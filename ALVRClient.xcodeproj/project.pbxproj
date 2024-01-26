@@ -7,7 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		C5E590302B6379ED00328ED6 /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = C5E5902F2B6379ED00328ED6 /* RealityKitContent */; };
+		C5114FAC2B63894F00865FD2 /* libalvr_client_core.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = C5114FAB2B63894F00865FD2 /* libalvr_client_core.dylib */; };
+		C5114FAD2B63899C00865FD2 /* libalvr_client_core.dylib in Embed Libraries */ = {isa = PBXBuildFile; fileRef = C5114FAB2B63894F00865FD2 /* libalvr_client_core.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */; };
 		C5E590342B6379ED00328ED6 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E590332B6379ED00328ED6 /* ContentView.swift */; };
 		C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E590352B6379ED00328ED6 /* Renderer.swift */; };
@@ -16,7 +17,22 @@
 		C5E5903E2B6379EE00328ED6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C5E5903D2B6379EE00328ED6 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		C5114FAE2B63899C00865FD2 /* Embed Libraries */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				C5114FAD2B63899C00865FD2 /* libalvr_client_core.dylib in Embed Libraries */,
+			);
+			name = "Embed Libraries";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		C5114FAB2B63894F00865FD2 /* libalvr_client_core.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = libalvr_client_core.dylib; sourceTree = "<group>"; };
 		C5E5902A2B6379ED00328ED6 /* ALVRClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ALVRClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5E5902E2B6379ED00328ED6 /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
 		C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ALVRClientApp.swift; sourceTree = "<group>"; };
@@ -27,6 +43,8 @@
 		C5E5903B2B6379ED00328ED6 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		C5E5903D2B6379EE00328ED6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C5E5903F2B6379EE00328ED6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C5E590452B637C0700328ED6 /* alvr_client_core.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = alvr_client_core.h; sourceTree = "<group>"; };
+		C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ALVRClient-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -34,7 +52,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C5E590302B6379ED00328ED6 /* RealityKitContent in Frameworks */,
+				C5114FAC2B63894F00865FD2 /* libalvr_client_core.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -62,10 +80,13 @@
 			isa = PBXGroup;
 			children = (
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
+				C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */,
 				C5E590332B6379ED00328ED6 /* ContentView.swift */,
 				C5E590352B6379ED00328ED6 /* Renderer.swift */,
 				C5E590372B6379ED00328ED6 /* Shaders.metal */,
 				C5E590392B6379ED00328ED6 /* ShaderTypes.h */,
+				C5E590452B637C0700328ED6 /* alvr_client_core.h */,
+				C5114FAB2B63894F00865FD2 /* libalvr_client_core.dylib */,
 				C5E5903D2B6379EE00328ED6 /* Assets.xcassets */,
 				C5E5903F2B6379EE00328ED6 /* Info.plist */,
 				C5E5903A2B6379ED00328ED6 /* Preview Content */,
@@ -99,6 +120,7 @@
 				C5E590262B6379ED00328ED6 /* Sources */,
 				C5E590272B6379ED00328ED6 /* Frameworks */,
 				C5E590282B6379ED00328ED6 /* Resources */,
+				C5114FAE2B63899C00865FD2 /* Embed Libraries */,
 			);
 			buildRules = (
 			);
@@ -106,7 +128,6 @@
 			);
 			name = ALVRClient;
 			packageProductDependencies = (
-				C5E5902F2B6379ED00328ED6 /* RealityKitContent */,
 			);
 			productName = ALVRClient;
 			productReference = C5E5902A2B6379ED00328ED6 /* ALVRClient.app */;
@@ -303,16 +324,23 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/ALVRClient",
+					"$(PROJECT_DIR)",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.worthdoingbadly.ALVRClient;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "$(TARGET_NAME)/ShaderTypes.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(TARGET_NAME)/ALVRClient-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 			};
@@ -330,16 +358,23 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/ALVRClient",
+					"$(PROJECT_DIR)",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.worthdoingbadly.ALVRClient;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "$(TARGET_NAME)/ShaderTypes.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(TARGET_NAME)/ALVRClient-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 			};
@@ -367,13 +402,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		C5E5902F2B6379ED00328ED6 /* RealityKitContent */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = RealityKitContent;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C5E590222B6379ED00328ED6 /* Project object */;
 }

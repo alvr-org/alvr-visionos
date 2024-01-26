@@ -7,7 +7,9 @@
 
 import SwiftUI
 import RealityKit
+#if false
 import RealityKitContent
+#endif
 
 struct ContentView: View {
 
@@ -15,10 +17,13 @@ struct ContentView: View {
     @State private var showImmersiveSpace = false
     @State private var immersiveSpaceIsShown = false
 
+    #if false
     @Environment(\.openImmersiveSpace) var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) var dismissImmersiveSpace
+    #endif
 
     var body: some View {
+#if false
         RealityView { content in
             // Add the initial RealityKit content
             if let scene = try? await Entity(named: "Scene", in: realityKitContentBundle) {
@@ -60,9 +65,12 @@ struct ContentView: View {
                 }
             }
         }
+#endif
     }
 }
 
+#if false
 #Preview(windowStyle: .volumetric) {
     ContentView()
 }
+#endif
