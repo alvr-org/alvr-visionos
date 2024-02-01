@@ -1,7 +1,7 @@
 //
 //  Renderer.swift
 //
-#if false
+#if os(visionOS)
 import CompositorServices
 import Metal
 import MetalKit

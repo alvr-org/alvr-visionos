@@ -3,11 +3,11 @@
 //
 
 import SwiftUI
-#if false
+#if os(visionOS)
 import CompositorServices
 #endif
 
-#if false
+#if os(visionOS)
 struct ContentStageConfiguration: CompositorLayerConfiguration {
     func makeConfiguration(capabilities: LayerRenderer.Capabilities, configuration: inout LayerRenderer.Configuration) {
         configuration.depthFormat = .depth32Float
@@ -24,9 +24,8 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
 }
 #endif
 
-#if false
+#if os(visionOS)
 @main
-#endif
 struct MetalRendererApp: App {
     var body: some Scene {
 #if false
@@ -34,24 +33,17 @@ struct MetalRendererApp: App {
             ContentView()
         }.windowStyle(.volumetric)
 #endif
-        
-#if true
-        WindowGroup {
-            ContentView()
-        }
-#endif
-        
-#if false
-        ImmersiveSpace(id: "ImmersiveSpace") {
+        ImmersiveSpace {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
                 let renderer = Renderer(layerRenderer)
                 renderer.startRenderLoop()
             }
-        }.immersionStyle(selection: .constant(.full), in: .full)
-#endif
+        }
     }
 }
+#endif
 
+#if !os(visionOS)
 @main
 struct Main {
     static func main() {
@@ -89,3 +81,4 @@ struct Main {
         }
     }
 }
+#endif
