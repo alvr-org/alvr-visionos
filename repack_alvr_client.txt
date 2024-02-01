@@ -1,2 +1,0 @@
-vtool -arch arm64 -set-build-version maccatalyst 17.0 17.0 -replace -output /tmp/libalvr_client_core.dylib libalvr_client_core.dylib
-install_name_tool -id "@rpath/libalvr_client_core.dylib" /tmp/libalvr_client_core.dylib
