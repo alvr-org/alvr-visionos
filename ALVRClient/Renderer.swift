@@ -50,6 +50,8 @@ class Renderer {
     let worldTracking: WorldTrackingProvider
     let layerRenderer: LayerRenderer
     
+    var alvrInitialized = false
+    
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
         self.device = layerRenderer.device
@@ -265,6 +267,29 @@ class Renderer {
         }
         
         guard let drawable = frame.queryDrawable() else { return }
+        
+        if !alvrInitialized {
+            alvrInitialized = true
+            let refreshRates:[Float] = [90]
+            alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(drawable.colorTextures[0].width), UInt32(drawable.colorTextures[0].height), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
+            alvr_resume()
+        }
+        
+        var alvrEvent = AlvrEvent()
+        let res = alvr_poll_event(&alvrEvent)
+        if res {
+            print(alvrEvent.tag)
+            switch UInt32(alvrEvent.tag) {
+            case ALVR_EVENT_HUD_MESSAGE_UPDATED.rawValue:
+                print("hud message updated")
+                let hudMessageBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
+                alvr_hud_message(hudMessageBuffer.baseAddress)
+                print(String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8))
+                hudMessageBuffer.deallocate()
+            default:
+                print("msg")
+            }
+        }
         
         _ = inFlightSemaphore.wait(timeout: DispatchTime.distantFuture)
         

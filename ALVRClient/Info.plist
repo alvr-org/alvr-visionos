@@ -9,15 +9,7 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
 		<key>UISceneConfigurations</key>
-		<dict>
-			<key>CPSceneSessionRoleImmersiveSpaceApplication</key>
-			<array>
-				<dict>
-					<key>UISceneInitialImmersionStyle</key>
-					<string>UIImmersionStyleFull</string>
-				</dict>
-			</array>
-		</dict>
+		<dict/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>For connecting to ALVR server on local network.</string>
