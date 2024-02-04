@@ -273,6 +273,11 @@ class Renderer {
             let refreshRates:[Float] = [90]
             alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(drawable.colorTextures[0].width), UInt32(drawable.colorTextures[0].height), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
             alvr_resume()
+            let inputThread = Thread {
+                self.inputLoop()
+            }
+            inputThread.name = "Input Thread"
+            inputThread.start()
         }
         
         var alvrEvent = AlvrEvent()
@@ -401,6 +406,24 @@ class Renderer {
                     self.renderFrame()
                 }
             }
+        }
+    }
+    
+    func inputLoop() {
+        let MAX_PREDICTION = 70 * NSEC_PER_MSEC
+        let deviceIdHead = alvr_path_string_to_id("/user/head")
+        while true {
+            let targetTimestamp = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC)) + min(alvr_get_head_prediction_offset_ns(), MAX_PREDICTION)
+            guard let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: Double(targetTimestamp) / Double(NSEC_PER_SEC)) else {
+                // TODO(zhuowei): fix these
+                usleep(UInt32(USEC_PER_SEC / (3*90)))
+                continue
+            }
+            let orientation = simd_quaternion(deviceAnchor.originFromAnchorTransform)
+            let position = deviceAnchor.originFromAnchorTransform.columns.3
+            var trackingMotion = AlvrDeviceMotion(device_id: deviceIdHead, orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+            alvr_send_tracking(targetTimestamp, &trackingMotion, 1)
+            usleep(UInt32(USEC_PER_SEC / (3*90)))
         }
     }
 }
