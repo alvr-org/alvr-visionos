@@ -62,7 +62,7 @@ struct Main {
         return (Data(buffer: nalBuffer), nalTimestamp)
     }
     
-    static func createVideoDecoder(initialNals: Data) -> VTDecompressionSession {
+    static func createVideoDecoder(initialNals: Data) -> (VTDecompressionSession, CMFormatDescription) {
         let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
         var videoFormat:CMFormatDescription? = nil
         var err:OSStatus = 0
@@ -95,11 +95,56 @@ struct Main {
         if err != 0 {
             fatalError("format?!")
         }
-        return decompressionSession!
+        return (decompressionSession!, videoFormat!)
     }
     
-    static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: Data, timestamp: UInt64) {
-        // TODO(zhuowei)
+    static func addLengthsToNals(nals: Data) -> Data {
+        var lastOff = 0
+        var off = 3
+        var outData = Data()
+        while off < nals.count - 3 {
+            if nals[off] == 0x00 && nals[off + 1] == 0x00 && nals[off + 2] == 0x01 {
+                let lastData = nals.subdata(in: lastOff+3..<off)
+                let lastLength = lastData.count
+                outData.append(contentsOf: [UInt8((lastLength >> 24) & 0xff), UInt8((lastLength >> 16) & 0xff), UInt8((lastLength >> 8) & 0xff), UInt8((lastLength >> 0) & 0xff)])
+                outData.append(lastData)
+                lastOff = off
+                off += 3
+                continue
+            }
+            off += 1
+        }
+        let lastData = nals.subdata(in: lastOff+3..<nals.count)
+        let lastLength = lastData.count
+        outData.append(contentsOf: [UInt8((lastLength >> 24) & 0xff), UInt8((lastLength >> 16) & 0xff), UInt8((lastLength >> 8) & 0xff), UInt8((lastLength >> 0) & 0xff)])
+        outData.append(lastData)
+        return outData
+    }
+    static var hasWrittenOneNals = false
+    static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: Data, timestamp: UInt64, videoFormat: CMFormatDescription) {
+        let nalsWithLengths = addLengthsToNals(nals: nals)
+        let blockBuffer = try! CMBlockBuffer(length: nalsWithLengths.count)
+        nalsWithLengths.withUnsafeBytes {
+            try! blockBuffer.replaceDataBytes(with: $0)
+        }
+        if !hasWrittenOneNals {
+            hasWrittenOneNals = true
+            try! nals.write(to: URL(filePath: "/tmp/feedVideo1.h264"))
+            try! nalsWithLengths.write(to: URL(filePath: "/tmp/feedVideo1WithLengths.h264"))
+        }
+        var err:OSStatus = 0
+        var sampleBuffer:CMSampleBuffer! = nil
+        err = CMSampleBufferCreate(allocator: nil, dataBuffer: blockBuffer, dataReady: true, makeDataReadyCallback: nil, refcon: nil, formatDescription: videoFormat, sampleCount: 1, sampleTimingEntryCount: 0, sampleTimingArray: nil, sampleSizeEntryCount: 0, sampleSizeArray: nil, sampleBufferOut: &sampleBuffer)
+        if err != 0 {
+            fatalError("CMSampleBufferCreate")
+        }
+        err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
+            print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
+            exit(0)
+        }
+        if err != 0 {
+            fatalError("VTDecompressionSessionDecodeFrame")
+        }
     }
     
     static func main() {
@@ -107,6 +152,7 @@ struct Main {
         let deviceIdHead = alvr_path_string_to_id("/user/head")
         var wroteOneFrame = false
         var vtDecompressionSession:VTDecompressionSession? = nil
+        var videoFormat:CMFormatDescription? = nil
         let refreshRates:[Float] = [60]
         alvr_initialize(nil, nil, 1024, 1024, refreshRates, Int32(refreshRates.count), true)
         alvr_resume()
@@ -144,7 +190,7 @@ struct Main {
                         NSLog("%@", nal as NSData)
                         if nal[4] & 0x1f == H264_NAL_TYPE_SPS {
                             // here we go!
-                            vtDecompressionSession = createVideoDecoder(initialNals: nal)
+                            (vtDecompressionSession, videoFormat) = createVideoDecoder(initialNals: nal)
                             try! nal.write(to: URL(fileURLWithPath: "/tmp/initialNals.h264"))
                             break
                         }
@@ -161,7 +207,7 @@ struct Main {
                             try! nal.write(to: URL(fileURLWithPath: "/tmp/oneFrame.h264"))
                         }
                         if let vtDecompressionSession = vtDecompressionSession {
-                            feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp)
+                            feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!)
                         }
                         // TODO(zhuowei): hax
                         alvr_report_frame_decoded(timestamp)
