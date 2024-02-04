@@ -14,7 +14,7 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
         configuration.depthFormat = .depth32Float
         configuration.colorFormat = .bgra8Unorm_srgb
     
-        let foveationEnabled = capabilities.supportsFoveation
+        let foveationEnabled = capabilities.supportsFoveation && false
         configuration.isFoveationEnabled = foveationEnabled
         
         let options: LayerRenderer.Capabilities.SupportedLayoutsOptions = foveationEnabled ? [.foveationEnabled] : []
@@ -44,12 +44,9 @@ struct MetalRendererApp: App {
 }
 #endif
 
-#if true && !os(visionOS)
-
 let H264_NAL_TYPE_SPS = 7
 
-@main
-struct Main {
+struct VideoHandler {
     static func pollNal() -> (Data, UInt64)? {
         let nalLength = alvr_poll_nal(nil, nil)
         if nalLength == 0 {
@@ -140,12 +137,17 @@ struct Main {
         }
         err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
             print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
-            exit(0)
+            //exit(0)
         }
         if err != 0 {
             fatalError("VTDecompressionSessionDecodeFrame")
         }
     }
+}
+
+#if true && !os(visionOS)
+@main
+struct Main: VideoHandler {
     
     static func main() {
         let startTime = mach_absolute_time()

@@ -8,6 +8,7 @@ import MetalKit
 import simd
 import Spatial
 import ARKit
+import VideoToolbox
 
 // The 256 byte aligned size of our uniform structure
 let alignedUniformsSize = (MemoryLayout<UniformsArray>.size + 0xFF) & -0x100
@@ -51,6 +52,11 @@ class Renderer {
     let layerRenderer: LayerRenderer
     
     var alvrInitialized = false
+    
+    // TODO(zhuowei): does this need to be atomic?
+    var inputRunning = false
+    var vtDecompressionSession:VTDecompressionSession? = nil
+    var videoFormat:CMFormatDescription? = nil
     
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
@@ -246,6 +252,63 @@ class Renderer {
         
         rotation += 0.01
     }
+    
+    func handleAlvrEvents() {
+        while true {
+            var alvrEvent = AlvrEvent()
+            let res = alvr_poll_event(&alvrEvent)
+            if !res {
+                break
+            }
+            switch UInt32(alvrEvent.tag) {
+            case ALVR_EVENT_HUD_MESSAGE_UPDATED.rawValue:
+                print("hud message updated")
+                let hudMessageBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
+                alvr_hud_message(hudMessageBuffer.baseAddress)
+                print(String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8)!)
+                hudMessageBuffer.deallocate()
+            case ALVR_EVENT_STREAMING_STARTED.rawValue:
+                print("streaming started: \(alvrEvent.STREAMING_STARTED)")
+                alvr_request_idr()
+            case ALVR_EVENT_STREAMING_STOPPED.rawValue:
+                print("streaming stopped")
+            case ALVR_EVENT_HAPTICS.rawValue:
+                print("haptics: \(alvrEvent.HAPTICS)")
+            case ALVR_EVENT_CREATE_DECODER.rawValue:
+                print("create decoder: \(alvrEvent.CREATE_DECODER)")
+                while true {
+                    guard let (nal, timestamp) = VideoHandler.pollNal() else {
+                        fatalError("create decoder: failed to poll nal?!")
+                        break
+                    }
+                    print(nal.count, timestamp)
+                    NSLog("%@", nal as NSData)
+                    if nal[4] & 0x1f == H264_NAL_TYPE_SPS {
+                        // here we go!
+                        (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal)
+                        break
+                    }
+                }
+            case ALVR_EVENT_FRAME_READY.rawValue:
+                print("frame ready")
+                while true {
+                    guard let (nal, timestamp) = VideoHandler.pollNal() else {
+                        break
+                    }
+                    print(nal.count, timestamp)
+                    if let vtDecompressionSession = vtDecompressionSession {
+                        VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!)
+                    }
+                    // TODO(zhuowei): hax
+                    alvr_report_frame_decoded(timestamp)
+                    alvr_report_compositor_start(timestamp)
+                    alvr_report_submit(timestamp, 0)
+                }
+            default:
+                print("msg")
+            }
+        }
+    }
 
     func renderFrame() {
         /// Per frame updates hare
@@ -255,6 +318,9 @@ class Renderer {
         frame.startUpdate()
         
         // Perform frame independent work
+        if alvrInitialized {
+            handleAlvrEvents()
+        }
         
         frame.endUpdate()
         
@@ -273,27 +339,14 @@ class Renderer {
             let refreshRates:[Float] = [90]
             alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(drawable.colorTextures[0].width), UInt32(drawable.colorTextures[0].height), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
             alvr_resume()
+        }
+        if !inputRunning {
+            inputRunning = true
             let inputThread = Thread {
                 self.inputLoop()
             }
             inputThread.name = "Input Thread"
             inputThread.start()
-        }
-        
-        var alvrEvent = AlvrEvent()
-        let res = alvr_poll_event(&alvrEvent)
-        if res {
-            print(alvrEvent.tag)
-            switch UInt32(alvrEvent.tag) {
-            case ALVR_EVENT_HUD_MESSAGE_UPDATED.rawValue:
-                print("hud message updated")
-                let hudMessageBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
-                alvr_hud_message(hudMessageBuffer.baseAddress)
-                print(String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8))
-                hudMessageBuffer.deallocate()
-            default:
-                print("msg")
-            }
         }
         
         _ = inFlightSemaphore.wait(timeout: DispatchTime.distantFuture)
@@ -397,9 +450,11 @@ class Renderer {
         while true {
             if layerRenderer.state == .invalidated {
                 print("Layer is invalidated")
+                inputRunning = false
                 return
             } else if layerRenderer.state == .paused {
                 layerRenderer.waitUntilRunning()
+                // TODO(zhuowei): input thread?
                 continue
             } else {
                 autoreleasepool {
@@ -412,7 +467,7 @@ class Renderer {
     func inputLoop() {
         let MAX_PREDICTION = 70 * NSEC_PER_MSEC
         let deviceIdHead = alvr_path_string_to_id("/user/head")
-        while true {
+        while inputRunning {
             let targetTimestamp = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC)) + min(alvr_get_head_prediction_offset_ns(), MAX_PREDICTION)
             guard let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: Double(targetTimestamp) / Double(NSEC_PER_SEC)) else {
                 // TODO(zhuowei): fix these
