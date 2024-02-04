@@ -55,11 +55,11 @@ struct Main {
         if nalLength == 0 {
             return nil
         }
-        let nalBuffer = malloc(Int(nalLength))!
-        defer { free(nalBuffer) }
+        let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength))
+        defer { nalBuffer.deallocate() }
         var nalTimestamp:UInt64 = 0
-        alvr_poll_nal(nalBuffer, &nalTimestamp)
-        return (Data(bytes: nalBuffer, count: Int(nalLength)), nalTimestamp)
+        alvr_poll_nal(nalBuffer.baseAddress, &nalTimestamp)
+        return (Data(buffer: nalBuffer), nalTimestamp)
     }
     
     static func createVideoDecoder(initialNals: Data) -> VTDecompressionSession {
@@ -104,6 +104,7 @@ struct Main {
     
     static func main() {
         let startTime = mach_absolute_time()
+        let deviceIdHead = alvr_path_string_to_id("/user/head")
         var wroteOneFrame = false
         var vtDecompressionSession:VTDecompressionSession? = nil
         let refreshRates:[Float] = [60]
@@ -126,7 +127,8 @@ struct Main {
                 case ALVR_EVENT_STREAMING_STARTED.rawValue:
                     print("streaming started: \(alvrEvent.STREAMING_STARTED)")
                     alvr_request_idr()
-                    alvr_send_tracking(mach_absolute_time() - startTime, nil, 0)
+                    var trackingMotion = AlvrDeviceMotion(device_id: deviceIdHead, orientation: AlvrQuat(x: 1, y: 0, z: 0, w: 0), position: (0, 0, 0), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+                    alvr_send_tracking(mach_absolute_time() - startTime, &trackingMotion, 1)
                 case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                     print("streaming stopped")
                 case ALVR_EVENT_HAPTICS.rawValue:
@@ -154,7 +156,7 @@ struct Main {
                             break
                         }
                         print(nal.count, timestamp)
-                        if !wroteOneFrame {
+                        if vtDecompressionSession != nil && timestamp != 0 && !wroteOneFrame {
                             wroteOneFrame = true
                             try! nal.write(to: URL(fileURLWithPath: "/tmp/oneFrame.h264"))
                         }
@@ -167,12 +169,13 @@ struct Main {
                         alvr_report_submit(timestamp, 0)
                     }
                     // YOLO?
-                    alvr_send_tracking(mach_absolute_time() - startTime, nil, 0)
+                    var trackingMotion = AlvrDeviceMotion(device_id: deviceIdHead, orientation: AlvrQuat(x: 1, y: 0, z: 0, w: 0), position: (0, 0, 0), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+                    alvr_send_tracking(mach_absolute_time() - startTime, &trackingMotion, 1)
                 default:
                     print("what")
                 }
             } else {
-                usleep(100000)
+                usleep(10000)
             }
         }
     }
