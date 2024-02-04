@@ -85,7 +85,7 @@ struct VideoHandler {
         print(videoFormat)
         
         let videoDecoderSpecification:[NSString: AnyObject] = [:]
-        let destinationImageBufferAttributes:[NSString: AnyObject] = [:]
+        let destinationImageBufferAttributes:[NSString: AnyObject] = [kCVPixelBufferMetalCompatibilityKey: true as NSNumber]
 
         var decompressionSession:VTDecompressionSession? = nil
         err = VTDecompressionSessionCreate(allocator: nil, formatDescription: videoFormat!, decoderSpecification: videoDecoderSpecification as CFDictionary, imageBufferAttributes: destinationImageBufferAttributes as CFDictionary, outputCallback: nil, decompressionSessionOut: &decompressionSession)
@@ -117,17 +117,11 @@ struct VideoHandler {
         outData.append(lastData)
         return outData
     }
-    static var hasWrittenOneNals = false
-    static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: Data, timestamp: UInt64, videoFormat: CMFormatDescription) {
+    static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: Data, timestamp: UInt64, videoFormat: CMFormatDescription, callback: @escaping (_ imageBuffer: CVImageBuffer?) -> Void) {
         let nalsWithLengths = addLengthsToNals(nals: nals)
         let blockBuffer = try! CMBlockBuffer(length: nalsWithLengths.count)
         nalsWithLengths.withUnsafeBytes {
             try! blockBuffer.replaceDataBytes(with: $0)
-        }
-        if !hasWrittenOneNals {
-            hasWrittenOneNals = true
-            try! nals.write(to: URL(filePath: "/tmp/feedVideo1.h264"))
-            try! nalsWithLengths.write(to: URL(filePath: "/tmp/feedVideo1WithLengths.h264"))
         }
         var err:OSStatus = 0
         var sampleBuffer:CMSampleBuffer! = nil
@@ -137,7 +131,7 @@ struct VideoHandler {
         }
         err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
             print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
-            //exit(0)
+            callback(imageBuffer)
         }
         if err != 0 {
             fatalError("VTDecompressionSessionDecodeFrame")
@@ -147,7 +141,7 @@ struct VideoHandler {
 
 #if true && !os(visionOS)
 @main
-struct Main: VideoHandler {
+struct Main {
     
     static func main() {
         let startTime = mach_absolute_time()
@@ -176,7 +170,7 @@ struct Main: VideoHandler {
                     print("streaming started: \(alvrEvent.STREAMING_STARTED)")
                     alvr_request_idr()
                     var trackingMotion = AlvrDeviceMotion(device_id: deviceIdHead, orientation: AlvrQuat(x: 1, y: 0, z: 0, w: 0), position: (0, 0, 0), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
-                    alvr_send_tracking(mach_absolute_time() - startTime, &trackingMotion, 1)
+                    alvr_send_tracking(mach_absolute_time(), &trackingMotion, 1)
                 case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                     print("streaming stopped")
                 case ALVR_EVENT_HAPTICS.rawValue:
@@ -184,7 +178,7 @@ struct Main: VideoHandler {
                 case ALVR_EVENT_CREATE_DECODER.rawValue:
                     print("create decoder: \(alvrEvent.CREATE_DECODER)")
                     while true {
-                        guard let (nal, timestamp) = pollNal() else {
+                        guard let (nal, timestamp) = VideoHandler.pollNal() else {
                             fatalError("create decoder: failed to poll nal?!")
                             break
                         }
@@ -192,7 +186,7 @@ struct Main: VideoHandler {
                         NSLog("%@", nal as NSData)
                         if nal[4] & 0x1f == H264_NAL_TYPE_SPS {
                             // here we go!
-                            (vtDecompressionSession, videoFormat) = createVideoDecoder(initialNals: nal)
+                            (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal)
                             try! nal.write(to: URL(fileURLWithPath: "/tmp/initialNals.h264"))
                             break
                         }
@@ -200,7 +194,7 @@ struct Main: VideoHandler {
                 case ALVR_EVENT_FRAME_READY.rawValue:
                     print("frame ready")
                     while true {
-                        guard let (nal, timestamp) = pollNal() else {
+                        guard let (nal, timestamp) = VideoHandler.pollNal() else {
                             break
                         }
                         print(nal.count, timestamp)
@@ -209,7 +203,10 @@ struct Main: VideoHandler {
                             try! nal.write(to: URL(fileURLWithPath: "/tmp/oneFrame.h264"))
                         }
                         if let vtDecompressionSession = vtDecompressionSession {
-                            feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!)
+                            VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) {_ in
+                                let currentTimestamp = mach_absolute_time()
+                                print("time it took = \(currentTimestamp - timestamp)")
+                            }
                         }
                         // TODO(zhuowei): hax
                         alvr_report_frame_decoded(timestamp)
@@ -218,7 +215,9 @@ struct Main: VideoHandler {
                     }
                     // YOLO?
                     var trackingMotion = AlvrDeviceMotion(device_id: deviceIdHead, orientation: AlvrQuat(x: 1, y: 0, z: 0, w: 0), position: (0, 0, 0), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
-                    alvr_send_tracking(mach_absolute_time() - startTime, &trackingMotion, 1)
+                    let timestamp = mach_absolute_time()
+                    print("sending tracking for timestamp \(timestamp)")
+                    alvr_send_tracking(timestamp, &trackingMotion, 1)
                 default:
                     print("what")
                 }

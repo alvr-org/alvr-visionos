@@ -9,6 +9,7 @@ import simd
 import Spatial
 import ARKit
 import VideoToolbox
+import ObjectiveC
 
 // The 256 byte aligned size of our uniform structure
 let alignedUniformsSize = (MemoryLayout<UniformsArray>.size + 0xFF) & -0x100
@@ -57,6 +58,19 @@ class Renderer {
     var inputRunning = false
     var vtDecompressionSession:VTDecompressionSession? = nil
     var videoFormat:CMFormatDescription? = nil
+    var frameQueueLock = NSObject()
+    struct QueuedFrame {
+        let imageBuffer: CVImageBuffer
+        let timestamp: UInt64
+    }
+    // TODO(zhuowei): make this a real deque
+    var frameQueue = [QueuedFrame]()
+    var streamingActive = false
+    
+    var deviceAnchorsLock = NSObject()
+    var deviceAnchorsQueue = [UInt64]()
+    var deviceAnchorsDictionary = [UInt64: DeviceAnchor]()
+    var metalTextureCache: CVMetalTextureCache!
     
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
@@ -101,6 +115,9 @@ class Renderer {
         
         worldTracking = WorldTrackingProvider()
         arSession = ARKitSession()
+        if CVMetalTextureCacheCreate(nil, nil, self.device, nil, &metalTextureCache) != 0 {
+            fatalError("CVMetalTextureCacheCreate")
+        }
     }
     
     func startRenderLoop() {
@@ -258,7 +275,8 @@ class Renderer {
             var alvrEvent = AlvrEvent()
             let res = alvr_poll_event(&alvrEvent)
             if !res {
-                break
+                usleep(10000)
+                continue
             }
             switch UInt32(alvrEvent.tag) {
             case ALVR_EVENT_HUD_MESSAGE_UPDATED.rawValue:
@@ -269,9 +287,11 @@ class Renderer {
                 hudMessageBuffer.deallocate()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started: \(alvrEvent.STREAMING_STARTED)")
+                streamingActive = true
                 alvr_request_idr()
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
+                streamingActive = false
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
             case ALVR_EVENT_CREATE_DECODER.rawValue:
@@ -297,12 +317,23 @@ class Renderer {
                     }
                     print(nal.count, timestamp)
                     if let vtDecompressionSession = vtDecompressionSession {
-                        VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!)
+                        VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
+                            alvr_report_frame_decoded(timestamp)
+                            guard let imageBuffer = imageBuffer else {
+                                return
+                            }
+                            objc_sync_enter(frameQueueLock)
+                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                            if frameQueue.count > 2 {
+                                frameQueue.removeFirst()
+                            }
+                            objc_sync_exit(frameQueueLock)
+                        }
+                    } else {
+                        alvr_report_frame_decoded(timestamp)
+                        alvr_report_compositor_start(timestamp)
+                        alvr_report_submit(timestamp, 0)
                     }
-                    // TODO(zhuowei): hax
-                    alvr_report_frame_decoded(timestamp)
-                    alvr_report_compositor_start(timestamp)
-                    alvr_report_submit(timestamp, 0)
                 }
             default:
                 print("msg")
@@ -317,15 +348,32 @@ class Renderer {
         
         frame.startUpdate()
         
-        // Perform frame independent work
-        if alvrInitialized {
-            handleAlvrEvents()
+        frame.endUpdate()
+        var queuedFrame:QueuedFrame? = nil
+        if streamingActive {
+            let startPollTime = CACurrentMediaTime()
+            while true {
+                objc_sync_enter(frameQueueLock)
+                queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
+                objc_sync_exit(frameQueueLock)
+                if queuedFrame != nil ||  CACurrentMediaTime() - startPollTime > 1{
+                    break
+                }
+                sched_yield()
+            }
         }
         
-        frame.endUpdate()
+        if let queuedFrame = queuedFrame {
+            alvr_report_compositor_start(queuedFrame.timestamp)
+            alvr_report_submit(queuedFrame.timestamp, 0)
+        }
         
-        guard let timing = frame.predictTiming() else { return }
-        LayerRenderer.Clock().wait(until: timing.optimalInputTime)
+        let renderingStreaming = streamingActive && queuedFrame != nil
+        
+        if !renderingStreaming {
+            guard let timing = frame.predictTiming() else { return }
+            LayerRenderer.Clock().wait(until: timing.optimalInputTime)
+        }
         
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
@@ -336,7 +384,8 @@ class Renderer {
         
         if !alvrInitialized {
             alvrInitialized = true
-            let refreshRates:[Float] = [90]
+            // TODO(zhuowei): ???
+            let refreshRates:[Float] = [90, 60, 45]
             alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(drawable.colorTextures[0].width), UInt32(drawable.colorTextures[0].height), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
             alvr_resume()
         }
@@ -347,25 +396,53 @@ class Renderer {
             }
             inputThread.name = "Input Thread"
             inputThread.start()
+            let eventsThread = Thread {
+                self.handleAlvrEvents()
+            }
+            eventsThread.name = "Events Thread"
+            eventsThread.start()
         }
         
         _ = inFlightSemaphore.wait(timeout: DispatchTime.distantFuture)
         
         frame.startSubmission()
         
-        let time = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
-        let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
-        
-        drawable.deviceAnchor = deviceAnchor
+        if renderingStreaming {
+            if let deviceAnchor = lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) {
+                print("found anchor for frame!", deviceAnchor)
+                drawable.deviceAnchor = deviceAnchor
+            }
+        }
+        if drawable.deviceAnchor == nil {
+            let time = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
+            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
+            
+            drawable.deviceAnchor = deviceAnchor
+        }
         
         let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             semaphore.signal()
         }
         
+        if streamingActive {
+            // TODO(zhuowei): do this
+            renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
+        } else {
+            renderLobby(drawable: drawable, commandBuffer: commandBuffer)
+        }
+        
+        drawable.encodePresent(commandBuffer: commandBuffer)
+        
+        commandBuffer.commit()
+        
+        frame.endSubmission()
+    }
+    
+    func renderLobby(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer) {
         self.updateDynamicBufferState()
         
-        self.updateGameState(drawable: drawable, deviceAnchor: deviceAnchor)
+        self.updateGameState(drawable: drawable, deviceAnchor: drawable.deviceAnchor)
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
@@ -438,12 +515,57 @@ class Renderer {
         renderEncoder.popDebugGroup()
         
         renderEncoder.endEncoding()
+    }
+    
+    func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?) {
+        let renderPassDescriptor = MTLRenderPassDescriptor()
+        renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
+        renderPassDescriptor.colorAttachments[0].loadAction = .clear
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
+        renderPassDescriptor.depthAttachment.loadAction = .clear
+        renderPassDescriptor.depthAttachment.storeAction = .store
+        renderPassDescriptor.depthAttachment.clearDepth = 0.0
+        renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
+        if layerRenderer.configuration.layout == .layered {
+            renderPassDescriptor.renderTargetArrayLength = drawable.views.count
+        }
         
-        drawable.encodePresent(commandBuffer: commandBuffer)
+        /// Final pass rendering code here
+        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            fatalError("Failed to create render encoder")
+        }
+        let viewports = drawable.views.map { $0.textureMap.viewport }
         
-        commandBuffer.commit()
+        renderEncoder.setViewports(viewports)
         
-        frame.endSubmission()
+        if drawable.views.count > 1 {
+            var viewMappings = (0..<drawable.views.count).map {
+                MTLVertexAmplificationViewMapping(viewportArrayIndexOffset: UInt32($0),
+                                                  renderTargetArrayIndexOffset: UInt32($0))
+            }
+            renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
+        }
+        renderEncoder.endEncoding()
+        let blitCommandEncoder = commandBuffer.makeBlitCommandEncoder()!
+        if let queuedFrame = queuedFrame {
+            let pixelBuffer = queuedFrame.imageBuffer
+            var textureOut:CVMetalTexture! = nil
+            // https://cs.android.com/android/platform/superproject/main/+/main:external/webrtc/sdk/objc/components/renderer/metal/RTCMTLNV12Renderer.mm;l=108;drc=a81e9c82fc3fbc984f0f110407d1e44c9c01958a
+            // TODO(zhuowei): yolo
+            let err = CVMetalTextureCacheCreateTextureFromImage(
+                nil, metalTextureCache, pixelBuffer, nil, .bgra8Unorm_srgb,
+                CVPixelBufferGetWidth(pixelBuffer), CVPixelBufferGetHeight(pixelBuffer), 0, &textureOut);
+            if err != 0 {
+                fatalError("CVMetalTextureCacheCreateTextureFromImage \(err)")
+            }
+            guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
+                fatalError("CVMetalTextureCacheCreateTextureFromImage")
+            }
+            blitCommandEncoder.copy(from: metalTexture, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(), sourceSize: MTLSize(width: metalTexture.width, height: metalTexture.height, depth: metalTexture.depth), to: drawable.colorTextures[0], destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin())
+        }
+        blitCommandEncoder.endEncoding()
     }
     
     func renderLoop() {
@@ -474,12 +596,25 @@ class Renderer {
                 usleep(UInt32(USEC_PER_SEC / (3*90)))
                 continue
             }
+            objc_sync_enter(deviceAnchorsLock)
+            deviceAnchorsQueue.append(targetTimestamp)
+            if deviceAnchorsQueue.count > 1000 {
+                deviceAnchorsDictionary.removeValue(forKey: deviceAnchorsQueue.removeFirst())
+            }
+            deviceAnchorsDictionary[targetTimestamp] = deviceAnchor
+            objc_sync_exit(deviceAnchorsLock)
             let orientation = simd_quaternion(deviceAnchor.originFromAnchorTransform)
             let position = deviceAnchor.originFromAnchorTransform.columns.3
             var trackingMotion = AlvrDeviceMotion(device_id: deviceIdHead, orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
             alvr_send_tracking(targetTimestamp, &trackingMotion, 1)
             usleep(UInt32(USEC_PER_SEC / (3*90)))
         }
+    }
+    
+    func lookupDeviceAnchorFor(timestamp: UInt64) -> DeviceAnchor? {
+        objc_sync_enter(deviceAnchorsLock)
+        defer { objc_sync_exit(deviceAnchorsLock) }
+        return deviceAnchorsDictionary[timestamp]
     }
 }
 
