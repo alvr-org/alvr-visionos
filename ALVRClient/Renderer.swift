@@ -27,6 +27,17 @@ extension LayerRenderer.Clock.Instant.Duration {
     }
 }
 
+// x, y, z
+// u, v
+let fullscreenQuadVertices:[Float] = [-1, -1, 1,
+                                       1, -1, 1,
+                                       -1, 1, 1,
+                                       1, 1, 1,
+                                       0, 1,
+                                       0.5, 1,
+                                       0, 0,
+                                       0.5, 0]
+
 class Renderer {
 
     public let device: MTLDevice
@@ -71,6 +82,9 @@ class Renderer {
     var deviceAnchorsQueue = [UInt64]()
     var deviceAnchorsDictionary = [UInt64: DeviceAnchor]()
     var metalTextureCache: CVMetalTextureCache!
+    var videoFramePipelineState:MTLRenderPipelineState
+    var fullscreenQuadBuffer:MTLBuffer!
+    var lastIpd:Float = -1
     
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
@@ -90,6 +104,9 @@ class Renderer {
 
         do {
             pipelineState = try Renderer.buildRenderPipelineWithDevice(device: device,
+                                                                       layerRenderer: layerRenderer,
+                                                                       mtlVertexDescriptor: mtlVertexDescriptor)
+            videoFramePipelineState = try Renderer.buildRenderPipelineForVideoFrameWithDevice(device: device,
                                                                        layerRenderer: layerRenderer,
                                                                        mtlVertexDescriptor: mtlVertexDescriptor)
         } catch {
@@ -117,6 +134,9 @@ class Renderer {
         arSession = ARKitSession()
         if CVMetalTextureCacheCreate(nil, nil, self.device, nil, &metalTextureCache) != 0 {
             fatalError("CVMetalTextureCacheCreate")
+        }
+        fullscreenQuadVertices.withUnsafeBytes {
+            fullscreenQuadBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
         }
     }
     
@@ -173,6 +193,30 @@ class Renderer {
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.label = "RenderPipeline"
+        pipelineDescriptor.vertexFunction = vertexFunction
+        pipelineDescriptor.fragmentFunction = fragmentFunction
+        pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
+
+        pipelineDescriptor.colorAttachments[0].pixelFormat = layerRenderer.configuration.colorFormat
+        pipelineDescriptor.depthAttachmentPixelFormat = layerRenderer.configuration.depthFormat
+
+        pipelineDescriptor.maxVertexAmplificationCount = layerRenderer.properties.viewCount
+        
+        return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+    }
+    
+    class func buildRenderPipelineForVideoFrameWithDevice(device: MTLDevice,
+                                             layerRenderer: LayerRenderer,
+                                             mtlVertexDescriptor: MTLVertexDescriptor) throws -> MTLRenderPipelineState {
+        /// Build a render state pipeline object
+
+        let library = device.makeDefaultLibrary()
+
+        let vertexFunction = library?.makeFunction(name: "videoFrameVertexShader")
+        let fragmentFunction = library?.makeFunction(name: "videoFrameFragmentShader")
+
+        let pipelineDescriptor = MTLRenderPipelineDescriptor()
+        pipelineDescriptor.label = "VideoFrameRenderPipeline"
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
@@ -270,8 +314,19 @@ class Renderer {
         rotation += 0.01
     }
     
+    private func updateGameStateForVideoFrame(drawable: LayerRenderer.Drawable, deviceAnchor: DeviceAnchor?) {
+        func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
+            return Uniforms(projectionMatrix: matrix_identity_float4x4, modelViewMatrix: matrix_identity_float4x4)
+        }
+        
+        self.uniforms[0].uniforms.0 = uniforms(forViewIndex: 0)
+        if drawable.views.count > 1 {
+            self.uniforms[0].uniforms.1 = uniforms(forViewIndex: 1)
+        }
+    }
+    
     func handleAlvrEvents() {
-        while true {
+        while inputRunning {
             var alvrEvent = AlvrEvent()
             let res = alvr_poll_event(&alvrEvent)
             if !res {
@@ -310,12 +365,12 @@ class Renderer {
                     }
                 }
             case ALVR_EVENT_FRAME_READY.rawValue:
-                print("frame ready")
+                // print("frame ready")
                 while true {
                     guard let (nal, timestamp) = VideoHandler.pollNal() else {
                         break
                     }
-                    print(nal.count, timestamp)
+                    // print(nal.count, timestamp)
                     if let vtDecompressionSession = vtDecompressionSession {
                         VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
                             alvr_report_frame_decoded(timestamp)
@@ -362,10 +417,9 @@ class Renderer {
                 sched_yield()
             }
         }
-        
+
         if let queuedFrame = queuedFrame {
             alvr_report_compositor_start(queuedFrame.timestamp)
-            alvr_report_submit(queuedFrame.timestamp, 0)
         }
         
         let renderingStreaming = streamingActive && queuedFrame != nil
@@ -403,17 +457,34 @@ class Renderer {
             eventsThread.start()
         }
         
+        
+        if alvrInitialized && streamingActive {
+            let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
+            if abs(lastIpd - ipd) > 0.001 {
+                lastIpd = ipd
+                let leftAngles = atan(drawable.views[0].tangents)
+                let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
+                let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
+                let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
+                let fovs = [leftFov, rightFov]
+                alvr_send_views_config(fovs, ipd)
+            }
+        }
+        
         _ = inFlightSemaphore.wait(timeout: DispatchTime.distantFuture)
         
         frame.startSubmission()
         
         if renderingStreaming {
             if let deviceAnchor = lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) {
-                print("found anchor for frame!", deviceAnchor)
+                //print("found anchor for frame!", deviceAnchor)
                 drawable.deviceAnchor = deviceAnchor
             }
         }
         if drawable.deviceAnchor == nil {
+            if renderingStreaming {
+                print("missing anchor!!")
+            }
             let time = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
             let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
             
@@ -423,6 +494,9 @@ class Renderer {
         let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             semaphore.signal()
+            if let queuedFrame = queuedFrame {
+                alvr_report_submit(queuedFrame.timestamp, 0)
+            }
         }
         
         if streamingActive {
@@ -518,6 +592,10 @@ class Renderer {
     }
     
     func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?) {
+        self.updateDynamicBufferState()
+        
+        self.updateGameStateForVideoFrame(drawable: drawable, deviceAnchor: drawable.deviceAnchor)
+        
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
         renderPassDescriptor.colorAttachments[0].loadAction = .clear
@@ -536,6 +614,21 @@ class Renderer {
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             fatalError("Failed to create render encoder")
         }
+        
+        renderEncoder.label = "Primary Render Encoder"
+        
+        renderEncoder.pushDebugGroup("Draw Box")
+        
+        renderEncoder.setCullMode(.back)
+        
+        renderEncoder.setFrontFacing(.counterClockwise)
+        
+        renderEncoder.setRenderPipelineState(videoFramePipelineState)
+        
+        renderEncoder.setDepthStencilState(depthState)
+        
+        renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
+        
         let viewports = drawable.views.map { $0.textureMap.viewport }
         
         renderEncoder.setViewports(viewports)
@@ -547,25 +640,41 @@ class Renderer {
             }
             renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
         }
-        renderEncoder.endEncoding()
-        let blitCommandEncoder = commandBuffer.makeBlitCommandEncoder()!
-        if let queuedFrame = queuedFrame {
-            let pixelBuffer = queuedFrame.imageBuffer
+        
+        guard let queuedFrame = queuedFrame else {
+            renderEncoder.endEncoding()
+            return
+        }
+        let pixelBuffer = queuedFrame.imageBuffer
+        // https://cs.android.com/android/platform/superproject/main/+/main:external/webrtc/sdk/objc/components/renderer/metal/RTCMTLNV12Renderer.mm;l=108;drc=a81e9c82fc3fbc984f0f110407d1e44c9c01958a
+        // TODO(zhuowei): yolo
+        for i in 0...1 {
             var textureOut:CVMetalTexture! = nil
-            // https://cs.android.com/android/platform/superproject/main/+/main:external/webrtc/sdk/objc/components/renderer/metal/RTCMTLNV12Renderer.mm;l=108;drc=a81e9c82fc3fbc984f0f110407d1e44c9c01958a
-            // TODO(zhuowei): yolo
-            let err = CVMetalTextureCacheCreateTextureFromImage(
-                nil, metalTextureCache, pixelBuffer, nil, .bgra8Unorm_srgb,
-                CVPixelBufferGetWidth(pixelBuffer), CVPixelBufferGetHeight(pixelBuffer), 0, &textureOut);
+            var err:OSStatus = 0
+            let width = CVPixelBufferGetWidth(pixelBuffer)
+            let height = CVPixelBufferGetHeight(pixelBuffer)
+            if i == 0 {
+                err = CVMetalTextureCacheCreateTextureFromImage(
+                    nil, metalTextureCache, pixelBuffer, nil, .r8Unorm,
+                    width, height, 0, &textureOut);
+            } else {
+                err = CVMetalTextureCacheCreateTextureFromImage(
+                    nil, metalTextureCache, pixelBuffer, nil, .rg8Unorm,
+                    width/2, height/2, 1, &textureOut);
+            }
             if err != 0 {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage \(err)")
             }
             guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage")
             }
-            blitCommandEncoder.copy(from: metalTexture, sourceSlice: 0, sourceLevel: 0, sourceOrigin: MTLOrigin(), sourceSize: MTLSize(width: metalTexture.width, height: metalTexture.height, depth: metalTexture.depth), to: drawable.colorTextures[0], destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin())
+            renderEncoder.setFragmentTexture(metalTexture, index: i)
         }
-        blitCommandEncoder.endEncoding()
+        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
+        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
+        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        renderEncoder.popDebugGroup()
+        renderEncoder.endEncoding()
     }
     
     func renderLoop() {

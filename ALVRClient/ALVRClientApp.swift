@@ -130,7 +130,7 @@ struct VideoHandler {
             fatalError("CMSampleBufferCreate")
         }
         err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
-            print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
+            //print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
             callback(imageBuffer)
         }
         if err != 0 {
