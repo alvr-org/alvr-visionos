@@ -27,12 +27,13 @@ extension LayerRenderer.Clock.Instant.Duration {
     }
 }
 
+// TODO(zhuowei): what's the z supposed to be?
 // x, y, z
 // u, v
-let fullscreenQuadVertices:[Float] = [-1, -1, 1,
-                                       1, -1, 1,
-                                       -1, 1, 1,
-                                       1, 1, 1,
+let fullscreenQuadVertices:[Float] = [-1, -1, 0,
+                                       1, -1, 0,
+                                       -1, 1, 0,
+                                       1, 1, 0,
                                        0, 1,
                                        0.5, 1,
                                        0, 0,
@@ -114,7 +115,8 @@ class Renderer {
         }
 
         let depthStateDescriptor = MTLDepthStencilDescriptor()
-        depthStateDescriptor.depthCompareFunction = MTLCompareFunction.greater
+        // TODO(zhuowei): hax
+        depthStateDescriptor.depthCompareFunction = MTLCompareFunction.greaterEqual
         depthStateDescriptor.isDepthWriteEnabled = true
         self.depthState = device.makeDepthStencilState(descriptor:depthStateDescriptor)!
 
