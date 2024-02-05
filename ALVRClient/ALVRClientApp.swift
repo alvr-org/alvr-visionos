@@ -96,22 +96,26 @@ struct VideoHandler {
     }
     
     static func addLengthsToNals(nals: Data) -> Data {
+        let nalHeaderLength = nals[2] == 0x01 ? 3 : 4
         var lastOff = 0
-        var off = 3
+        var off = nalHeaderLength
         var outData = Data()
-        while off < nals.count - 3 {
-            if nals[off] == 0x00 && nals[off + 1] == 0x00 && nals[off + 2] == 0x01 {
-                let lastData = nals.subdata(in: lastOff+3..<off)
+        while off < nals.count - nalHeaderLength {
+            let isNalHeader = nalHeaderLength == 3 ?
+            nals[off] == 0x00 && nals[off + 1] == 0x00 && nals[off + 2] == 0x01 :
+            nals[off] == 0x00 && nals[off + 1] == 0x00 && nals[off + 2] == 0x00 && nals[off + 3] == 0x01
+            if isNalHeader {
+                let lastData = nals.subdata(in: lastOff+nalHeaderLength..<off)
                 let lastLength = lastData.count
                 outData.append(contentsOf: [UInt8((lastLength >> 24) & 0xff), UInt8((lastLength >> 16) & 0xff), UInt8((lastLength >> 8) & 0xff), UInt8((lastLength >> 0) & 0xff)])
                 outData.append(lastData)
                 lastOff = off
-                off += 3
+                off += nalHeaderLength
                 continue
             }
             off += 1
         }
-        let lastData = nals.subdata(in: lastOff+3..<nals.count)
+        let lastData = nals.subdata(in: lastOff+nalHeaderLength..<nals.count)
         let lastLength = lastData.count
         outData.append(contentsOf: [UInt8((lastLength >> 24) & 0xff), UInt8((lastLength >> 16) & 0xff), UInt8((lastLength >> 8) & 0xff), UInt8((lastLength >> 0) & 0xff)])
         outData.append(lastData)
