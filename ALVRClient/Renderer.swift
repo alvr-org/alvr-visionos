@@ -30,10 +30,10 @@ extension LayerRenderer.Clock.Instant.Duration {
 // TODO(zhuowei): what's the z supposed to be?
 // x, y, z
 // u, v
-let fullscreenQuadVertices:[Float] = [-1, -1, 0,
-                                       1, -1, 0,
-                                       -1, 1, 0,
-                                       1, 1, 0,
+let fullscreenQuadVertices:[Float] = [-1, -1, 1,
+                                       1, -1, 1,
+                                       -1, 1, 1,
+                                       1, 1, 1,
                                        0, 1,
                                        0.5, 1,
                                        0, 0,
@@ -77,6 +77,7 @@ class Renderer {
     }
     // TODO(zhuowei): make this a real deque
     var frameQueue = [QueuedFrame]()
+    var frameQueueLastTimestamp: UInt64 = 0
     var streamingActive = false
     
     var deviceAnchorsLock = NSObject()
@@ -116,7 +117,7 @@ class Renderer {
 
         let depthStateDescriptor = MTLDepthStencilDescriptor()
         // TODO(zhuowei): hax
-        depthStateDescriptor.depthCompareFunction = MTLCompareFunction.greaterEqual
+        depthStateDescriptor.depthCompareFunction = MTLCompareFunction.greater
         depthStateDescriptor.isDepthWriteEnabled = true
         self.depthState = device.makeDepthStencilState(descriptor:depthStateDescriptor)!
 
@@ -373,17 +374,27 @@ class Renderer {
                         break
                     }
                     // print(nal.count, timestamp)
+                    objc_sync_enter(frameQueueLock)
+                    if frameQueueLastTimestamp > timestamp {
+                        continue
+                    }
+                    objc_sync_exit(frameQueueLock)
+                    
                     if let vtDecompressionSession = vtDecompressionSession {
                         VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
                             alvr_report_frame_decoded(timestamp)
                             guard let imageBuffer = imageBuffer else {
                                 return
                             }
+                            //print(Unmanaged.passUnretained(imageBuffer).toOpaque())
                             objc_sync_enter(frameQueueLock)
-                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
-                            if frameQueue.count > 2 {
-                                frameQueue.removeFirst()
+                            if frameQueueLastTimestamp <= timestamp {
+                                frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                                if frameQueue.count > 2 {
+                                    frameQueue.removeFirst()
+                                }
                             }
+                            frameQueueLastTimestamp = timestamp
                             objc_sync_exit(frameQueueLock)
                         }
                     } else {
