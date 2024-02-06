@@ -15,6 +15,7 @@
 		C5E590382B6379ED00328ED6 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = C5E590372B6379ED00328ED6 /* Shaders.metal */; };
 		C5E5903C2B6379ED00328ED6 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C5E5903B2B6379ED00328ED6 /* Preview Assets.xcassets */; };
 		C5E5903E2B6379EE00328ED6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C5E5903D2B6379EE00328ED6 /* Assets.xcassets */; };
+		D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61E6FDF2B71CE080076031A /* VideoHandler.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -44,6 +45,7 @@
 		C5E5903D2B6379EE00328ED6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C5E5903F2B6379EE00328ED6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ALVRClient-Bridging-Header.h"; sourceTree = "<group>"; };
+		D61E6FDF2B71CE080076031A /* VideoHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoHandler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,6 +84,7 @@
 				C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */,
 				C5E590332B6379ED00328ED6 /* ContentView.swift */,
 				C5E590352B6379ED00328ED6 /* Renderer.swift */,
+				D61E6FDF2B71CE080076031A /* VideoHandler.swift */,
 				C5E590372B6379ED00328ED6 /* Shaders.metal */,
 				C5E590392B6379ED00328ED6 /* ShaderTypes.h */,
 				C5E5903D2B6379EE00328ED6 /* Assets.xcassets */,
@@ -182,6 +185,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C5E590382B6379ED00328ED6 /* Shaders.metal in Sources */,
+				D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */,
 				C5E590342B6379ED00328ED6 /* ContentView.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
