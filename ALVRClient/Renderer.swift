@@ -447,11 +447,6 @@ class Renderer {
         }
         if !inputRunning {
             inputRunning = true
-            let inputThread = Thread {
-                self.inputLoop()
-            }
-            inputThread.name = "Input Thread"
-            inputThread.start()
             let eventsThread = Thread {
                 self.handleAlvrEvents()
             }
@@ -478,6 +473,8 @@ class Renderer {
         frame.startSubmission()
         
         if renderingStreaming {
+            sendTracking()
+            
             if let deviceAnchor = lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) {
                 //print("found anchor for frame!", deviceAnchor)
                 drawable.deviceAnchor = deviceAnchor
@@ -697,34 +694,27 @@ class Renderer {
         }
     }
     
-    func inputLoop() {
-        let MAX_PREDICTION = 70 * NSEC_PER_MSEC
-        let deviceIdHead = alvr_path_string_to_id("/user/head")
-        while inputRunning {
-            let targetTimestamp = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC)) + min(alvr_get_head_prediction_offset_ns(), MAX_PREDICTION)
-            guard let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: Double(targetTimestamp) / Double(NSEC_PER_SEC)) else {
-                // TODO(zhuowei): fix these
-                usleep(UInt32(USEC_PER_SEC / (3*90)))
-                continue
-            }
-            objc_sync_enter(deviceAnchorsLock)
-            deviceAnchorsQueue.append(targetTimestamp)
-            if deviceAnchorsQueue.count > 1000 {
-                deviceAnchorsDictionary.removeValue(forKey: deviceAnchorsQueue.removeFirst())
-            }
-            deviceAnchorsDictionary[targetTimestamp] = deviceAnchor
-            objc_sync_exit(deviceAnchorsLock)
-            let orientation = simd_quaternion(deviceAnchor.originFromAnchorTransform)
-            let position = deviceAnchor.originFromAnchorTransform.columns.3
-            var trackingMotion = AlvrDeviceMotion(device_id: deviceIdHead, orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
-            alvr_send_tracking(targetTimestamp, &trackingMotion, 1)
-            usleep(UInt32(USEC_PER_SEC / (3*90)))
+    static let maxPrediction = 15 * NSEC_PER_MSEC
+    static let deviceIdHead = alvr_path_string_to_id("/user/head")
+    
+    func sendTracking() {
+        let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
+        let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
+        guard let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestamp) else {
+            return
         }
+        deviceAnchorsQueue.append(targetTimestampNS)
+        if deviceAnchorsQueue.count > 1000 {
+            deviceAnchorsDictionary.removeValue(forKey: deviceAnchorsQueue.removeFirst())
+        }
+        deviceAnchorsDictionary[targetTimestampNS] = deviceAnchor
+        let orientation = simd_quaternion(deviceAnchor.originFromAnchorTransform)
+        let position = deviceAnchor.originFromAnchorTransform.columns.3
+        var trackingMotion = AlvrDeviceMotion(device_id: Renderer.deviceIdHead, orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+        alvr_send_tracking(targetTimestampNS, &trackingMotion, 1)
     }
     
     func lookupDeviceAnchorFor(timestamp: UInt64) -> DeviceAnchor? {
-        objc_sync_enter(deviceAnchorsLock)
-        defer { objc_sync_exit(deviceAnchorsLock) }
         return deviceAnchorsDictionary[timestamp]
     }
 }
