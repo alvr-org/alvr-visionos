@@ -332,7 +332,7 @@ class Renderer {
             var alvrEvent = AlvrEvent()
             let res = alvr_poll_event(&alvrEvent)
             if !res {
-                usleep(10000)
+                usleep(1000)
                 continue
             }
             switch UInt32(alvrEvent.tag) {

@@ -6,7 +6,6 @@ import SwiftUI
 #if os(visionOS)
 import CompositorServices
 #endif
-import VideoToolbox
 
 #if os(visionOS)
 struct ContentStageConfiguration: CompositorLayerConfiguration {
@@ -43,105 +42,6 @@ struct MetalRendererApp: App {
     }
 }
 #endif
-
-let H264_NAL_TYPE_SPS = 7
-
-struct VideoHandler {
-    static func pollNal() -> (Data, UInt64)? {
-        let nalLength = alvr_poll_nal(nil, nil)
-        if nalLength == 0 {
-            return nil
-        }
-        let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength))
-        defer { nalBuffer.deallocate() }
-        var nalTimestamp:UInt64 = 0
-        alvr_poll_nal(nalBuffer.baseAddress, &nalTimestamp)
-        return (Data(buffer: nalBuffer), nalTimestamp)
-    }
-    
-    static func createVideoDecoder(initialNals: Data) -> (VTDecompressionSession, CMFormatDescription) {
-        let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
-        var videoFormat:CMFormatDescription? = nil
-        var err:OSStatus = 0
-        
-        // First two are the SPS and PPS
-        // https://source.chromium.org/chromium/chromium/src/+/main:third_party/webrtc/sdk/objc/components/video_codec/nalu_rewriter.cc;l=228;drc=6f86f6af008176e631140e6a80e0a0bca9550143
-        
-        err = initialNals.withUnsafeBytes { (b:UnsafeRawBufferPointer) in
-            let nalOffset0 = b.baseAddress!
-            let nalOffset1 = memmem(nalOffset0 + 4, b.count - 4, nalHeader, nalHeader.count)!
-            let nalLength0 = UnsafeRawPointer(nalOffset1) - nalOffset0 - 4
-            let nalLength1 = b.baseAddress! + b.count - UnsafeRawPointer(nalOffset1) - 4
-
-            let parameterSetPointers = [unsafeBitCast(nalOffset0 + 4, to: UnsafePointer<UInt8>.self), unsafeBitCast(nalOffset1 + 4, to: UnsafePointer<UInt8>.self)]
-            let parameterSetSizes = [nalLength0, nalLength1]
-            return CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2, parameterSetPointers: parameterSetPointers, parameterSetSizes: parameterSetSizes, nalUnitHeaderLength: 4, formatDescriptionOut: &videoFormat)
-        }
-
-
-        if err != 0 {
-            fatalError("format?!")
-        }
-        print(videoFormat)
-        
-        let videoDecoderSpecification:[NSString: AnyObject] = [:]
-        let destinationImageBufferAttributes:[NSString: AnyObject] = [kCVPixelBufferMetalCompatibilityKey: true as NSNumber]
-
-        var decompressionSession:VTDecompressionSession? = nil
-        err = VTDecompressionSessionCreate(allocator: nil, formatDescription: videoFormat!, decoderSpecification: videoDecoderSpecification as CFDictionary, imageBufferAttributes: destinationImageBufferAttributes as CFDictionary, outputCallback: nil, decompressionSessionOut: &decompressionSession)
-        if err != 0 {
-            fatalError("format?!")
-        }
-        return (decompressionSession!, videoFormat!)
-    }
-    
-    static func addLengthsToNals(nals: Data) -> Data {
-        let nalHeaderLength = nals[2] == 0x01 ? 3 : 4
-        var lastOff = 0
-        var off = nalHeaderLength
-        var outData = Data()
-        while off < nals.count - nalHeaderLength {
-            let isNalHeader = nalHeaderLength == 3 ?
-            nals[off] == 0x00 && nals[off + 1] == 0x00 && nals[off + 2] == 0x01 :
-            nals[off] == 0x00 && nals[off + 1] == 0x00 && nals[off + 2] == 0x00 && nals[off + 3] == 0x01
-            if isNalHeader {
-                let lastData = nals.subdata(in: lastOff+nalHeaderLength..<off)
-                let lastLength = lastData.count
-                outData.append(contentsOf: [UInt8((lastLength >> 24) & 0xff), UInt8((lastLength >> 16) & 0xff), UInt8((lastLength >> 8) & 0xff), UInt8((lastLength >> 0) & 0xff)])
-                outData.append(lastData)
-                lastOff = off
-                off += nalHeaderLength
-                continue
-            }
-            off += 1
-        }
-        let lastData = nals.subdata(in: lastOff+nalHeaderLength..<nals.count)
-        let lastLength = lastData.count
-        outData.append(contentsOf: [UInt8((lastLength >> 24) & 0xff), UInt8((lastLength >> 16) & 0xff), UInt8((lastLength >> 8) & 0xff), UInt8((lastLength >> 0) & 0xff)])
-        outData.append(lastData)
-        return outData
-    }
-    static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: Data, timestamp: UInt64, videoFormat: CMFormatDescription, callback: @escaping (_ imageBuffer: CVImageBuffer?) -> Void) {
-        let nalsWithLengths = addLengthsToNals(nals: nals)
-        let blockBuffer = try! CMBlockBuffer(length: nalsWithLengths.count)
-        nalsWithLengths.withUnsafeBytes {
-            try! blockBuffer.replaceDataBytes(with: $0)
-        }
-        var err:OSStatus = 0
-        var sampleBuffer:CMSampleBuffer! = nil
-        err = CMSampleBufferCreate(allocator: nil, dataBuffer: blockBuffer, dataReady: true, makeDataReadyCallback: nil, refcon: nil, formatDescription: videoFormat, sampleCount: 1, sampleTimingEntryCount: 0, sampleTimingArray: nil, sampleSizeEntryCount: 0, sampleSizeArray: nil, sampleBufferOut: &sampleBuffer)
-        if err != 0 {
-            fatalError("CMSampleBufferCreate")
-        }
-        err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
-            //print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
-            callback(imageBuffer)
-        }
-        if err != 0 {
-            fatalError("VTDecompressionSessionDecodeFrame")
-        }
-    }
-}
 
 #if true && !os(visionOS)
 @main
