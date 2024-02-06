@@ -30,10 +30,10 @@ extension LayerRenderer.Clock.Instant.Duration {
 // TODO(zhuowei): what's the z supposed to be?
 // x, y, z
 // u, v
-let fullscreenQuadVertices:[Float] = [-1, -1, 1,
-                                       1, -1, 1,
-                                       -1, 1, 1,
-                                       1, 1, 1,
+let fullscreenQuadVertices:[Float] = [-1, -1, 0.1,
+                                       1, -1, 0.1,
+                                       -1, 1, 0.1,
+                                       1, 1, 0.1,
                                        0, 1,
                                        0.5, 1,
                                        0, 0,
@@ -87,6 +87,7 @@ class Renderer {
     var videoFramePipelineState:MTLRenderPipelineState
     var fullscreenQuadBuffer:MTLBuffer!
     var lastIpd:Float = -1
+    var framesRendered:Int = 0
     
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
@@ -117,7 +118,7 @@ class Renderer {
 
         let depthStateDescriptor = MTLDepthStencilDescriptor()
         // TODO(zhuowei): hax
-        depthStateDescriptor.depthCompareFunction = MTLCompareFunction.greater
+        depthStateDescriptor.depthCompareFunction = MTLCompareFunction.always
         depthStateDescriptor.isDepthWriteEnabled = true
         self.depthState = device.makeDepthStencilState(descriptor:depthStateDescriptor)!
 
@@ -388,9 +389,9 @@ class Renderer {
                             }
                             //print(Unmanaged.passUnretained(imageBuffer).toOpaque())
                             objc_sync_enter(frameQueueLock)
-                            if frameQueueLastTimestamp <= timestamp {
+                            if frameQueueLastTimestamp <= timestamp /*&& timestamp - frameQueueLastTimestamp < 1000*1000*50*/ {
                                 frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
-                                if frameQueue.count > 2 {
+                                if frameQueue.count > 1 {
                                     frameQueue.removeFirst()
                                 }
                             }
@@ -412,11 +413,10 @@ class Renderer {
     func renderFrame() {
         /// Per frame updates hare
 
-        guard let frame = layerRenderer.queryNextFrame() else { return }
+        //usleep(1000*500)
+
+        //layerRenderer.minimumFrameRepeatCount = 90
         
-        frame.startUpdate()
-        
-        frame.endUpdate()
         var queuedFrame:QueuedFrame? = nil
         if streamingActive {
             let startPollTime = CACurrentMediaTime()
@@ -430,6 +430,12 @@ class Renderer {
                 sched_yield()
             }
         }
+        
+        guard let frame = layerRenderer.queryNextFrame() else { return }
+        
+        frame.startUpdate()
+        
+        frame.endUpdate()
 
         if let queuedFrame = queuedFrame {
             alvr_report_compositor_start(queuedFrame.timestamp)
@@ -484,7 +490,10 @@ class Renderer {
         frame.startSubmission()
         
         if renderingStreaming {
-            sendTracking()
+            framesRendered += 1
+            //if framesRendered % 90 == 0 {
+                sendTracking()
+            //}
             
             if let deviceAnchor = lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) {
                 //print("found anchor for frame!", deviceAnchor)
