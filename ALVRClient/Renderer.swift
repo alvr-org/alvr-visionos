@@ -71,18 +71,31 @@ class Renderer {
     var vtDecompressionSession:VTDecompressionSession? = nil
     var videoFormat:CMFormatDescription? = nil
     var frameQueueLock = NSObject()
+    var nalLock = NSObject()
     struct QueuedFrame {
         let imageBuffer: CVImageBuffer
         let timestamp: UInt64
     }
+    
+    struct HoldMetalTextures {
+        var texture0: CVMetalTexture?
+        var texture1: CVMetalTexture?
+        var pixelBuffer: CVPixelBuffer?
+    }
+    
+    var heldTextures = [UInt64: HoldMetalTextures]()
+    var numNals = [UInt64: Int]()
+    
     // TODO(zhuowei): make this a real deque
     var frameQueue = [QueuedFrame]()
     var frameQueueLastTimestamp: UInt64 = 0
+    var frameQueueLastImageBuffer: CVImageBuffer? = nil
+    var lastQueuedFrame: QueuedFrame? = nil
     var streamingActive = false
     
     var deviceAnchorsLock = NSObject()
     var deviceAnchorsQueue = [UInt64]()
-    var deviceAnchorsDictionary = [UInt64: DeviceAnchor]()
+    var deviceAnchorsDictionary = [UInt64: simd_float4x4]()
     var metalTextureCache: CVMetalTextureCache!
     var videoFramePipelineState:MTLRenderPipelineState
     var fullscreenQuadBuffer:MTLBuffer!
@@ -330,11 +343,13 @@ class Renderer {
     }
     
     func handleAlvrEvents() {
+        var bigNal = NSMutableData() //or var messageData : NSMutableData = NSMutableData()
+        var bigNalTimestamp: UInt64 = 0
         while inputRunning {
             var alvrEvent = AlvrEvent()
             let res = alvr_poll_event(&alvrEvent)
             if !res {
-                usleep(1000)
+                usleep(1000*5)
                 continue
             }
             switch UInt32(alvrEvent.tag) {
@@ -370,43 +385,81 @@ class Renderer {
                 }
             case ALVR_EVENT_FRAME_READY.rawValue:
                 // print("frame ready")
+                
                 while true {
                     guard let (nal, timestamp) = VideoHandler.pollNal() else {
                         break
                     }
+                    bigNal.append(nal)
+                    bigNalTimestamp = timestamp
                     // print(nal.count, timestamp)
-                    objc_sync_enter(frameQueueLock)
-                    if frameQueueLastTimestamp > timestamp {
-                        continue
-                    }
-                    objc_sync_exit(frameQueueLock)
                     
-                    if let vtDecompressionSession = vtDecompressionSession {
-                        VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
-                            alvr_report_frame_decoded(timestamp)
-                            guard let imageBuffer = imageBuffer else {
-                                return
-                            }
-                            //print(Unmanaged.passUnretained(imageBuffer).toOpaque())
-                            objc_sync_enter(frameQueueLock)
-                            if frameQueueLastTimestamp <= timestamp /*&& timestamp - frameQueueLastTimestamp < 1000*1000*50*/ {
-                                frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
-                                if frameQueue.count > 1 {
-                                    frameQueue.removeFirst()
-                                }
-                            }
-                            frameQueueLastTimestamp = timestamp
-                            objc_sync_exit(frameQueueLock)
-                        }
-                    } else {
-                        alvr_report_frame_decoded(timestamp)
-                        alvr_report_compositor_start(timestamp)
-                        alvr_report_submit(timestamp, 0)
-                    }
+                    
+                    //NSLog("%@", nal as NSData)
                 }
+                
+                
             default:
                 print("msg")
             }
+            
+            objc_sync_enter(nalLock)
+            if bigNal.count > 0 {
+                let timestamp = bigNalTimestamp
+                let nal_type = bigNal[4] & 0x1f
+                //print("begin decode: \(timestamp), \(nal_type)")
+
+                if let vtDecompressionSession = vtDecompressionSession {
+                    VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: bigNal as Data, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
+                        alvr_report_frame_decoded(timestamp)
+                        guard let imageBuffer = imageBuffer else {
+                            return
+                        }
+                        let test = Unmanaged.passUnretained(imageBuffer).toOpaque()
+                        
+                        //print("finish decode: \(timestamp), \(test), \(nal_type)")
+                        //print(Unmanaged.passUnretained(imageBuffer).toOpaque())
+                        objc_sync_enter(frameQueueLock)
+                        //numNals[timestamp, default:0] += 1
+                        if frameQueueLastTimestamp < timestamp
+                        {
+                            // HACK: I have no idea when the frames are valid after decode, so we just wait until the start of a new frame,
+                            // and then submit the last frame for rendering.
+                            if frameQueueLastImageBuffer != nil {
+                                frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
+                                //frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                            }
+                            else {
+                                frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                            }
+                            if frameQueue.count > 1 {
+                                frameQueue.removeFirst()
+                            }
+                            
+                            
+                            if frameQueueLastTimestamp <= timestamp {
+                                //print("queue: \(frameQueueLastTimestamp) -> \(timestamp), \(test)")
+                            }
+                            
+                            frameQueueLastTimestamp = timestamp
+                            frameQueueLastImageBuffer = imageBuffer
+                        }
+                        if frameQueueLastTimestamp == timestamp {
+                             frameQueueLastImageBuffer = imageBuffer
+                        }
+                        
+                        
+                        objc_sync_exit(frameQueueLock)
+                    }
+                } else {
+                    alvr_report_frame_decoded(timestamp)
+                    alvr_report_compositor_start(timestamp)
+                    alvr_report_submit(timestamp, 0)
+                }
+                bigNal = NSMutableData()
+                bigNalTimestamp = 0
+            }
+            objc_sync_exit(nalLock)
         }
     }
 
@@ -417,19 +470,44 @@ class Renderer {
 
         //layerRenderer.minimumFrameRepeatCount = 90
         
+        framesRendered += 1
+        //if framesRendered % 90 == 0 {
+            sendTracking()
+        //}
+        
         var queuedFrame:QueuedFrame? = nil
         if streamingActive {
             let startPollTime = CACurrentMediaTime()
             while true {
+                objc_sync_enter(nalLock)
                 objc_sync_enter(frameQueueLock)
                 queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
                 objc_sync_exit(frameQueueLock)
-                if queuedFrame != nil ||  CACurrentMediaTime() - startPollTime > 1{
+                objc_sync_exit(nalLock)
+                if queuedFrame != nil ||  CACurrentMediaTime() - startPollTime > 0.01 {
+                    break
+                }
+                if lastQueuedFrame != nil {
                     break
                 }
                 sched_yield()
             }
         }
+        
+        if queuedFrame == nil && lastQueuedFrame != nil && streamingActive {
+            queuedFrame = lastQueuedFrame
+        }
+        
+        if queuedFrame == nil && streamingActive {
+            return
+        }
+        
+        /*
+        if let queuedFrame = queuedFrame {
+            if frameQueueLastTimestamp > queuedFrame.timestamp {
+                return
+            }
+        }*/
         
         guard let frame = layerRenderer.queryNextFrame() else { return }
         
@@ -437,8 +515,8 @@ class Renderer {
         
         frame.endUpdate()
 
-        if let queuedFrame = queuedFrame {
-            alvr_report_compositor_start(queuedFrame.timestamp)
+        if queuedFrame != nil {
+            alvr_report_compositor_start(queuedFrame!.timestamp)
         }
         
         let renderingStreaming = streamingActive && queuedFrame != nil
@@ -487,17 +565,41 @@ class Renderer {
         
         _ = inFlightSemaphore.wait(timeout: DispatchTime.distantFuture)
         
+        // HACK: get a newer frame if possible
+        /*
+        if queuedFrame != nil {
+            if frameQueueLastTimestamp > queuedFrame!.timestamp {
+                if streamingActive {
+                    let startPollTime = CACurrentMediaTime()
+                    while true {
+                        objc_sync_enter(nalLock)
+                        objc_sync_enter(frameQueueLock)
+                        queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
+                        objc_sync_exit(frameQueueLock)
+                        objc_sync_exit(nalLock)
+                        if queuedFrame != nil {
+                            break
+                        }
+                        sched_yield()
+                    }
+                }
+            }
+        }*/
+        
         frame.startSubmission()
         
         if renderingStreaming {
-            framesRendered += 1
-            //if framesRendered % 90 == 0 {
-                sendTracking()
-            //}
-            
-            if let deviceAnchor = lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) {
-                //print("found anchor for frame!", deviceAnchor)
+            if let deviceAnchorLoc = lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) {
+                
+                
+                //let time = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
+                
+                // TODO: maybe find some mutable pointer hax to just copy in the ground truth, instead of asking for a value in the past.
+                let time = Double(queuedFrame!.timestamp) / Double(NSEC_PER_SEC)
+                let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
                 drawable.deviceAnchor = deviceAnchor
+                
+                //print("found anchor for frame!", deviceAnchorLoc, queuedFrame!.timestamp, deviceAnchor?.originFromAnchorTransform)
             }
         }
         if drawable.deviceAnchor == nil {
@@ -508,6 +610,10 @@ class Renderer {
             let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
             
             drawable.deviceAnchor = deviceAnchor
+        }
+        if let queuedFrame = queuedFrame {
+            let test_ts = queuedFrame.timestamp
+            //print("draw: \(test_ts)")
         }
         
         let semaphore = inFlightSemaphore
@@ -528,8 +634,18 @@ class Renderer {
         drawable.encodePresent(commandBuffer: commandBuffer)
         
         commandBuffer.commit()
+        commandBuffer.addCompletedHandler { commandBuffer in
+            if let queuedFrame = queuedFrame {
+                self.heldTextures.removeValue(forKey: queuedFrame.timestamp)
+            }
+        }
         
         frame.endSubmission()
+        
+        //if lastQueuedFrame == nil {
+        lastQueuedFrame = queuedFrame
+        //}
+        
     }
     
     func renderLobby(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer) {
@@ -667,6 +783,12 @@ class Renderer {
         let pixelBuffer = queuedFrame.imageBuffer
         // https://cs.android.com/android/platform/superproject/main/+/main:external/webrtc/sdk/objc/components/renderer/metal/RTCMTLNV12Renderer.mm;l=108;drc=a81e9c82fc3fbc984f0f110407d1e44c9c01958a
         // TODO(zhuowei): yolo
+        //usleep(1000*100)
+        
+        //TODO: prevailing wisdom on stackoverflow says that the CVMetalTextureRef has to be held until
+        // rendering is complete, or the MtlTexture will be invalid?
+        var hold: HoldMetalTextures = HoldMetalTextures(texture0: nil, texture1: nil, pixelBuffer: nil)
+        
         for i in 0...1 {
             var textureOut:CVMetalTexture! = nil
             var err:OSStatus = 0
@@ -688,7 +810,19 @@ class Renderer {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage")
             }
             renderEncoder.setFragmentTexture(metalTexture, index: i)
+            
+            if i == 0 {
+                hold.texture0 = textureOut
+            }
+            else {
+                hold.texture1 = textureOut
+            }
         }
+        hold.pixelBuffer = pixelBuffer
+        heldTextures[queuedFrame.timestamp] = hold
+        let test = Unmanaged.passUnretained(pixelBuffer).toOpaque()
+        //print("draw buf: \(test)")
+        
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
@@ -725,16 +859,17 @@ class Renderer {
         }
         deviceAnchorsQueue.append(targetTimestampNS)
         if deviceAnchorsQueue.count > 1000 {
-            deviceAnchorsDictionary.removeValue(forKey: deviceAnchorsQueue.removeFirst())
+            let val = deviceAnchorsQueue.removeFirst()
+            deviceAnchorsDictionary.removeValue(forKey: val)
         }
-        deviceAnchorsDictionary[targetTimestampNS] = deviceAnchor
+        deviceAnchorsDictionary[targetTimestampNS] = deviceAnchor.originFromAnchorTransform
         let orientation = simd_quaternion(deviceAnchor.originFromAnchorTransform)
         let position = deviceAnchor.originFromAnchorTransform.columns.3
         var trackingMotion = AlvrDeviceMotion(device_id: Renderer.deviceIdHead, orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
         alvr_send_tracking(targetTimestampNS, &trackingMotion, 1)
     }
     
-    func lookupDeviceAnchorFor(timestamp: UInt64) -> DeviceAnchor? {
+    func lookupDeviceAnchorFor(timestamp: UInt64) -> simd_float4x4? {
         return deviceAnchorsDictionary[timestamp]
     }
 }
