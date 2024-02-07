@@ -437,9 +437,10 @@ class Renderer {
     func renderFrame() {
         /// Per frame updates hare
         framesRendered += 1
+        var streamingActiveForFrame = streamingActive
         
         var queuedFrame:QueuedFrame? = nil
-        if streamingActive {
+        if streamingActiveForFrame {
             let startPollTime = CACurrentMediaTime()
             while true {
                 objc_sync_enter(frameQueueLock)
@@ -458,8 +459,8 @@ class Renderer {
             }
         }
         
-        if queuedFrame == nil && streamingActive {
-            return
+        if queuedFrame == nil && streamingActiveForFrame {
+            streamingActiveForFrame = false
         }
         
         guard let frame = layerRenderer.queryNextFrame() else { return }
@@ -472,7 +473,7 @@ class Renderer {
             alvr_report_compositor_start(queuedFrame!.timestamp)
         }
         
-        let renderingStreaming = streamingActive && queuedFrame != nil
+        let renderingStreaming = false && streamingActiveForFrame && queuedFrame != nil
         
         if !renderingStreaming {
             guard let timing = frame.predictTiming() else { return }
@@ -493,8 +494,6 @@ class Renderer {
             let refreshRates:[Float] = [90, 60, 45]
             alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(drawable.colorTextures[0].width), UInt32(drawable.colorTextures[0].height), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
             alvr_resume()
-            usleep(1000*100) // TODO wat, why is this needed on release builds
-            sched_yield()
         }
         if !inputRunning {
             inputRunning = true
@@ -503,12 +502,10 @@ class Renderer {
             }
             eventsThread.name = "Events Thread"
             eventsThread.start()
-            usleep(1000*100)
-            sched_yield()
         }
         
         
-        if alvrInitialized && streamingActive {
+        if alvrInitialized && streamingActiveForFrame {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
             if abs(lastIpd - ipd) > 0.001 {
                 lastIpd = ipd
@@ -525,7 +522,7 @@ class Renderer {
         
         // HACK: get a newer frame if possible
         if queuedFrame != nil {
-            if frameQueue.count > 0 && streamingActive {
+            if frameQueue.count > 0 && streamingActiveForFrame {
                 while true {
                     objc_sync_enter(frameQueueLock)
                     queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
@@ -573,7 +570,7 @@ class Renderer {
             }
         }
         
-        if streamingActive {
+        if streamingActiveForFrame {
             renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
         } else {
             renderLobby(drawable: drawable, commandBuffer: commandBuffer)
