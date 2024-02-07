@@ -76,14 +76,6 @@ class Renderer {
         let timestamp: UInt64
     }
     
-    struct HoldMetalTextures {
-        var texture0: CVMetalTexture?
-        var texture1: CVMetalTexture?
-        var pixelBuffer: CVPixelBuffer?
-    }
-    
-    var heldTextures = [UInt64: HoldMetalTextures]()
-    
     // TODO(zhuowei): make this a real deque
     var frameQueue = [QueuedFrame]()
     var frameQueueLastTimestamp: UInt64 = 0
@@ -130,7 +122,7 @@ class Renderer {
         let depthStateDescriptor = MTLDepthStencilDescriptor()
         // TODO(zhuowei): hax
         depthStateDescriptor.depthCompareFunction = MTLCompareFunction.always
-        depthStateDescriptor.isDepthWriteEnabled = true
+        depthStateDescriptor.isDepthWriteEnabled = false
         self.depthState = device.makeDepthStencilState(descriptor:depthStateDescriptor)!
 
         do {
@@ -345,7 +337,7 @@ class Renderer {
             var alvrEvent = AlvrEvent()
             let res = alvr_poll_event(&alvrEvent)
             if !res {
-                usleep(1000*5)
+                usleep(1000)
                 continue
             }
             switch UInt32(alvrEvent.tag) {
@@ -398,7 +390,7 @@ class Renderer {
                             //print("finish decode: \(timestamp), \(imageBufferPtr), \(nal_type)")
                             
                             objc_sync_enter(frameQueueLock)
-                            if frameQueueLastTimestamp < timestamp
+                            if frameQueueLastTimestamp != timestamp
                             {
                                 // TODO: For some reason, really low frame rates seem to decode the wrong image for a split second?
                                 // But for whatever reason this is fine at high FPS.
@@ -444,15 +436,7 @@ class Renderer {
 
     func renderFrame() {
         /// Per frame updates hare
-
-        //usleep(1000*500)
-
-        //layerRenderer.minimumFrameRepeatCount = 90
-        
         framesRendered += 1
-        //if framesRendered % 90 == 0 {
-            sendTracking()
-        //}
         
         var queuedFrame:QueuedFrame? = nil
         if streamingActive {
@@ -478,13 +462,6 @@ class Renderer {
         if queuedFrame == nil && streamingActive {
             return
         }
-        
-        /*
-        if let queuedFrame = queuedFrame {
-            if frameQueueLastTimestamp > queuedFrame.timestamp {
-                return
-            }
-        }*/
         
         guard let frame = layerRenderer.queryNextFrame() else { return }
         
@@ -607,17 +584,15 @@ class Renderer {
         
         commandBuffer.commit()
         commandBuffer.addCompletedHandler { commandBuffer in
-            if let queuedFrame = queuedFrame {
-                self.heldTextures.removeValue(forKey: queuedFrame.timestamp)
-            }
+            // TODO perf measurements?
         }
         
         frame.endSubmission()
         
-        //if lastQueuedFrame == nil {
-        lastQueuedFrame = queuedFrame
-        //}
+        let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
+        sendTracking(targetTimestamp: targetTimestamp)
         
+        lastQueuedFrame = queuedFrame
     }
     
     func renderLobby(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer) {
@@ -711,7 +686,7 @@ class Renderer {
         renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
-        renderPassDescriptor.depthAttachment.clearDepth = 0.0
+        renderPassDescriptor.depthAttachment.clearDepth = 0.01
         renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
         if layerRenderer.configuration.layout == .layered {
             renderPassDescriptor.renderTargetArrayLength = drawable.views.count
@@ -755,11 +730,8 @@ class Renderer {
         let pixelBuffer = queuedFrame.imageBuffer
         // https://cs.android.com/android/platform/superproject/main/+/main:external/webrtc/sdk/objc/components/renderer/metal/RTCMTLNV12Renderer.mm;l=108;drc=a81e9c82fc3fbc984f0f110407d1e44c9c01958a
         // TODO(zhuowei): yolo
-        //usleep(1000*100)
-        
         //TODO: prevailing wisdom on stackoverflow says that the CVMetalTextureRef has to be held until
         // rendering is complete, or the MtlTexture will be invalid?
-        var hold: HoldMetalTextures = HoldMetalTextures(texture0: nil, texture1: nil, pixelBuffer: nil)
         
         for i in 0...1 {
             var textureOut:CVMetalTexture! = nil
@@ -782,17 +754,8 @@ class Renderer {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage")
             }
             renderEncoder.setFragmentTexture(metalTexture, index: i)
-            
-            if i == 0 {
-                hold.texture0 = textureOut
-            }
-            else {
-                hold.texture1 = textureOut
-            }
         }
-        hold.pixelBuffer = pixelBuffer
-        heldTextures[queuedFrame.timestamp] = hold
-        let test = Unmanaged.passUnretained(pixelBuffer).toOpaque()
+        //let test = Unmanaged.passUnretained(pixelBuffer).toOpaque()
         //print("draw buf: \(test)")
         
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
@@ -823,8 +786,8 @@ class Renderer {
     static let maxPrediction = 15 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
     
-    func sendTracking() {
-        let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
+    func sendTracking(targetTimestamp: Double) {
+        //let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
         let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         guard let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestamp) else {
             return
