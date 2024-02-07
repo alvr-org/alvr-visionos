@@ -34,7 +34,7 @@ struct VideoHandler {
             let nalLength0 = UnsafeRawPointer(nalOffset1) - nalOffset0 - 4
             let nalLength1 = b.baseAddress! + b.count - UnsafeRawPointer(nalOffset1) - 4
 
-            let parameterSetPointers = [unsafeBitCast(nalOffset0 + 4, to: UnsafePointer<UInt8>.self), unsafeBitCast(nalOffset1 + 4, to: UnsafePointer<UInt8>.self)]
+            let parameterSetPointers = [(nalOffset0 + 4).assumingMemoryBound(to: UInt8.self), UnsafeRawPointer(nalOffset1 + 4).assumingMemoryBound(to: UInt8.self)]
             let parameterSetSizes = [nalLength0, nalLength1]
             return CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2, parameterSetPointers: parameterSetPointers, parameterSetSizes: parameterSetSizes, nalUnitHeaderLength: 4, formatDescriptionOut: &videoFormat)
         }
@@ -43,7 +43,7 @@ struct VideoHandler {
         if err != 0 {
             fatalError("format?!")
         }
-        print(videoFormat)
+        print(videoFormat!)
         
         let videoDecoderSpecification:[NSString: AnyObject] = [kVTDecompressionPropertyKey_RealTime:kCFBooleanTrue]
         let destinationImageBufferAttributes:[NSString: AnyObject] = [kCVPixelBufferMetalCompatibilityKey: true as NSNumber, kCVPixelBufferPoolMinimumBufferCountKey: 3 as NSNumber]
