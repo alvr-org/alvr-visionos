@@ -486,12 +486,15 @@ class Renderer {
         
         guard let drawable = frame.queryDrawable() else { return }
         
+        
         if !alvrInitialized {
             alvrInitialized = true
             // TODO(zhuowei): ???
             let refreshRates:[Float] = [90, 60, 45]
             alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(drawable.colorTextures[0].width), UInt32(drawable.colorTextures[0].height), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
             alvr_resume()
+            usleep(1000*100) // TODO wat, why is this needed on release builds
+            sched_yield()
         }
         if !inputRunning {
             inputRunning = true
@@ -500,6 +503,8 @@ class Renderer {
             }
             eventsThread.name = "Events Thread"
             eventsThread.start()
+            usleep(1000*100)
+            sched_yield()
         }
         
         
@@ -562,7 +567,9 @@ class Renderer {
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             semaphore.signal()
             if let queuedFrame = queuedFrame {
-                alvr_report_submit(queuedFrame.timestamp, 0)
+                if self.alvrInitialized {
+                    alvr_report_submit(queuedFrame.timestamp, 0)
+                }
             }
         }
         
@@ -575,14 +582,13 @@ class Renderer {
         drawable.encodePresent(commandBuffer: commandBuffer)
         
         commandBuffer.commit()
-        commandBuffer.addCompletedHandler { commandBuffer in
-            // TODO perf measurements?
-        }
         
         frame.endSubmission()
         
-        let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
-        sendTracking(targetTimestamp: targetTimestamp)
+        if self.alvrInitialized {
+            let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
+            sendTracking(targetTimestamp: targetTimestamp)
+        }
         
         lastQueuedFrame = queuedFrame
     }
@@ -758,10 +764,12 @@ class Renderer {
     }
     
     func renderLoop() {
+        layerRenderer.waitUntilRunning()
         while true {
             if layerRenderer.state == .invalidated {
                 print("Layer is invalidated")
                 inputRunning = false
+                exit(0)
                 return
             } else if layerRenderer.state == .paused {
                 layerRenderer.waitUntilRunning()
