@@ -71,7 +71,6 @@ class Renderer {
     var vtDecompressionSession:VTDecompressionSession? = nil
     var videoFormat:CMFormatDescription? = nil
     var frameQueueLock = NSObject()
-    var nalLock = NSObject()
     struct QueuedFrame {
         let imageBuffer: CVImageBuffer
         let timestamp: UInt64
@@ -84,7 +83,6 @@ class Renderer {
     }
     
     var heldTextures = [UInt64: HoldMetalTextures]()
-    var numNals = [UInt64: Int]()
     
     // TODO(zhuowei): make this a real deque
     var frameQueue = [QueuedFrame]()
@@ -343,8 +341,6 @@ class Renderer {
     }
     
     func handleAlvrEvents() {
-        var bigNal = NSMutableData() //or var messageData : NSMutableData = NSMutableData()
-        var bigNalTimestamp: UInt64 = 0
         while inputRunning {
             var alvrEvent = AlvrEvent()
             let res = alvr_poll_event(&alvrEvent)
@@ -390,76 +386,59 @@ class Renderer {
                     guard let (nal, timestamp) = VideoHandler.pollNal() else {
                         break
                     }
-                    bigNal.append(nal)
-                    bigNalTimestamp = timestamp
-                    // print(nal.count, timestamp)
                     
-                    
-                    //NSLog("%@", nal as NSData)
+                    if let vtDecompressionSession = vtDecompressionSession {
+                        VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
+                            alvr_report_frame_decoded(timestamp)
+                            guard let imageBuffer = imageBuffer else {
+                                return
+                            }
+                            
+                            //let imageBufferPtr = Unmanaged.passUnretained(imageBuffer).toOpaque()
+                            //print("finish decode: \(timestamp), \(imageBufferPtr), \(nal_type)")
+                            
+                            objc_sync_enter(frameQueueLock)
+                            if frameQueueLastTimestamp < timestamp
+                            {
+                                // TODO: For some reason, really low frame rates seem to decode the wrong image for a split second?
+                                // But for whatever reason this is fine at high FPS.
+                                // From what I've read online, the only way to know if an H264 frame has actually completed is if
+                                // the next frame is starting, so keep this around for now just in case.
+                                if frameQueueLastImageBuffer != nil {
+                                    //frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
+                                    frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                                }
+                                else {
+                                    frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                                }
+                                if frameQueue.count > 2 {
+                                    frameQueue.removeFirst()
+                                }
+                                
+                                //print("queue: \(frameQueueLastTimestamp) -> \(timestamp), \(test)")
+                                
+                                frameQueueLastTimestamp = timestamp
+                                frameQueueLastImageBuffer = imageBuffer
+                            }
+                            
+                            // Pull the very last imageBuffer for a given timestamp
+                            if frameQueueLastTimestamp == timestamp {
+                                 frameQueueLastImageBuffer = imageBuffer
+                            }
+                            
+                            objc_sync_exit(frameQueueLock)
+                        }
+                    } else {
+                        alvr_report_frame_decoded(timestamp)
+                        alvr_report_compositor_start(timestamp)
+                        alvr_report_submit(timestamp, 0)
+                    }
                 }
                 
                 
             default:
                 print("msg")
             }
-            
-            objc_sync_enter(nalLock)
-            if bigNal.count > 0 {
-                let timestamp = bigNalTimestamp
-                let nal_type = bigNal[4] & 0x1f
-                //print("begin decode: \(timestamp), \(nal_type)")
-
-                if let vtDecompressionSession = vtDecompressionSession {
-                    VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: bigNal as Data, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
-                        alvr_report_frame_decoded(timestamp)
-                        guard let imageBuffer = imageBuffer else {
-                            return
-                        }
-                        let test = Unmanaged.passUnretained(imageBuffer).toOpaque()
-                        
-                        //print("finish decode: \(timestamp), \(test), \(nal_type)")
-                        //print(Unmanaged.passUnretained(imageBuffer).toOpaque())
-                        objc_sync_enter(frameQueueLock)
-                        //numNals[timestamp, default:0] += 1
-                        if frameQueueLastTimestamp < timestamp
-                        {
-                            // HACK: I have no idea when the frames are valid after decode, so we just wait until the start of a new frame,
-                            // and then submit the last frame for rendering.
-                            if frameQueueLastImageBuffer != nil {
-                                frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
-                                //frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
-                            }
-                            else {
-                                frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
-                            }
-                            if frameQueue.count > 1 {
-                                frameQueue.removeFirst()
-                            }
-                            
-                            
-                            if frameQueueLastTimestamp <= timestamp {
-                                //print("queue: \(frameQueueLastTimestamp) -> \(timestamp), \(test)")
-                            }
-                            
-                            frameQueueLastTimestamp = timestamp
-                            frameQueueLastImageBuffer = imageBuffer
-                        }
-                        if frameQueueLastTimestamp == timestamp {
-                             frameQueueLastImageBuffer = imageBuffer
-                        }
-                        
-                        
-                        objc_sync_exit(frameQueueLock)
-                    }
-                } else {
-                    alvr_report_frame_decoded(timestamp)
-                    alvr_report_compositor_start(timestamp)
-                    alvr_report_submit(timestamp, 0)
-                }
-                bigNal = NSMutableData()
-                bigNalTimestamp = 0
-            }
-            objc_sync_exit(nalLock)
         }
     }
 
@@ -479,11 +458,9 @@ class Renderer {
         if streamingActive {
             let startPollTime = CACurrentMediaTime()
             while true {
-                objc_sync_enter(nalLock)
                 objc_sync_enter(frameQueueLock)
                 queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
                 objc_sync_exit(frameQueueLock)
-                objc_sync_exit(nalLock)
                 if queuedFrame != nil ||  CACurrentMediaTime() - startPollTime > 0.01 {
                     break
                 }
@@ -566,25 +543,20 @@ class Renderer {
         _ = inFlightSemaphore.wait(timeout: DispatchTime.distantFuture)
         
         // HACK: get a newer frame if possible
-        /*
         if queuedFrame != nil {
-            if frameQueueLastTimestamp > queuedFrame!.timestamp {
-                if streamingActive {
-                    let startPollTime = CACurrentMediaTime()
-                    while true {
-                        objc_sync_enter(nalLock)
-                        objc_sync_enter(frameQueueLock)
-                        queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
-                        objc_sync_exit(frameQueueLock)
-                        objc_sync_exit(nalLock)
-                        if queuedFrame != nil {
-                            break
-                        }
-                        sched_yield()
+            if frameQueue.count > 0 && streamingActive {
+                let startPollTime = CACurrentMediaTime()
+                while true {
+                    objc_sync_enter(frameQueueLock)
+                    queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
+                    objc_sync_exit(frameQueueLock)
+                    if queuedFrame != nil {
+                        break
                     }
+                    sched_yield()
                 }
             }
-        }*/
+        }
         
         frame.startSubmission()
         

@@ -145,6 +145,7 @@ struct VideoHandler {
                 offset += 4
                 _ = UnsafeMutableBufferPointer(start: pointer.advanced(by: offset), count: blockBufferSize - offset).update(from: buffer[index.payloadStartOffset..<index.payloadStartOffset + index.payloadSize])
                 offset += index.payloadSize
+                //print(buffer[index.payloadStartOffset] & 0x1F)
             }
         }
         
@@ -162,10 +163,11 @@ struct VideoHandler {
         let sampleBuffer = annexBBufferToCMSampleBuffer(buffer: nals, videoFormat: videoFormat)
         err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
             //print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
+            //print("status: \(status), image_nil?: \(imageBuffer == nil), infoFlags: \(infoFlags)")
             callback(imageBuffer)
         }
         if err != 0 {
-            fatalError("VTDecompressionSessionDecodeFrame")
+            //fatalError("VTDecompressionSessionDecodeFrame")
         }
     }
 }
