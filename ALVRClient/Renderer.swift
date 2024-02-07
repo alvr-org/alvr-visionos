@@ -771,11 +771,9 @@ class Renderer {
             if layerRenderer.state == .invalidated {
                 print("Layer is invalidated")
                 inputRunning = false
-                exit(0)
-                return
+                break
             } else if layerRenderer.state == .paused {
                 layerRenderer.waitUntilRunning()
-                // TODO(zhuowei): input thread?
                 continue
             } else {
                 autoreleasepool {
