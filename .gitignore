@@ -1,3 +1,4 @@
 libalvr_client_core.dylib
 ALVRClientCore.xcframework
 alvrrepack
+Override.xcconfig

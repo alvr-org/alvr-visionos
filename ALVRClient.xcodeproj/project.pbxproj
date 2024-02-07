@@ -46,6 +46,8 @@
 		C5E5903F2B6379EE00328ED6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ALVRClient-Bridging-Header.h"; sourceTree = "<group>"; };
 		D61E6FDF2B71CE080076031A /* VideoHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoHandler.swift; sourceTree = "<group>"; };
+		D68FA8042B73D5DD0052B7FF /* ALVRClient.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ALVRClient.xcconfig; sourceTree = "<group>"; };
+		D68FA8052B73D6260052B7FF /* Override.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Override.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,6 +65,8 @@
 		C5E590212B6379ED00328ED6 = {
 			isa = PBXGroup;
 			children = (
+				D68FA8042B73D5DD0052B7FF /* ALVRClient.xcconfig */,
+				D68FA8052B73D6260052B7FF /* Override.xcconfig */,
 				C5E5902C2B6379ED00328ED6 /* ALVRClient */,
 				C5E5902D2B6379ED00328ED6 /* Packages */,
 				C5E5902B2B6379ED00328ED6 /* Products */,
@@ -316,13 +320,13 @@
 		};
 		C5E590432B6379EE00328ED6 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D68FA8042B73D5DD0052B7FF /* ALVRClient.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
-				DEVELOPMENT_TEAM = 3D7RY4393N;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_ARCHS = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -340,7 +344,6 @@
 					"$(PROJECT_DIR)",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.worthdoingbadly.ALVRClient;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -353,13 +356,13 @@
 		};
 		C5E590442B6379EE00328ED6 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D68FA8042B73D5DD0052B7FF /* ALVRClient.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
-				DEVELOPMENT_TEAM = 3D7RY4393N;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_ARCHS = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -377,7 +380,6 @@
 					"$(PROJECT_DIR)",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.worthdoingbadly.ALVRClient;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
 				SUPPORTS_MACCATALYST = YES;
