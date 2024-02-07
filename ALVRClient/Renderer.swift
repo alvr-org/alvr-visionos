@@ -27,13 +27,18 @@ extension LayerRenderer.Clock.Instant.Duration {
     }
 }
 
+// Larger makes closer objects zoom in more,
+// smaller makes farther objects zoom in more?
+// Could also be a foveation thing idk
+let panel_depth: Float = 0.1
+
 // TODO(zhuowei): what's the z supposed to be?
 // x, y, z
 // u, v
-let fullscreenQuadVertices:[Float] = [-1, -1, 0.1,
-                                       1, -1, 0.1,
-                                       -1, 1, 0.1,
-                                       1, 1, 0.1,
+let fullscreenQuadVertices:[Float] = [-1, -1, panel_depth,
+                                       1, -1, panel_depth,
+                                       -1, 1, panel_depth,
+                                       1, 1, panel_depth,
                                        0, 1,
                                        0.5, 1,
                                        0, 0,
@@ -121,8 +126,8 @@ class Renderer {
 
         let depthStateDescriptor = MTLDepthStencilDescriptor()
         // TODO(zhuowei): hax
-        depthStateDescriptor.depthCompareFunction = MTLCompareFunction.always
-        depthStateDescriptor.isDepthWriteEnabled = false
+        depthStateDescriptor.depthCompareFunction = MTLCompareFunction.greater
+        depthStateDescriptor.isDepthWriteEnabled = true
         self.depthState = device.makeDepthStencilState(descriptor:depthStateDescriptor)!
 
         do {
@@ -681,7 +686,7 @@ class Renderer {
         renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
-        renderPassDescriptor.depthAttachment.clearDepth = 0.01
+        renderPassDescriptor.depthAttachment.clearDepth = 0.0
         renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
         if layerRenderer.configuration.layout == .layered {
             renderPassDescriptor.renderTargetArrayLength = drawable.views.count
