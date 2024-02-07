@@ -473,7 +473,7 @@ class Renderer {
             alvr_report_compositor_start(queuedFrame!.timestamp)
         }
         
-        let renderingStreaming = false && streamingActiveForFrame && queuedFrame != nil
+        let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
         if !renderingStreaming {
             guard let timing = frame.predictTiming() else { return }
