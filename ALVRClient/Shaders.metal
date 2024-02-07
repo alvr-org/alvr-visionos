@@ -159,7 +159,19 @@ fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<f
     );
     
     // TODO(zhuowei): gamma is wrong here
-    float4 ycbcr = float4(pow(ySample.r, 2.2), uvSample.rg, 1.0f);
+    float4 ycbcr = float4(ySample.r, uvSample.rg, 1.0f);
     
-    return ycbcrToRGBTransform * ycbcr;
+    float3 rgb_uncorrect = (ycbcrToRGBTransform * ycbcr).rgb;
+    
+    const float DIV12 = 1. / 12.92;
+    const float DIV1 = 1. / 1.055;
+    const float THRESHOLD = 0.04045;
+    const float3 GAMMA = float3(2.4);
+        
+    float3 condition = float3(rgb_uncorrect.r < THRESHOLD, rgb_uncorrect.g < THRESHOLD, rgb_uncorrect.b < THRESHOLD);
+    float3 lowValues = rgb_uncorrect * DIV12;
+    float3 highValues = pow((rgb_uncorrect + 0.055) * DIV1, GAMMA);
+    float3 color = condition * lowValues + (1.0 - condition) * highValues;
+    
+    return float4(color.rgb, 1.0);
 }
