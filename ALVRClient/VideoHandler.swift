@@ -145,7 +145,6 @@ struct VideoHandler {
                 offset += 4
                 _ = UnsafeMutableBufferPointer(start: pointer.advanced(by: offset), count: blockBufferSize - offset).update(from: buffer[index.payloadStartOffset..<index.payloadStartOffset + index.payloadSize])
                 offset += index.payloadSize
-                //print(buffer[index.payloadStartOffset] & 0x1F)
             }
         }
         

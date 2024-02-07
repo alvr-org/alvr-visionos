@@ -365,7 +365,7 @@ class Renderer {
                     }
                     print(nal.count, timestamp)
                     NSLog("%@", nal as NSData)
-                    if nal[4] & 0x1f == H264_NAL_TYPE_SPS {
+                    if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
                         // here we go!
                         (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal)
                         break
@@ -448,15 +448,14 @@ class Renderer {
                 if queuedFrame != nil ||  CACurrentMediaTime() - startPollTime > 0.01 {
                     break
                 }
+                
+                // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
                 if lastQueuedFrame != nil {
+                    queuedFrame = lastQueuedFrame
                     break
                 }
                 sched_yield()
             }
-        }
-        
-        if queuedFrame == nil && lastQueuedFrame != nil && streamingActive {
-            queuedFrame = lastQueuedFrame
         }
         
         if queuedFrame == nil && streamingActive {
@@ -522,7 +521,6 @@ class Renderer {
         // HACK: get a newer frame if possible
         if queuedFrame != nil {
             if frameQueue.count > 0 && streamingActive {
-                let startPollTime = CACurrentMediaTime()
                 while true {
                     objc_sync_enter(frameQueueLock)
                     queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
@@ -537,19 +535,13 @@ class Renderer {
         
         frame.startSubmission()
         
-        if renderingStreaming {
-            if let deviceAnchorLoc = lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) {
-                
-                
-                //let time = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
-                
-                // TODO: maybe find some mutable pointer hax to just copy in the ground truth, instead of asking for a value in the past.
-                let time = Double(queuedFrame!.timestamp) / Double(NSEC_PER_SEC)
-                let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
-                drawable.deviceAnchor = deviceAnchor
-                
-                //print("found anchor for frame!", deviceAnchorLoc, queuedFrame!.timestamp, deviceAnchor?.originFromAnchorTransform)
-            }
+        if renderingStreaming && lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) != nil {
+            // TODO: maybe find some mutable pointer hax to just copy in the ground truth, instead of asking for a value in the past.
+            let time = Double(queuedFrame!.timestamp) / Double(NSEC_PER_SEC)
+            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
+            drawable.deviceAnchor = deviceAnchor
+            
+            //print("found anchor for frame!", deviceAnchorLoc, queuedFrame!.timestamp, deviceAnchor?.originFromAnchorTransform)
         }
         if drawable.deviceAnchor == nil {
             if renderingStreaming {
@@ -560,10 +552,11 @@ class Renderer {
             
             drawable.deviceAnchor = deviceAnchor
         }
-        if let queuedFrame = queuedFrame {
+        
+        /*if let queuedFrame = queuedFrame {
             let test_ts = queuedFrame.timestamp
-            //print("draw: \(test_ts)")
-        }
+            print("draw: \(test_ts)")
+        }*/
         
         let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
@@ -574,7 +567,6 @@ class Renderer {
         }
         
         if streamingActive {
-            // TODO(zhuowei): do this
             renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
         } else {
             renderLobby(drawable: drawable, commandBuffer: commandBuffer)
