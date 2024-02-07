@@ -11,7 +11,5 @@
 		<key>UISceneConfigurations</key>
 		<dict/>
 	</dict>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>For connecting to ALVR server on local network.</string>
 </dict>
 </plist>
