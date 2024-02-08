@@ -369,10 +369,18 @@ class Renderer {
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
                 streamingActive = false
+                vtDecompressionSession = nil
+                videoFormat = nil
+                lastRequestedTimestamp = 0
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
             case ALVR_EVENT_CREATE_DECODER.rawValue:
                 print("create decoder: \(alvrEvent.CREATE_DECODER)")
+                // Don't reinstantiate the decoder if it's already created.
+                // TODO: Switching from H264 -> HEVC at runtime?
+                if vtDecompressionSession != nil {
+                    continue
+                }
                 while true {
                     guard let (nal, timestamp) = VideoHandler.pollNal() else {
                         fatalError("create decoder: failed to poll nal?!")
@@ -408,7 +416,7 @@ class Renderer {
                     
                     // If we're receiving NALs timestamped from 400ms ago, stop decoding them
                     // to prevent a cascade of needless decoding lag
-                    if lastRequestedTimestamp - timestamp > 1000*1000*400 {
+                    if lastRequestedTimestamp != 0 && lastRequestedTimestamp &- timestamp > 1000*1000*400 {
                         // notify ALVR we skipped this one
                         alvr_report_frame_decoded(timestamp)
                         alvr_report_compositor_start(timestamp)
