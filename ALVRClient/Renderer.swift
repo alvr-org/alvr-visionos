@@ -411,6 +411,7 @@ class Renderer {
                     // Don't submit NALs for decoding if we have already decoded a later frame
                     objc_sync_enter(frameQueueLock)
                     if timestamp < frameQueueLastTimestamp {
+                        objc_sync_exit(frameQueueLock)
                         continue
                     }
                     
@@ -422,6 +423,7 @@ class Renderer {
                         alvr_report_compositor_start(timestamp)
                         alvr_report_submit(timestamp, 0)
                         
+                        objc_sync_exit(frameQueueLock)
                         continue
                     }
                     objc_sync_exit(frameQueueLock)
