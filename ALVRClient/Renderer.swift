@@ -86,6 +86,7 @@ class Renderer {
     var frameQueueLastTimestamp: UInt64 = 0
     var frameQueueLastImageBuffer: CVImageBuffer? = nil
     var lastQueuedFrame: QueuedFrame? = nil
+    var lastRequestedTimestamp: UInt64 = 0
     var streamingActive = false
     
     var deviceAnchorsLock = NSObject()
@@ -402,6 +403,17 @@ class Renderer {
                     // Don't submit NALs for decoding if we have already decoded a later frame
                     objc_sync_enter(frameQueueLock)
                     if timestamp < frameQueueLastTimestamp {
+                        continue
+                    }
+                    
+                    // If we're receiving NALs timestamped from 400ms ago, stop decoding them
+                    // to prevent a cascade of needless decoding lag
+                    if lastRequestedTimestamp - timestamp > 1000*1000*400 {
+                        // notify ALVR we skipped this one
+                        alvr_report_frame_decoded(timestamp)
+                        alvr_report_compositor_start(timestamp)
+                        alvr_report_submit(timestamp, 0)
+                        
                         continue
                     }
                     objc_sync_exit(frameQueueLock)
@@ -811,6 +823,7 @@ class Renderer {
     func sendTracking(targetTimestamp: Double) {
         //let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
         let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
+        lastRequestedTimestamp = targetTimestampNS
         guard let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestamp) else {
             return
         }
