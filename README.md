@@ -2,6 +2,6 @@
 
 This repository hosts the platform-specific code for the Apple visionOS client.
 
-## Build
+## Building
 
-Run `zsh build_and_repack.sh` to build the ALVR client library framework, then compile with Xcode.
+See the [Building](https://github.com/alvr-org/alvr-visionos/wiki/Building) wiki page for detailed instructions.
