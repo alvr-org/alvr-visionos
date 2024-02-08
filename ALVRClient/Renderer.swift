@@ -92,7 +92,8 @@ class Renderer {
     var deviceAnchorsQueue = [UInt64]()
     var deviceAnchorsDictionary = [UInt64: simd_float4x4]()
     var metalTextureCache: CVMetalTextureCache!
-    var videoFramePipelineState:MTLRenderPipelineState
+    let mtlVertexDescriptor: MTLVertexDescriptor
+    var videoFramePipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
     var lastIpd:Float = -1
     var framesRendered:Int = 0
@@ -111,13 +112,10 @@ class Renderer {
 
         uniforms = UnsafeMutableRawPointer(dynamicUniformBuffer.contents()).bindMemory(to:UniformsArray.self, capacity:1)
 
-        let mtlVertexDescriptor = Renderer.buildMetalVertexDescriptor()
+        mtlVertexDescriptor = Renderer.buildMetalVertexDescriptor()
 
         do {
             pipelineState = try Renderer.buildRenderPipelineWithDevice(device: device,
-                                                                       layerRenderer: layerRenderer,
-                                                                       mtlVertexDescriptor: mtlVertexDescriptor)
-            videoFramePipelineState = try Renderer.buildRenderPipelineForVideoFrameWithDevice(device: device,
                                                                        layerRenderer: layerRenderer,
                                                                        mtlVertexDescriptor: mtlVertexDescriptor)
         } catch {
@@ -218,14 +216,17 @@ class Renderer {
     }
     
     class func buildRenderPipelineForVideoFrameWithDevice(device: MTLDevice,
-                                             layerRenderer: LayerRenderer,
-                                             mtlVertexDescriptor: MTLVertexDescriptor) throws -> MTLRenderPipelineState {
+                                                          layerRenderer: LayerRenderer,
+                                                          mtlVertexDescriptor: MTLVertexDescriptor,
+                                                          foveationVars: FoveationVars) throws -> MTLRenderPipelineState {
         /// Build a render state pipeline object
 
         let library = device.makeDefaultLibrary()
 
         let vertexFunction = library?.makeFunction(name: "videoFrameVertexShader")
-        let fragmentFunction = library?.makeFunction(name: "videoFrameFragmentShader")
+         
+        let fragmentConstants = FFR.makeFunctionConstants(foveationVars)
+        let fragmentFunction = try library?.makeFunction(name: "videoFrameFragmentShader", constantValues: fragmentConstants)
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.label = "VideoFrameRenderPipeline"
@@ -354,6 +355,13 @@ class Renderer {
                 hudMessageBuffer.deallocate()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started: \(alvrEvent.STREAMING_STARTED)")
+                let foveationVars = FFR.calculateFoveationVars(alvrEvent.STREAMING_STARTED)
+                videoFramePipelineState = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
+                    device: device,
+                    layerRenderer: layerRenderer,
+                    mtlVertexDescriptor: mtlVertexDescriptor,
+                    foveationVars: foveationVars
+                )
                 streamingActive = true
                 alvr_request_idr()
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:

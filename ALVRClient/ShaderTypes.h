@@ -51,10 +51,11 @@ typedef struct
 
 typedef NS_ENUM(EnumBackingType, ALVRFunctionConstant)
 {
-    ALVRFunctionConstantFfrCommonShaderTargetResolution = 100,
-    ALVRFunctionConstantFfrCommonShaderOptimizedResolution = 101,
-    ALVRFunctionConstantFfrCommonShaderEyeSizeRatio = 102,
-    ALVRFunctionConstantFfrCommonShaderCenterSize = 103,
-    ALVRFunctionConstantFfrCommonShaderCenterShift = 104,
-    ALVRFunctionConstantFfrCommonShaderEdgeRatio = 105,
+    ALVRFunctionConstantFfrEnabled = 100,
+    ALVRFunctionConstantFfrCommonShaderTargetResolution = 101,
+    ALVRFunctionConstantFfrCommonShaderOptimizedResolution = 102,
+    ALVRFunctionConstantFfrCommonShaderEyeSizeRatio = 103,
+    ALVRFunctionConstantFfrCommonShaderCenterSize = 104,
+    ALVRFunctionConstantFfrCommonShaderCenterShift = 105,
+    ALVRFunctionConstantFfrCommonShaderEdgeRatio = 106,
 };
