@@ -399,6 +399,13 @@ class Renderer {
                         break
                     }
                     
+                    // Don't submit NALs for decoding if we have already decoded a later frame
+                    objc_sync_enter(frameQueueLock)
+                    if timestamp < frameQueueLastTimestamp {
+                        continue
+                    }
+                    objc_sync_exit(frameQueueLock)
+                    
                     if let vtDecompressionSession = vtDecompressionSession {
                         VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
                             alvr_report_frame_decoded(timestamp)
