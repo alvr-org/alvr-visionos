@@ -418,10 +418,10 @@ class Renderer {
                     // If we're receiving NALs timestamped from 400ms ago, stop decoding them
                     // to prevent a cascade of needless decoding lag
                     if lastRequestedTimestamp != 0 && lastRequestedTimestamp &- timestamp > 1000*1000*400 {
-                        // notify ALVR we skipped this one
-                        alvr_report_frame_decoded(timestamp)
-                        alvr_report_compositor_start(timestamp)
-                        alvr_report_submit(timestamp, 0)
+                        // notify ALVR we skipped this one?
+                        //alvr_report_frame_decoded(timestamp)
+                        //alvr_report_compositor_start(timestamp)
+                        //alvr_report_submit(timestamp, 0)
                         
                         objc_sync_exit(frameQueueLock)
                         continue
