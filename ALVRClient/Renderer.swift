@@ -273,6 +273,7 @@ class Renderer {
         let textureLoader = MTKTextureLoader(device: device)
 
         let textureLoaderOptions = [
+            MTKTextureLoader.Option.generateMipmaps: NSNumber(value: true),
             MTKTextureLoader.Option.textureUsage: NSNumber(value: MTLTextureUsage.shaderRead.rawValue),
             MTKTextureLoader.Option.textureStorageMode: NSNumber(value: MTLStorageMode.`private`.rawValue)
         ]
@@ -370,9 +371,15 @@ class Renderer {
                     }
                     print(nal.count, timestamp)
                     NSLog("%@", nal as NSData)
+                    let val = (nal[4] & 0x7E) >> 1
+                    print("NAL type of \(val)")
                     if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
                         // here we go!
-                        (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal)
+                        (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS)
+                        break
+                    } else if (nal[3] == 0x01 && (nal[4] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) || (nal[2] == 0x01 && (nal[3] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) {
+                         // The NAL unit type is 32 (VPS)
+                        (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: HEVC_NAL_TYPE_VPS)
                         break
                     }
                 }

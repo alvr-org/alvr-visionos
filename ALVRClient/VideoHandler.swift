@@ -6,6 +6,7 @@ import Foundation
 import VideoToolbox
 
 let H264_NAL_TYPE_SPS = 7
+let HEVC_NAL_TYPE_VPS = 32
 
 struct VideoHandler {
     static func pollNal() -> (Data, UInt64)? {
@@ -20,7 +21,7 @@ struct VideoHandler {
         return (Data(buffer: nalBuffer), nalTimestamp)
     }
     
-    static func createVideoDecoder(initialNals: Data) -> (VTDecompressionSession, CMFormatDescription) {
+    static func createVideoDecoder(initialNals: Data, codec: Int) -> (VTDecompressionSession, CMFormatDescription) {
         let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
         var videoFormat:CMFormatDescription? = nil
         var err:OSStatus = 0
@@ -28,24 +29,129 @@ struct VideoHandler {
         // First two are the SPS and PPS
         // https://source.chromium.org/chromium/chromium/src/+/main:third_party/webrtc/sdk/objc/components/video_codec/nalu_rewriter.cc;l=228;drc=6f86f6af008176e631140e6a80e0a0bca9550143
         
-        err = initialNals.withUnsafeBytes { (b:UnsafeRawBufferPointer) in
-            let nalOffset0 = b.baseAddress!
-            let nalOffset1 = memmem(nalOffset0 + 4, b.count - 4, nalHeader, nalHeader.count)!
-            let nalLength0 = UnsafeRawPointer(nalOffset1) - nalOffset0 - 4
-            let nalLength1 = b.baseAddress! + b.count - UnsafeRawPointer(nalOffset1) - 4
+        if (codec == H264_NAL_TYPE_SPS) {
+            err = initialNals.withUnsafeBytes { (b:UnsafeRawBufferPointer) in
+                let nalOffset0 = b.baseAddress!
+                let nalOffset1 = memmem(nalOffset0 + 4, b.count - 4, nalHeader, nalHeader.count)!
+                let nalLength0 = UnsafeRawPointer(nalOffset1) - nalOffset0 - 4
+                let nalLength1 = b.baseAddress! + b.count - UnsafeRawPointer(nalOffset1) - 4
 
-            let parameterSetPointers = [(nalOffset0 + 4).assumingMemoryBound(to: UInt8.self), UnsafeRawPointer(nalOffset1 + 4).assumingMemoryBound(to: UInt8.self)]
-            let parameterSetSizes = [nalLength0, nalLength1]
-            return CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2, parameterSetPointers: parameterSetPointers, parameterSetSizes: parameterSetSizes, nalUnitHeaderLength: 4, formatDescriptionOut: &videoFormat)
+                let parameterSetPointers = [(nalOffset0 + 4).assumingMemoryBound(to: UInt8.self), UnsafeRawPointer(nalOffset1 + 4).assumingMemoryBound(to: UInt8.self)]
+                let parameterSetSizes = [nalLength0, nalLength1]
+                return CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2, parameterSetPointers: parameterSetPointers, parameterSetSizes: parameterSetSizes, nalUnitHeaderLength: 4, formatDescriptionOut: &videoFormat)
+            } 
+        } else if (codec == HEVC_NAL_TYPE_VPS) {
+            let (vps, sps, pps, prefixSei, suffixSei) = extractParameterSets(from: initialNals)
+            
+            // Convert Data objects to arrays of UInt8 for each parameter set
+            let _ = vps != nil ? [UInt8](vps!) : nil
+            let _ = sps != nil ? [UInt8](sps!) : nil
+            let _ = pps != nil ? [UInt8](pps!) : nil
+            let _ = prefixSei != nil ? [UInt8](prefixSei!) : nil
+            let _ = suffixSei != nil ? [UInt8](suffixSei!) : nil
+            
+            // Ensure parameterSetPointers is an array of non-optional UnsafePointer<UInt8>
+            var parameterSetPointers: [UnsafePointer<UInt8>?] = []
+            var parameterSetSizes: [Int] = []
+            
+            if let vps = vps {
+                vps.withUnsafeBytes { rawBufferPointer in
+                    if let baseAddress = rawBufferPointer.baseAddress {
+                        let typedPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
+                        parameterSetPointers.append(typedPointer)
+                        parameterSetSizes.append(vps.count)
+                    }
+                }
+            }
+            
+            if let sps = sps {
+                sps.withUnsafeBytes { rawBufferPointer in
+                    if let baseAddress = rawBufferPointer.baseAddress {
+                        let typedPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
+                        parameterSetPointers.append(typedPointer)
+                        parameterSetSizes.append(sps.count)
+                    }
+                }
+            }
+            
+            if let pps = pps {
+                pps.withUnsafeBytes { rawBufferPointer in
+                    if let baseAddress = rawBufferPointer.baseAddress {
+                        let typedPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
+                        parameterSetPointers.append(typedPointer)
+                        parameterSetSizes.append(pps.count)
+                    }
+                }
+            }
+            
+            if let prefixSei = prefixSei {
+                prefixSei.withUnsafeBytes { rawBufferPointer in
+                    if let baseAddress = rawBufferPointer.baseAddress {
+                        let typedPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
+                        parameterSetPointers.append(typedPointer)
+                        parameterSetSizes.append(prefixSei.count)
+                    }
+                }
+            }
+            
+            if let suffixSei = suffixSei {
+                suffixSei.withUnsafeBytes { rawBufferPointer in
+                    if let baseAddress = rawBufferPointer.baseAddress {
+                        let typedPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
+                        parameterSetPointers.append(typedPointer)
+                        parameterSetSizes.append(suffixSei.count)
+                    }
+                }
+            }
+            
+            // Flatten parameterSetPointers to non-optional before passing to the function
+            let nonOptionalParameterSetPointers = parameterSetPointers.compactMap { $0 }
+            
+            
+            // nonOptionalParameterSetPointers is an array of UnsafePointer<UInt8>
+            nonOptionalParameterSetPointers.withUnsafeBufferPointer { bufferPointer in
+                guard let baseAddress = bufferPointer.baseAddress else { return }
+                
+                parameterSetSizes.withUnsafeBufferPointer { sizesBufferPointer in
+                guard let sizesBaseAddress = sizesBufferPointer.baseAddress else { return }
+                   
+                    let parameterSetCount = [vps, sps, pps].compactMap { $0 }.count // Only count non-nil parameter sets
+                    print("Parameter set count: \(parameterSetCount)")
+
+                    let nalUnitHeaderLength: Int32 = 4 // Typically 4 for HEVC
+
+                    parameterSetSizes.enumerated().forEach { index, size in
+                        print("Parameter set \(index) size: \(size)")
+                    }
+                
+                    let status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                        allocator: nil,
+                        parameterSetCount: parameterSetPointers.count,
+                        parameterSetPointers: baseAddress,
+                        parameterSetSizes: sizesBaseAddress,
+                        nalUnitHeaderLength: nalUnitHeaderLength,
+                        extensions: nil,
+                        formatDescriptionOut: &videoFormat
+                    )
+                    
+                    // Check if the format description was successfully created
+                    if status == noErr, let _ = videoFormat {
+                        // Use the format description
+                        print("Successfully created CMVideoFormatDescription.")
+                    } else {
+                        print("Failed to create CMVideoFormatDescription.")
+                    }
+                }
+                
+            }
         }
-
-
+            
         if err != 0 {
             fatalError("format?!")
         }
         print(videoFormat!)
         
-        let videoDecoderSpecification:[NSString: AnyObject] = [kVTDecompressionPropertyKey_RealTime:kCFBooleanTrue]
+        let videoDecoderSpecification:[NSString: AnyObject] = [kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder:kCFBooleanTrue]
         let destinationImageBufferAttributes:[NSString: AnyObject] = [kCVPixelBufferMetalCompatibilityKey: true as NSNumber, kCVPixelBufferPoolMinimumBufferCountKey: 3 as NSNumber]
 
         var decompressionSession:VTDecompressionSession? = nil
@@ -57,6 +163,61 @@ struct VideoHandler {
         return (decompressionSession!, videoFormat!)
     }
     
+    // Function to parse NAL units and extract VPS, SPS, and PPS data
+    static func extractParameterSets(from nalData: Data) -> (vps: Data?, sps: Data?, pps: Data?, prefixSei: Data?, suffixSei: Data?) {
+        var vps: Data?
+        var sps: Data?
+        var pps: Data?
+        var prefixSei: Data?
+        var suffixSei: Data?
+        
+        var index = 0
+        while index < nalData.count - 4 {
+            // Find the start code (0x00000001 or 0x000001)
+            if nalData[index] == 0 && nalData[index + 1] == 0 && nalData[index + 2] == 0 && nalData[index + 3] == 1 {
+                // NAL unit starts after the start code
+                let nalUnitStartIndex = index + 4
+                var nalUnitEndIndex = index + 4
+                
+                // Find the next start code to determine the end of this NAL unit
+                for nextIndex in nalUnitStartIndex..<nalData.count - 4 {
+                    if nalData[nextIndex] == 0 && nalData[nextIndex + 1] == 0 && nalData[nextIndex + 2] == 0 && nalData[nextIndex + 3] == 1 {
+                        nalUnitEndIndex = nextIndex
+                        break
+                    }
+                    nalUnitEndIndex = nalData.count // If no more start codes, this NAL unit goes to the end of the data
+                }
+                
+                let nalUnitType = (nalData[nalUnitStartIndex] & 0x7E) >> 1 // Get NAL unit type (HEVC)
+                let nalUnitData = nalData.subdata(in: nalUnitStartIndex..<nalUnitEndIndex)
+                
+                print("Switch nalUnitType of: \(nalUnitType)")
+                switch nalUnitType {
+                case 32: // VPS
+                    vps = nalUnitData
+                case 33: // SPS
+                    sps = nalUnitData
+                case 34: // PPS
+                    pps = nalUnitData
+                case 39: //prefixSEI
+                    prefixSei = nalUnitData
+                case 40: //suffixSEI
+                    suffixSei = nalUnitData
+                default:
+                    break
+                }
+                
+                index = nalUnitEndIndex
+            } else {
+                index += 1 // Move to the next byte if start code not found
+            }
+        }
+        
+        return (vps, sps, pps, prefixSei, suffixSei)
+    }
+
+
+
     // Based on https://webrtc.googlesource.com/src/+/refs/heads/main/common_video/h264/h264_common.cc
     private static func findNaluIndices(buffer: Data) -> [NaluIndex] {
         guard buffer.count >= /* kNaluShortStartSequenceSize */ 3 else {
