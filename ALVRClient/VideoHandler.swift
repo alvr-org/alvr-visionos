@@ -41,14 +41,7 @@ struct VideoHandler {
                 return CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2, parameterSetPointers: parameterSetPointers, parameterSetSizes: parameterSetSizes, nalUnitHeaderLength: 4, formatDescriptionOut: &videoFormat)
             } 
         } else if (codec == HEVC_NAL_TYPE_VPS) {
-            let (vps, sps, pps, prefixSei, suffixSei) = extractParameterSets(from: initialNals)
-            
-            // Convert Data objects to arrays of UInt8 for each parameter set
-            let _ = vps != nil ? [UInt8](vps!) : nil
-            let _ = sps != nil ? [UInt8](sps!) : nil
-            let _ = pps != nil ? [UInt8](pps!) : nil
-            let _ = prefixSei != nil ? [UInt8](prefixSei!) : nil
-            let _ = suffixSei != nil ? [UInt8](suffixSei!) : nil
+            let (vps, sps, pps) = extractParameterSets(from: initialNals)
             
             // Ensure parameterSetPointers is an array of non-optional UnsafePointer<UInt8>
             var parameterSetPointers: [UnsafePointer<UInt8>?] = []
@@ -80,26 +73,6 @@ struct VideoHandler {
                         let typedPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
                         parameterSetPointers.append(typedPointer)
                         parameterSetSizes.append(pps.count)
-                    }
-                }
-            }
-            
-            if let prefixSei = prefixSei {
-                prefixSei.withUnsafeBytes { rawBufferPointer in
-                    if let baseAddress = rawBufferPointer.baseAddress {
-                        let typedPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
-                        parameterSetPointers.append(typedPointer)
-                        parameterSetSizes.append(prefixSei.count)
-                    }
-                }
-            }
-            
-            if let suffixSei = suffixSei {
-                suffixSei.withUnsafeBytes { rawBufferPointer in
-                    if let baseAddress = rawBufferPointer.baseAddress {
-                        let typedPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
-                        parameterSetPointers.append(typedPointer)
-                        parameterSetSizes.append(suffixSei.count)
                     }
                 }
             }
@@ -162,14 +135,12 @@ struct VideoHandler {
         
         return (decompressionSession!, videoFormat!)
     }
-    
+
     // Function to parse NAL units and extract VPS, SPS, and PPS data
-    static func extractParameterSets(from nalData: Data) -> (vps: Data?, sps: Data?, pps: Data?, prefixSei: Data?, suffixSei: Data?) {
-        var vps: Data?
-        var sps: Data?
-        var pps: Data?
-        var prefixSei: Data?
-        var suffixSei: Data?
+    static func extractParameterSets(from nalData: Data) -> (vps: [UInt8]?, sps: [UInt8]?, pps: [UInt8]?) {
+        var vps: [UInt8]?
+        var sps: [UInt8]?
+        var pps: [UInt8]?
         
         var index = 0
         while index < nalData.count - 4 {
@@ -194,15 +165,11 @@ struct VideoHandler {
                 print("Switch nalUnitType of: \(nalUnitType)")
                 switch nalUnitType {
                 case 32: // VPS
-                    vps = nalUnitData
+                    vps = [UInt8](nalUnitData)
                 case 33: // SPS
-                    sps = nalUnitData
+                    sps = [UInt8](nalUnitData)
                 case 34: // PPS
-                    pps = nalUnitData
-                case 39: //prefixSEI
-                    prefixSei = nalUnitData
-                case 40: //suffixSEI
-                    suffixSei = nalUnitData
+                    pps = [UInt8](nalUnitData)
                 default:
                     break
                 }
@@ -213,7 +180,7 @@ struct VideoHandler {
             }
         }
         
-        return (vps, sps, pps, prefixSei, suffixSei)
+        return (vps, sps, pps)
     }
 
 
