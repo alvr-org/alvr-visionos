@@ -55,6 +55,7 @@ fragment float4 fragmentShader(ColorInOut in [[stage_in]],
 
 // FFR_COMMON_SHADER_FORMAT
 
+constant bool FFR_ENABLED [[ function_constant(ALVRFunctionConstantFfrEnabled) ]];
 constant uint2 TARGET_RESOLUTION [[ function_constant(ALVRFunctionConstantFfrCommonShaderTargetResolution) ]];
 constant uint2 OPTIMIZED_RESOLUTION [[ function_constant(ALVRFunctionConstantFfrCommonShaderOptimizedResolution) ]];
 constant float2 EYE_SIZE_RATIO [[ function_constant(ALVRFunctionConstantFfrCommonShaderEyeSizeRatio) ]];
@@ -74,17 +75,16 @@ float2 EyeToTextureUV(float2 eyeUV, bool isRightEye) {
 }
 
 // DECOMPRESS_AXIS_ALIGNED_FRAGMENT_SHADER
-fragment float4 decompressAxisAlignedFragmentShader(ColorInOut in [[stage_in]], texture2d<half> colorMap [[ texture(TextureIndexColor) ]]) {
-    float2 uv = in.texCoord;
+float2 decompressAxisAlignedCoord(float2 uv) {
     bool isRightEye = uv.x > 0.5;
     float2 eyeUV = TextureToEyeUV(uv, isRightEye);
 
-    float2 c0 = (1. - CENTER_SIZE) * 0.5;
-    float2 c1 = (EDGE_RATIO - 1.) * c0 * (CENTER_SHIFT + 1.) / EDGE_RATIO;
-    float2 c2 = (EDGE_RATIO - 1.) * CENTER_SIZE + 1.;
+    const float2 c0 = (1. - CENTER_SIZE) * 0.5;
+    const float2 c1 = (EDGE_RATIO - 1.) * c0 * (CENTER_SHIFT + 1.) / EDGE_RATIO;
+    const float2 c2 = (EDGE_RATIO - 1.) * CENTER_SIZE + 1.;
 
-    float2 loBound = c0 * (CENTER_SHIFT + 1.);
-    float2 hiBound = c0 * (CENTER_SHIFT - 1.) + 1.;
+    const float2 loBound = c0 * (CENTER_SHIFT + 1.);
+    const float2 hiBound = c0 * (CENTER_SHIFT - 1.) + 1.;
     float2 underBound = float2(eyeUV.x < loBound.x, eyeUV.y < loBound.y);
     float2 inBound = float2(loBound.x < eyeUV.x && eyeUV.x < hiBound.x,
                         loBound.y < eyeUV.y && eyeUV.y < hiBound.y);
@@ -92,8 +92,8 @@ fragment float4 decompressAxisAlignedFragmentShader(ColorInOut in [[stage_in]], 
 
     float2 center = (eyeUV - c1) * EDGE_RATIO / c2;
 
-    float2 loBoundC = c0 * (CENTER_SHIFT + 1.) / c2;
-    float2 hiBoundC = c0 * (CENTER_SHIFT - 1.) / c2 + 1.;
+    const float2 loBoundC = c0 * (CENTER_SHIFT + 1.) / c2;
+    const float2 hiBoundC = c0 * (CENTER_SHIFT - 1.) / c2 + 1.;
 
     float2 leftEdge = (-(c1 + c2 * loBoundC) / loBoundC +
                     sqrt(((c1 + c2 * loBoundC) / loBoundC) * ((c1 + c2 * loBoundC) / loBoundC) +
@@ -114,12 +114,9 @@ fragment float4 decompressAxisAlignedFragmentShader(ColorInOut in [[stage_in]], 
                     eyeUV * (c2 * EDGE_RATIO - c2) / (EDGE_RATIO * (1. - hiBoundC))))) /
         (2. * c2 * (EDGE_RATIO - 1.)) * (EDGE_RATIO * (1. - hiBoundC));
 
-    float2 uncompressedUV = underBound * leftEdge + inBound * center + overBound * rightEdge;
-    constexpr sampler colorSampler(mip_filter::linear,
-                                   mag_filter::linear,
-                                   min_filter::linear);
-    half4 colorSample = colorMap.sample(colorSampler, EyeToTextureUV(uncompressedUV * EYE_SIZE_RATIO, isRightEye));
-    return float4(colorSample);
+    // todo: idk why these clamps are necessary
+    float2 uncompressedUV = clamp(underBound * leftEdge, float2(0, 0), float2(1, 1)) + clamp(inBound * center, float2(0, 0), float2(1, 1)) + clamp(overBound * rightEdge, float2(0, 0), float2(1, 1));
+    return EyeToTextureUV(uncompressedUV * EYE_SIZE_RATIO, isRightEye);
 }
 
 // VERTEX_SHADER
@@ -144,12 +141,22 @@ vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
 }
 
 fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
+// https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
+    
+    float2 sampleCoord;
+    if (FFR_ENABLED) {
+        sampleCoord = decompressAxisAlignedCoord(in.texCoord);
+    } else {
+        sampleCoord = in.texCoord;
+    }
+    
     constexpr sampler colorSampler(mip_filter::linear,
                                    mag_filter::linear,
                                    min_filter::linear);
-// https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
-    float4 ySample = in_tex_y.sample(colorSampler, in.texCoord.xy);
-    float4 uvSample = in_tex_uv.sample(colorSampler, in.texCoord.xy);
+    float4 ySample = in_tex_y.sample(colorSampler, sampleCoord);
+    float4 uvSample = in_tex_uv.sample(colorSampler, sampleCoord);
+    // TODO(zhuowei): gamma is wrong here
+    float4 ycbcr = float4(ySample.r, uvSample.rg, 1.0f);
     
     const float4x4 ycbcrToRGBTransform = float4x4(
         float4(+1.0000f, +1.0000f, +1.0000f, +0.0000f),
@@ -157,9 +164,6 @@ fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<f
         float4(+1.4020f, -0.7141f, +0.0000f, +0.0000f),
         float4(-0.7010f, +0.5291f, -0.8860f, +1.0000f)
     );
-    
-    // TODO(zhuowei): gamma is wrong here
-    float4 ycbcr = float4(ySample.r, uvSample.rg, 1.0f);
     
     float3 rgb_uncorrect = (ycbcrToRGBTransform * ycbcr).rgb;
     
