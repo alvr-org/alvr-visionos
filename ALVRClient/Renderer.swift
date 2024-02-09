@@ -430,7 +430,7 @@ class Renderer {
                         continue
                     }
                     
-                    // If we're receiving NALs timestamped from >100ms ago, stop decoding them
+                    // If we're receiving NALs timestamped from >400ms ago, stop decoding them
                     // to prevent a cascade of needless decoding lag
                     let ns_diff_from_last_req_ts = lastRequestedTimestamp > timestamp ? lastRequestedTimestamp &- timestamp : 0
                     // TODO: adjustable framerate
