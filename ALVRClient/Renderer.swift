@@ -86,6 +86,7 @@ class Renderer {
     var frameQueueLastTimestamp: UInt64 = 0
     var frameQueueLastImageBuffer: CVImageBuffer? = nil
     var lastQueuedFrame: QueuedFrame? = nil
+    var lastRequestedTimestamp: UInt64 = 0
     var streamingActive = false
     
     var deviceAnchorsLock = NSObject()
@@ -368,10 +369,18 @@ class Renderer {
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
                 streamingActive = false
+                vtDecompressionSession = nil
+                videoFormat = nil
+                lastRequestedTimestamp = 0
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
             case ALVR_EVENT_CREATE_DECODER.rawValue:
                 print("create decoder: \(alvrEvent.CREATE_DECODER)")
+                // Don't reinstantiate the decoder if it's already created.
+                // TODO: Switching from H264 -> HEVC at runtime?
+                if vtDecompressionSession != nil {
+                    continue
+                }
                 while true {
                     guard let (nal, timestamp) = VideoHandler.pollNal() else {
                         fatalError("create decoder: failed to poll nal?!")
@@ -398,6 +407,26 @@ class Renderer {
                     guard let (nal, timestamp) = VideoHandler.pollNal() else {
                         break
                     }
+                    
+                    // Don't submit NALs for decoding if we have already decoded a later frame
+                    objc_sync_enter(frameQueueLock)
+                    if timestamp < frameQueueLastTimestamp {
+                        objc_sync_exit(frameQueueLock)
+                        continue
+                    }
+                    
+                    // If we're receiving NALs timestamped from 400ms ago, stop decoding them
+                    // to prevent a cascade of needless decoding lag
+                    if lastRequestedTimestamp != 0 && lastRequestedTimestamp &- timestamp > 1000*1000*400 {
+                        // notify ALVR we skipped this one?
+                        //alvr_report_frame_decoded(timestamp)
+                        //alvr_report_compositor_start(timestamp)
+                        //alvr_report_submit(timestamp, 0)
+                        
+                        objc_sync_exit(frameQueueLock)
+                        continue
+                    }
+                    objc_sync_exit(frameQueueLock)
                     
                     if let vtDecompressionSession = vtDecompressionSession {
                         VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
@@ -804,6 +833,7 @@ class Renderer {
     func sendTracking(targetTimestamp: Double) {
         //let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
         let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
+        lastRequestedTimestamp = targetTimestampNS
         guard let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestamp) else {
             return
         }
