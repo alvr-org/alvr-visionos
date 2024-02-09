@@ -30,7 +30,7 @@ extension LayerRenderer.Clock.Instant.Duration {
 // Larger makes closer objects zoom in more,
 // smaller makes farther objects zoom in more?
 // Could also be a foveation thing idk
-let panel_depth: Float = 0.0000000001
+let panel_depth: Float = 0.1
 
 // TODO(zhuowei): what's the z supposed to be?
 // x, y, z
