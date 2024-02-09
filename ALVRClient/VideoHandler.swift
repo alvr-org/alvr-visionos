@@ -22,11 +22,7 @@ struct VideoHandler {
     }
     
     static func abandonAllPendingNals() {
-        while true {
-            guard let (nal, timestamp) = VideoHandler.pollNal() else {
-                break
-            }
-        }
+        while let _ = VideoHandler.pollNal() {}
     }
     
     static func createVideoDecoder(initialNals: Data, codec: Int) -> (VTDecompressionSession, CMFormatDescription) {
