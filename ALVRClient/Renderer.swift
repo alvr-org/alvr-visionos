@@ -30,7 +30,7 @@ extension LayerRenderer.Clock.Instant.Duration {
 // Larger makes closer objects zoom in more,
 // smaller makes farther objects zoom in more?
 // Could also be a foveation thing idk
-let panel_depth: Float = 0.1
+let panel_depth: Float = 0.0000000001
 
 // TODO(zhuowei): what's the z supposed to be?
 // x, y, z
@@ -101,6 +101,8 @@ class Renderer {
     var framesRendered:Int = 0
     var framesSinceLastIDR:Int = 0
     var framesSinceLastDecode:Int = 0
+    
+    let constantTimeOffsetForJitterReductionHack:Double = 33.0/1000.0
     
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
@@ -433,10 +435,10 @@ class Renderer {
                     let ns_diff_from_last_req_ts = lastRequestedTimestamp > timestamp ? lastRequestedTimestamp &- timestamp : 0
                     // TODO: adjustable framerate
                     // TODO: maybe also call this if we fail to decode for too long.
-                    if lastRequestedTimestamp != 0 && ((ns_diff_from_last_req_ts > 1000*1000*100 && framesSinceLastIDR > 90*1) || framesSinceLastDecode > 90*1) {
+                    if lastRequestedTimestamp != 0 && ((ns_diff_from_last_req_ts > 1000*1000*400 && framesSinceLastIDR > 90*1) || framesSinceLastDecode > 90*1) {
                         objc_sync_exit(frameQueueLock)
                         
-                        print("Handle spike!")
+                        print("Handle spike!", framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
                         
                         // We have to request an IDR to resume the video feed
                         VideoHandler.abandonAllPendingNals()
@@ -599,7 +601,7 @@ class Renderer {
         if renderingStreaming && lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) != nil {
             // TODO: maybe find some mutable pointer hax to just copy in the ground truth, instead of asking for a value in the past.
             let time = Double(queuedFrame!.timestamp) / Double(NSEC_PER_SEC)
-            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
+            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time - constantTimeOffsetForJitterReductionHack)
             drawable.deviceAnchor = deviceAnchor
             
             //print("found anchor for frame!", deviceAnchorLoc, queuedFrame!.timestamp, deviceAnchor?.originFromAnchorTransform)
@@ -645,8 +647,9 @@ class Renderer {
         
         frame.endSubmission()
         
-        if self.alvrInitialized {
-            let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
+        if self.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
+            let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
+            var targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC))
             sendTracking(targetTimestamp: targetTimestamp)
         }
         
@@ -859,11 +862,11 @@ class Renderer {
         
         // Predict as far into the future as Apple will allow us.
         for i in 0...20 {
-            targetTimestampWalkedBack = targetTimestamp - (Double(i*5)/1000.0)
-            deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestampWalkedBack)
+            deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestampWalkedBack - constantTimeOffsetForJitterReductionHack)
             if deviceAnchor != nil {
                 break
             }
+            targetTimestampWalkedBack -= (5/1000.0)
         }
         
         // Fallback.
@@ -888,8 +891,8 @@ class Renderer {
         let orientation = simd_quaternion(deviceAnchor.originFromAnchorTransform)
         let position = deviceAnchor.originFromAnchorTransform.columns.3
         var trackingMotion = AlvrDeviceMotion(device_id: Renderer.deviceIdHead, orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
-        //let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
-        //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
+        let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
+        let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
         lastRequestedTimestamp = targetTimestampNS
         alvr_send_tracking(targetTimestampNS, &trackingMotion, 1)
