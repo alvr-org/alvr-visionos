@@ -30,7 +30,7 @@ extension LayerRenderer.Clock.Instant.Duration {
 // Larger makes closer objects zoom in more,
 // smaller makes farther objects zoom in more?
 // Could also be a foveation thing idk
-let panel_depth: Float = 1e-16
+let panel_depth: Float = -1
 
 // TODO(zhuowei): what's the z supposed to be?
 // x, y, z
@@ -334,9 +334,39 @@ class Renderer {
         rotation += 0.01
     }
     
-    private func updateGameStateForVideoFrame(drawable: LayerRenderer.Drawable, deviceAnchor: DeviceAnchor?) {
+    // A/B helpers, TODO remove
+    var testIter:Int = 0
+    var testIter2:Int = 0
+    
+    private func updateGameStateForVideoFrame(drawable: LayerRenderer.Drawable, framePose: simd_float4x4) {
+        let simdDeviceAnchor = drawable.deviceAnchor != nil ? drawable.deviceAnchor!.originFromAnchorTransform : matrix_identity_float4x4
+        
+        // A/B helpers, TODO remove
+        testIter2 += 1
+        if testIter2 % 90 == 0 {
+            testIter = (testIter + 1) % 3
+        }
+        
+        
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
-            return Uniforms(projectionMatrix: matrix_identity_float4x4, modelViewMatrix: matrix_identity_float4x4)
+            let view = drawable.views[viewIndex]
+            var viewTrans = matrix_identity_float4x4
+            viewTrans = view.transform.inverse
+            for _ in 0...2 {
+                // Why??
+                viewTrans *= viewTrans
+            }
+        
+            
+            let viewMatrix = (framePose.inverse * simdDeviceAnchor * viewTrans).inverse
+            let projection = ProjectiveTransform3D(leftTangent: Double(view.tangents[0]),
+                                                   rightTangent: Double(view.tangents[1]),
+                                                   topTangent: Double(view.tangents[2]),
+                                                   bottomTangent: Double(view.tangents[3]),
+                                                   nearZ: Double(drawable.depthRange.y),
+                                                   farZ: Double(drawable.depthRange.x),
+                                                   reverseZ: true)
+            return Uniforms(projectionMatrix: .init(projection), modelViewMatrix: viewMatrix)
         }
         
         self.uniforms[0].uniforms.0 = uniforms(forViewIndex: 0)
@@ -598,22 +628,24 @@ class Renderer {
         
         frame.startSubmission()
         
-        if renderingStreaming && lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) != nil {
+        let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
+        let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
+        let framePreviouslyPredictedPose = queuedFrame != nil ? lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
+        if renderingStreaming && framePreviouslyPredictedPose != nil {
             // TODO: maybe find some mutable pointer hax to just copy in the ground truth, instead of asking for a value in the past.
             let time = Double(queuedFrame!.timestamp) / Double(NSEC_PER_SEC)
-            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time - constantTimeOffsetForJitterReductionHack)
+            //let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time - constantTimeOffsetForJitterReductionHack)
+            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
             drawable.deviceAnchor = deviceAnchor
             
             //print("found anchor for frame!", deviceAnchorLoc, queuedFrame!.timestamp, deviceAnchor?.originFromAnchorTransform)
         }
-        let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
-        let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
+        
         if drawable.deviceAnchor == nil {
             if renderingStreaming && queuedFrame != nil {
                 print("missing anchor!!", queuedFrame!.timestamp)
             }
             let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
-            
             drawable.deviceAnchor = deviceAnchor
         }
         
@@ -636,7 +668,7 @@ class Renderer {
         }
         
         if streamingActiveForFrame {
-            renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
+            renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
         } else {
             renderLobby(drawable: drawable, commandBuffer: commandBuffer)
         }
@@ -741,10 +773,10 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?) {
+    func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?, framePose: simd_float4x4) {
         self.updateDynamicBufferState()
         
-        self.updateGameStateForVideoFrame(drawable: drawable, deviceAnchor: drawable.deviceAnchor)
+        self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose)
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
