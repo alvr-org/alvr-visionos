@@ -9,9 +9,9 @@ cp "$HEADERPATH" alvrrepack/headers
 
 install_name_tool -id "@rpath/libalvr_client_core.dylib" alvrrepack/ios/libalvr_client_core.dylib
 
-vtool -arch arm64 -set-build-version maccatalyst 17.0 17.0 -replace -output alvrrepack/maccatalyst/libalvr_client_core.dylib alvrrepack/ios/libalvr_client_core.dylib
-vtool -arch arm64 -set-build-version xros 1.0 1.0 -replace -output alvrrepack/xros/libalvr_client_core.dylib alvrrepack/ios/libalvr_client_core.dylib
-vtool -arch arm64 -set-build-version xrossim 1.0 1.0 -replace -output alvrrepack/xrsimulator/libalvr_client_core.dylib alvrrepack/ios/libalvr_client_core.dylib
+xcrun vtool -arch arm64 -set-build-version maccatalyst 17.0 17.0 -replace -output alvrrepack/maccatalyst/libalvr_client_core.dylib alvrrepack/ios/libalvr_client_core.dylib
+xcrun vtool -arch arm64 -set-build-version xros 1.0 1.0 -replace -output alvrrepack/xros/libalvr_client_core.dylib alvrrepack/ios/libalvr_client_core.dylib
+xcrun vtool -arch arm64 -set-build-version xrossim 1.0 1.0 -replace -output alvrrepack/xrsimulator/libalvr_client_core.dylib alvrrepack/ios/libalvr_client_core.dylib
 
 xcodebuild -create-xcframework \
 	-library alvrrepack/ios/libalvr_client_core.dylib \
