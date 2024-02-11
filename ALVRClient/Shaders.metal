@@ -130,6 +130,18 @@ vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
     Uniforms uniforms = uniformsArray.uniforms[amp_id];
     
     float4 position = float4(in.position, 1.0);
+    if (position.x < 1.0) {
+        position.x = -uniforms.tangents[0]/2.0 - 0.5;
+    }
+    else {
+        position.x = uniforms.tangents[1]/2.0 + 0.5;
+    }
+    if (position.y < 1.0) {
+        position.y = -uniforms.tangents[2]/2.0 - 0.5;
+    }
+    else {
+        position.y = uniforms.tangents[3]/2.0 + 0.5;
+    }
     out.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * position;
     if (amp_id == 0) {
         out.texCoord = in.texCoord;

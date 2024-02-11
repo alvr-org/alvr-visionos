@@ -323,7 +323,7 @@ class Renderer {
                                                    farZ: Double(drawable.depthRange.x),
                                                    reverseZ: true)
             
-            return Uniforms(projectionMatrix: .init(projection), modelViewMatrix: viewMatrix * modelMatrix)
+            return Uniforms(projectionMatrix: .init(projection), modelViewMatrix: viewMatrix * modelMatrix, tangents: view.tangents)
         }
         
         self.uniforms[0].uniforms.0 = uniforms(forViewIndex: 0)
@@ -350,15 +350,8 @@ class Renderer {
         
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
             let view = drawable.views[viewIndex]
-            var viewTrans = matrix_identity_float4x4
-            viewTrans = view.transform.inverse
-            for _ in 0...2 {
-                // Why??
-                viewTrans *= viewTrans
-            }
-        
             
-            let viewMatrix = (framePose.inverse * simdDeviceAnchor * viewTrans).inverse
+            let viewMatrix = (framePose.inverse * simdDeviceAnchor * view.transform).inverse
             let projection = ProjectiveTransform3D(leftTangent: Double(view.tangents[0]),
                                                    rightTangent: Double(view.tangents[1]),
                                                    topTangent: Double(view.tangents[2]),
@@ -366,7 +359,7 @@ class Renderer {
                                                    nearZ: Double(drawable.depthRange.y),
                                                    farZ: Double(drawable.depthRange.x),
                                                    reverseZ: true)
-            return Uniforms(projectionMatrix: .init(projection), modelViewMatrix: viewMatrix)
+            return Uniforms(projectionMatrix: .init(projection), modelViewMatrix: viewMatrix, tangents: view.tangents)
         }
         
         self.uniforms[0].uniforms.0 = uniforms(forViewIndex: 0)
