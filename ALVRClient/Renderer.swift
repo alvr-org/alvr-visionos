@@ -27,18 +27,17 @@ extension LayerRenderer.Clock.Instant.Duration {
     }
 }
 
-// Larger makes closer objects zoom in more,
-// smaller makes farther objects zoom in more?
-// Could also be a foveation thing idk
-let panel_depth: Float = -1
+// Focal depth of the timewarp panel, ideally would be adjusted based on the depth
+// of what the user is looking at.
+let panel_depth: Float = 1
 
 // TODO(zhuowei): what's the z supposed to be?
 // x, y, z
 // u, v
-let fullscreenQuadVertices:[Float] = [-1, -1, panel_depth,
-                                       1, -1, panel_depth,
-                                       -1, 1, panel_depth,
-                                       1, 1, panel_depth,
+let fullscreenQuadVertices:[Float] = [-panel_depth, -panel_depth, -panel_depth,
+                                       panel_depth, -panel_depth, -panel_depth,
+                                       -panel_depth, panel_depth, -panel_depth,
+                                       panel_depth, panel_depth, -panel_depth,
                                        0, 1,
                                        0.5, 1,
                                        0, 0,
@@ -637,14 +636,6 @@ class Renderer {
         let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             semaphore.signal()
-            if let queuedFrame = queuedFrame {
-                if self.alvrInitialized && self.lastSubmittedTimestamp != queuedFrame.timestamp {
-                    /*let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
-                    print("Finished:", queuedFrame.timestamp)
-                    alvr_report_submit(queuedFrame.timestamp, vsyncTimeNs &- currentTimeNs)
-                    self.lastSubmittedTimestamp = queuedFrame.timestamp*/
-                }
-            }
         }
         
         if streamingActiveForFrame {
@@ -660,8 +651,7 @@ class Renderer {
         frame.endSubmission()
         
         if self.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
-            let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
-            var targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC))
+            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC))
             sendTracking(targetTimestamp: targetTimestamp)
         }
         
