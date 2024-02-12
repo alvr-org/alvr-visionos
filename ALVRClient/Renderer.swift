@@ -102,8 +102,6 @@ class Renderer {
     var framesSinceLastIDR:Int = 0
     var framesSinceLastDecode:Int = 0
     
-    let constantTimeOffsetForJitterReductionHack:Double = 33.0/1000.0
-    
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
         self.device = layerRenderer.device
@@ -627,7 +625,7 @@ class Renderer {
         if renderingStreaming && framePreviouslyPredictedPose != nil {
             // TODO: maybe find some mutable pointer hax to just copy in the ground truth, instead of asking for a value in the past.
             let time = Double(queuedFrame!.timestamp) / Double(NSEC_PER_SEC)
-            //let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time - constantTimeOffsetForJitterReductionHack)
+            //let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
             let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
             drawable.deviceAnchor = deviceAnchor
             
@@ -876,8 +874,8 @@ class Renderer {
         }
     }
     
-    // TODO: once we have our own timewarp, bump this up.
-    static let maxPrediction = 10 * NSEC_PER_MSEC
+    // TODO: figure out how stable Apple's predictions are into the future
+    static let maxPrediction = 50 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
     
     func sendTracking(targetTimestamp: Double) {
@@ -887,7 +885,7 @@ class Renderer {
         
         // Predict as far into the future as Apple will allow us.
         for i in 0...20 {
-            deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestampWalkedBack - constantTimeOffsetForJitterReductionHack)
+            deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestampWalkedBack)
             if deviceAnchor != nil {
                 break
             }
