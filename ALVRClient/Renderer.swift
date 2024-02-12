@@ -332,19 +332,8 @@ class Renderer {
         rotation += 0.01
     }
     
-    // A/B helpers, TODO remove
-    var testIter:Int = 0
-    var testIter2:Int = 0
-    
     private func updateGameStateForVideoFrame(drawable: LayerRenderer.Drawable, framePose: simd_float4x4) {
         let simdDeviceAnchor = drawable.deviceAnchor != nil ? drawable.deviceAnchor!.originFromAnchorTransform : matrix_identity_float4x4
-        
-        // A/B helpers, TODO remove
-        testIter2 += 1
-        if testIter2 % 90 == 0 {
-            testIter = (testIter + 1) % 3
-        }
-        
         
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
             let view = drawable.views[viewIndex]
