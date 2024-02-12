@@ -351,7 +351,7 @@ class Renderer {
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
             let view = drawable.views[viewIndex]
             
-            let viewMatrix = (framePose.inverse * simdDeviceAnchor * view.transform).inverse
+            let viewMatrix = (framePose.inverse * simdDeviceAnchor).inverse
             let projection = ProjectiveTransform3D(leftTangent: Double(view.tangents[0]),
                                                    rightTangent: Double(view.tangents[1]),
                                                    topTangent: Double(view.tangents[2]),
