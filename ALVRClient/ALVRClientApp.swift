@@ -13,7 +13,7 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
         configuration.depthFormat = .depth32Float
         configuration.colorFormat = .bgra8Unorm_srgb
     
-        let foveationEnabled = capabilities.supportsFoveation && false
+        let foveationEnabled = capabilities.supportsFoveation
         configuration.isFoveationEnabled = foveationEnabled
         
         let options: LayerRenderer.Capabilities.SupportedLayoutsOptions = foveationEnabled ? [.foveationEnabled] : []
@@ -39,6 +39,7 @@ struct MetalRendererApp: App {
                 renderer.startRenderLoop()
             }
         }
+        //.upperLimbVisibility(.hidden) // TODO: make this an option
     }
 }
 #endif
