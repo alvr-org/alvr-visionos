@@ -529,13 +529,17 @@ class Renderer {
                 objc_sync_enter(frameQueueLock)
                 queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
                 objc_sync_exit(frameQueueLock)
-                if queuedFrame != nil ||  CACurrentMediaTime() - startPollTime > 0.002 {
+                if queuedFrame != nil {
                     break
                 }
                 
                 // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
                 if lastQueuedFrame != nil {
                     queuedFrame = lastQueuedFrame
+                    break
+                }
+                
+                if CACurrentMediaTime() - startPollTime > 0.002 {
                     break
                 }
             }
@@ -564,7 +568,9 @@ class Renderer {
         }
         
         guard let drawable = frame.queryDrawable() else {
-            lastQueuedFrame = queuedFrame
+            if queuedFrame != nil {
+                lastQueuedFrame = queuedFrame
+            }
             return
         }
         
@@ -642,7 +648,7 @@ class Renderer {
             semaphore.signal()
         }
         
-        if streamingActiveForFrame {
+        if renderingStreaming {
             renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
         } else {
             renderLobby(drawable: drawable, commandBuffer: commandBuffer)
