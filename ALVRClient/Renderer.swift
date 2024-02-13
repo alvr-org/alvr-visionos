@@ -434,17 +434,18 @@ class Renderer {
                     // Don't submit NALs for decoding if we have already decoded a later frame
                     objc_sync_enter(frameQueueLock)
                     if timestamp < frameQueueLastTimestamp {
-                        print("Skip:", timestamp, frameQueueLastTimestamp)
-                        objc_sync_exit(frameQueueLock)
-                        continue
+                        //print("Skip:", timestamp, frameQueueLastTimestamp)
+                        //objc_sync_exit(frameQueueLock)
+                        //continue
                     }
                     
                     // If we're receiving NALs timestamped from >400ms ago, stop decoding them
                     // to prevent a cascade of needless decoding lag
                     let ns_diff_from_last_req_ts = lastRequestedTimestamp > timestamp ? lastRequestedTimestamp &- timestamp : 0
+                    let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*400 && framesSinceLastIDR > 90*2) && false
                     // TODO: adjustable framerate
                     // TODO: maybe also call this if we fail to decode for too long.
-                    if lastRequestedTimestamp != 0 && ((ns_diff_from_last_req_ts > 1000*1000*400 && framesSinceLastIDR > 90*1) || framesSinceLastDecode > 90*1) {
+                    if lastRequestedTimestamp != 0 && (lagSpiked || framesSinceLastDecode > 90*2) {
                         objc_sync_exit(frameQueueLock)
                         
                         print("Handle spike!", framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
@@ -478,8 +479,8 @@ class Renderer {
                                 // From what I've read online, the only way to know if an H264 frame has actually completed is if
                                 // the next frame is starting, so keep this around for now just in case.
                                 if frameQueueLastImageBuffer != nil {
-                                    //frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
-                                    frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                                    frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
+                                    //frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
                                 }
                                 else {
                                     frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
