@@ -479,8 +479,8 @@ class Renderer {
                                 // From what I've read online, the only way to know if an H264 frame has actually completed is if
                                 // the next frame is starting, so keep this around for now just in case.
                                 if frameQueueLastImageBuffer != nil {
-                                    frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
-                                    //frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                                    //frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
+                                    frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
                                 }
                                 else {
                                     frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
@@ -551,10 +551,6 @@ class Renderer {
         
         frame.endUpdate()
         
-        if queuedFrame != nil && lastSubmittedTimestamp != queuedFrame!.timestamp {
-            alvr_report_compositor_start(queuedFrame!.timestamp)
-        }
-        
         let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
         if !renderingStreaming {
@@ -567,8 +563,14 @@ class Renderer {
             fatalError("Failed to create command buffer")
         }
         
-        guard let drawable = frame.queryDrawable() else { return }
+        guard let drawable = frame.queryDrawable() else {
+            lastQueuedFrame = queuedFrame
+            return
+        }
         
+        if queuedFrame != nil && lastSubmittedTimestamp != queuedFrame!.timestamp {
+            alvr_report_compositor_start(queuedFrame!.timestamp)
+        }
         
         if !alvrInitialized {
             alvrInitialized = true
