@@ -442,7 +442,7 @@ class Renderer {
                     // If we're receiving NALs timestamped from >400ms ago, stop decoding them
                     // to prevent a cascade of needless decoding lag
                     let ns_diff_from_last_req_ts = lastRequestedTimestamp > timestamp ? lastRequestedTimestamp &- timestamp : 0
-                    let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*400 && framesSinceLastIDR > 90*2) && false
+                    let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*600 && framesSinceLastIDR > 90*2)
                     // TODO: adjustable framerate
                     // TODO: maybe also call this if we fail to decode for too long.
                     if lastRequestedTimestamp != 0 && (lagSpiked || framesSinceLastDecode > 90*2) {
@@ -525,10 +525,11 @@ class Renderer {
         if streamingActiveForFrame {
             let startPollTime = CACurrentMediaTime()
             while true {
+                sched_yield()
                 objc_sync_enter(frameQueueLock)
                 queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
                 objc_sync_exit(frameQueueLock)
-                if queuedFrame != nil ||  CACurrentMediaTime() - startPollTime > 0.01 {
+                if queuedFrame != nil ||  CACurrentMediaTime() - startPollTime > 0.002 {
                     break
                 }
                 
@@ -537,7 +538,6 @@ class Renderer {
                     queuedFrame = lastQueuedFrame
                     break
                 }
-                sched_yield()
             }
         }
         
@@ -592,6 +592,7 @@ class Renderer {
         if alvrInitialized && streamingActiveForFrame {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
             if abs(lastIpd - ipd) > 0.001 {
+                print("Send view config")
                 lastIpd = ipd
                 let leftAngles = atan(drawable.views[0].tangents)
                 let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
@@ -857,7 +858,7 @@ class Renderer {
     }
     
     // TODO: figure out how stable Apple's predictions are into the future
-    static let maxPrediction = 50 * NSEC_PER_MSEC
+    static let maxPrediction = 30 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
     
     func sendTracking(targetTimestamp: Double) {
