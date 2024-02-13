@@ -21,6 +21,10 @@ struct VideoHandler {
         return (Data(buffer: nalBuffer), nalTimestamp)
     }
     
+    static func abandonAllPendingNals() {
+        while let _ = VideoHandler.pollNal() {}
+    }
+    
     static func createVideoDecoder(initialNals: Data, codec: Int) -> (VTDecompressionSession, CMFormatDescription) {
         let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
         var videoFormat:CMFormatDescription? = nil

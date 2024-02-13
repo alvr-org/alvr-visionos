@@ -27,18 +27,17 @@ extension LayerRenderer.Clock.Instant.Duration {
     }
 }
 
-// Larger makes closer objects zoom in more,
-// smaller makes farther objects zoom in more?
-// Could also be a foveation thing idk
-let panel_depth: Float = 0.1
+// Focal depth of the timewarp panel, ideally would be adjusted based on the depth
+// of what the user is looking at.
+let panel_depth: Float = 1
 
 // TODO(zhuowei): what's the z supposed to be?
 // x, y, z
 // u, v
-let fullscreenQuadVertices:[Float] = [-1, -1, panel_depth,
-                                       1, -1, panel_depth,
-                                       -1, 1, panel_depth,
-                                       1, 1, panel_depth,
+let fullscreenQuadVertices:[Float] = [-panel_depth, -panel_depth, -panel_depth,
+                                       panel_depth, -panel_depth, -panel_depth,
+                                       -panel_depth, panel_depth, -panel_depth,
+                                       panel_depth, panel_depth, -panel_depth,
                                        0, 1,
                                        0.5, 1,
                                        0, 0,
@@ -87,6 +86,7 @@ class Renderer {
     var frameQueueLastImageBuffer: CVImageBuffer? = nil
     var lastQueuedFrame: QueuedFrame? = nil
     var lastRequestedTimestamp: UInt64 = 0
+    var lastSubmittedTimestamp: UInt64 = 0
     var streamingActive = false
     
     var deviceAnchorsLock = NSObject()
@@ -98,6 +98,8 @@ class Renderer {
     var fullscreenQuadBuffer:MTLBuffer!
     var lastIpd:Float = -1
     var framesRendered:Int = 0
+    var framesSinceLastIDR:Int = 0
+    var framesSinceLastDecode:Int = 0
     
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
@@ -318,7 +320,7 @@ class Renderer {
                                                    farZ: Double(drawable.depthRange.x),
                                                    reverseZ: true)
             
-            return Uniforms(projectionMatrix: .init(projection), modelViewMatrix: viewMatrix * modelMatrix)
+            return Uniforms(projectionMatrix: .init(projection), modelViewMatrix: viewMatrix * modelMatrix, tangents: view.tangents)
         }
         
         self.uniforms[0].uniforms.0 = uniforms(forViewIndex: 0)
@@ -329,9 +331,21 @@ class Renderer {
         rotation += 0.01
     }
     
-    private func updateGameStateForVideoFrame(drawable: LayerRenderer.Drawable, deviceAnchor: DeviceAnchor?) {
+    private func updateGameStateForVideoFrame(drawable: LayerRenderer.Drawable, framePose: simd_float4x4) {
+        let simdDeviceAnchor = drawable.deviceAnchor != nil ? drawable.deviceAnchor!.originFromAnchorTransform : matrix_identity_float4x4
+        
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
-            return Uniforms(projectionMatrix: matrix_identity_float4x4, modelViewMatrix: matrix_identity_float4x4)
+            let view = drawable.views[viewIndex]
+            
+            let viewMatrix = (framePose.inverse * simdDeviceAnchor).inverse
+            let projection = ProjectiveTransform3D(leftTangent: Double(view.tangents[0]),
+                                                   rightTangent: Double(view.tangents[1]),
+                                                   topTangent: Double(view.tangents[2]),
+                                                   bottomTangent: Double(view.tangents[3]),
+                                                   nearZ: Double(drawable.depthRange.y),
+                                                   farZ: Double(drawable.depthRange.x),
+                                                   reverseZ: true)
+            return Uniforms(projectionMatrix: .init(projection), modelViewMatrix: viewMatrix, tangents: view.tangents)
         }
         
         self.uniforms[0].uniforms.0 = uniforms(forViewIndex: 0)
@@ -366,12 +380,18 @@ class Renderer {
                 )
                 streamingActive = true
                 alvr_request_idr()
+                framesSinceLastIDR = 0
+                framesSinceLastDecode = 0
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
                 streamingActive = false
                 vtDecompressionSession = nil
                 videoFormat = nil
                 lastRequestedTimestamp = 0
+                lastSubmittedTimestamp = 0
+                framesRendered = 0
+                framesSinceLastIDR = 0
+                framesSinceLastDecode = 0
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
             case ALVR_EVENT_CREATE_DECODER.rawValue:
@@ -401,29 +421,41 @@ class Renderer {
                     }
                 }
             case ALVR_EVENT_FRAME_READY.rawValue:
-                // print("frame ready")
+                //print("frame ready")
                 
                 while true {
                     guard let (nal, timestamp) = VideoHandler.pollNal() else {
                         break
                     }
                     
+                    //print("nal bytecount:", nal.count, "for ts:", timestamp)
+                    framesSinceLastIDR += 1
+                    
                     // Don't submit NALs for decoding if we have already decoded a later frame
                     objc_sync_enter(frameQueueLock)
                     if timestamp < frameQueueLastTimestamp {
-                        objc_sync_exit(frameQueueLock)
-                        continue
+                        //print("Skip:", timestamp, frameQueueLastTimestamp)
+                        //objc_sync_exit(frameQueueLock)
+                        //continue
                     }
                     
-                    // If we're receiving NALs timestamped from 400ms ago, stop decoding them
+                    // If we're receiving NALs timestamped from >400ms ago, stop decoding them
                     // to prevent a cascade of needless decoding lag
-                    if lastRequestedTimestamp != 0 && lastRequestedTimestamp &- timestamp > 1000*1000*400 {
-                        // notify ALVR we skipped this one?
-                        //alvr_report_frame_decoded(timestamp)
-                        //alvr_report_compositor_start(timestamp)
-                        //alvr_report_submit(timestamp, 0)
-                        
+                    let ns_diff_from_last_req_ts = lastRequestedTimestamp > timestamp ? lastRequestedTimestamp &- timestamp : 0
+                    let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*600 && framesSinceLastIDR > 90*2)
+                    // TODO: adjustable framerate
+                    // TODO: maybe also call this if we fail to decode for too long.
+                    if lastRequestedTimestamp != 0 && (lagSpiked || framesSinceLastDecode > 90*2) {
                         objc_sync_exit(frameQueueLock)
+                        
+                        print("Handle spike!", framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
+                        
+                        // We have to request an IDR to resume the video feed
+                        VideoHandler.abandonAllPendingNals()
+                        alvr_request_idr()
+                        framesSinceLastIDR = 0
+                        framesSinceLastDecode = 0
+                        
                         continue
                     }
                     objc_sync_exit(frameQueueLock)
@@ -439,6 +471,7 @@ class Renderer {
                             //print("finish decode: \(timestamp), \(imageBufferPtr), \(nal_type)")
                             
                             objc_sync_enter(frameQueueLock)
+                            framesSinceLastDecode = 0
                             if frameQueueLastTimestamp != timestamp
                             {
                                 // TODO: For some reason, really low frame rates seem to decode the wrong image for a split second?
@@ -492,10 +525,11 @@ class Renderer {
         if streamingActiveForFrame {
             let startPollTime = CACurrentMediaTime()
             while true {
+                sched_yield()
                 objc_sync_enter(frameQueueLock)
                 queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
                 objc_sync_exit(frameQueueLock)
-                if queuedFrame != nil ||  CACurrentMediaTime() - startPollTime > 0.01 {
+                if queuedFrame != nil {
                     break
                 }
                 
@@ -504,7 +538,10 @@ class Renderer {
                     queuedFrame = lastQueuedFrame
                     break
                 }
-                sched_yield()
+                
+                if CACurrentMediaTime() - startPollTime > 0.002 {
+                    break
+                }
             }
         }
         
@@ -517,10 +554,6 @@ class Renderer {
         frame.startUpdate()
         
         frame.endUpdate()
-
-        if queuedFrame != nil {
-            alvr_report_compositor_start(queuedFrame!.timestamp)
-        }
         
         let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
@@ -534,8 +567,16 @@ class Renderer {
             fatalError("Failed to create command buffer")
         }
         
-        guard let drawable = frame.queryDrawable() else { return }
+        guard let drawable = frame.queryDrawable() else {
+            if queuedFrame != nil {
+                lastQueuedFrame = queuedFrame
+            }
+            return
+        }
         
+        if queuedFrame != nil && lastSubmittedTimestamp != queuedFrame!.timestamp {
+            alvr_report_compositor_start(queuedFrame!.timestamp)
+        }
         
         if !alvrInitialized {
             alvrInitialized = true
@@ -557,6 +598,7 @@ class Renderer {
         if alvrInitialized && streamingActiveForFrame {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
             if abs(lastIpd - ipd) > 0.001 {
+                print("Send view config")
                 lastIpd = ipd
                 let leftAngles = atan(drawable.views[0].tangents)
                 let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
@@ -569,38 +611,30 @@ class Renderer {
         
         _ = inFlightSemaphore.wait(timeout: DispatchTime.distantFuture)
         
-        // HACK: get a newer frame if possible
-        if queuedFrame != nil {
-            if frameQueue.count > 0 && streamingActiveForFrame {
-                while true {
-                    objc_sync_enter(frameQueueLock)
-                    queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
-                    objc_sync_exit(frameQueueLock)
-                    if queuedFrame != nil {
-                        break
-                    }
-                    sched_yield()
-                }
-            }
-        }
+        objc_sync_enter(frameQueueLock)
+        framesSinceLastDecode += 1
+        objc_sync_exit(frameQueueLock)
         
         frame.startSubmission()
         
-        if renderingStreaming && lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) != nil {
+        let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
+        let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
+        let framePreviouslyPredictedPose = queuedFrame != nil ? lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
+        if renderingStreaming && framePreviouslyPredictedPose != nil {
             // TODO: maybe find some mutable pointer hax to just copy in the ground truth, instead of asking for a value in the past.
             let time = Double(queuedFrame!.timestamp) / Double(NSEC_PER_SEC)
-            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
+            //let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
+            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
             drawable.deviceAnchor = deviceAnchor
             
             //print("found anchor for frame!", deviceAnchorLoc, queuedFrame!.timestamp, deviceAnchor?.originFromAnchorTransform)
         }
+        
         if drawable.deviceAnchor == nil {
-            if renderingStreaming {
-                print("missing anchor!!")
+            if renderingStreaming && queuedFrame != nil {
+                print("missing anchor!!", queuedFrame!.timestamp)
             }
-            let time = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
-            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
-            
+            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
             drawable.deviceAnchor = deviceAnchor
         }
         
@@ -612,15 +646,10 @@ class Renderer {
         let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             semaphore.signal()
-            if let queuedFrame = queuedFrame {
-                if self.alvrInitialized {
-                    alvr_report_submit(queuedFrame.timestamp, 0)
-                }
-            }
         }
         
-        if streamingActiveForFrame {
-            renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
+        if renderingStreaming {
+            renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
         } else {
             renderLobby(drawable: drawable, commandBuffer: commandBuffer)
         }
@@ -631,9 +660,16 @@ class Renderer {
         
         frame.endSubmission()
         
-        if self.alvrInitialized {
-            let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
+        if self.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
+            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC))
             sendTracking(targetTimestamp: targetTimestamp)
+        }
+        
+        if alvrInitialized && queuedFrame != nil && lastSubmittedTimestamp != queuedFrame?.timestamp {
+            let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
+            //print("Finished:", queuedFrame!.timestamp)
+            alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
+            self.lastSubmittedTimestamp = queuedFrame!.timestamp
         }
         
         lastQueuedFrame = queuedFrame
@@ -717,10 +753,10 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?) {
+    func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?, framePose: simd_float4x4) {
         self.updateDynamicBufferState()
         
-        self.updateGameStateForVideoFrame(drawable: drawable, deviceAnchor: drawable.deviceAnchor)
+        self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose)
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
@@ -827,16 +863,37 @@ class Renderer {
         }
     }
     
-    static let maxPrediction = 15 * NSEC_PER_MSEC
+    // TODO: figure out how stable Apple's predictions are into the future
+    static let maxPrediction = 30 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
     
     func sendTracking(targetTimestamp: Double) {
         //let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), Renderer.maxPrediction)) / Double(NSEC_PER_SEC)
-        let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
-        lastRequestedTimestamp = targetTimestampNS
-        guard let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestamp) else {
+        var targetTimestampWalkedBack = targetTimestamp
+        var deviceAnchor:DeviceAnchor? = nil
+        
+        // Predict as far into the future as Apple will allow us.
+        for i in 0...20 {
+            deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestampWalkedBack)
+            if deviceAnchor != nil {
+                break
+            }
+            targetTimestampWalkedBack -= (5/1000.0)
+        }
+        
+        // Fallback.
+        if deviceAnchor == nil {
+            targetTimestampWalkedBack = CACurrentMediaTime()
+            deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestamp)
+        }
+
+        // Well, I'm out of ideas.
+        guard let deviceAnchor = deviceAnchor else {
             return
         }
+        
+        let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
+        
         deviceAnchorsQueue.append(targetTimestampNS)
         if deviceAnchorsQueue.count > 1000 {
             let val = deviceAnchorsQueue.removeFirst()
@@ -846,6 +903,10 @@ class Renderer {
         let orientation = simd_quaternion(deviceAnchor.originFromAnchorTransform)
         let position = deviceAnchor.originFromAnchorTransform.columns.3
         var trackingMotion = AlvrDeviceMotion(device_id: Renderer.deviceIdHead, orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+        let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
+        let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
+        //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
+        lastRequestedTimestamp = targetTimestampNS
         alvr_send_tracking(targetTimestampNS, &trackingMotion, 1)
     }
     
