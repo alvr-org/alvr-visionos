@@ -1,0 +1,16 @@
+{
+  "pathsToIds" : {
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Earth.usda" : "6AF421D5-F098-4D35-8830-F4BB228EF79A",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Globe.usda" : "226D5FCD-4FF0-430F-A93F-70BF40142986",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Moon.usda" : "8E9B8C88-F22D-4EE2-B6AA-9BBAD73F3E50",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Moon\/Moon.exported_compressed.usdc" : "BE98AC9B-F8F7-4A7E-A0AE-55FDF8A7E428",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Pole.usda" : "B4C6A378-458F-4D94-ACEF-9F2262B83E88",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Pole\/Pole.exported_compressed.usdc" : "1DD6C655-F7F0-4ED6-B8C6-775139BFF2A8",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Satellite.usda" : "728FD24A-4002-4183-8D67-B8B6F46769DF",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Satellite\/Satellite.exported_compressed.usdc" : "A001C904-96A3-4BF4-9073-10051D097045",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Sun.usda" : "088D34D4-28D8-43DF-9224-25316CEC5ECC",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Sun\/Sun.exported_compressed.usdc" : "5DF31FBF-B20E-462E-A857-0A0C07099242",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Telescope.usda" : "E8B8CE96-14C0-4650-BB3C-3C429BB5843A",
+    "WorldAssets\/Sources\/WorldAssets\/WorldAssets.rkassets\/Telescope\/Telescope.exported_compressed.usdc" : "2C867DD3-0451-47C4-B9B1-360F14B42510"
+  }
+}

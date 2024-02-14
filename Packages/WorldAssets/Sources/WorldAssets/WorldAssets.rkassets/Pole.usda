@@ -1,0 +1,177 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "Root"
+{
+    reorder nameChildren = ["", "", "Pole", "M_Pole"]
+    def "Pole" (
+        active = true
+        customData = {
+            float3 rotationEulerHint = (0, 0, 0)
+        }
+        references = @Pole.usdc@
+    )
+    {
+        reorder nameChildren = ["", "", "arrow_geo", "M_Pole"]
+        quatf xformOp:orient = (1, 0, 0, 0)
+        float3 xformOp:scale = (0.001, 0.001, 0.001)
+        float3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def Material "M_Pole" (
+            active = true
+        )
+        {
+            token inputs:frame:stPrimvarName = "st"
+            token outputs:mtlx:surface
+            token outputs:realitykit:vertex
+            prepend token outputs:surface.connect = </Root/Pole/M_Pole/UsdPreviewSurface.outputs:surface>
+
+            def Shader "UsdPreviewSurface" (
+                active = true
+            )
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.18, 0.18, 0.18)
+                color3f inputs:diffuseColor.connect = </Root/Pole/M_Pole/diffuseColor.outputs:rgb>
+                color3f inputs:emissiveColor = (0, 0, 0)
+                color3f inputs:emissiveColor.connect = </Root/Pole/M_Pole/emissiveColor.outputs:rgb>
+                float inputs:metallic = 0
+                float inputs:metallic.connect = </Root/Pole/M_Pole/metallic.outputs:r>
+                normal3f inputs:normal = (0, 0, 1)
+                normal3f inputs:normal.connect = </Root/Pole/M_Pole/normal.outputs:rgb>
+                float inputs:occlusion = 1
+                float inputs:opacity = 1
+                float inputs:opacity.connect = </Root/Pole/M_Pole/opacity.outputs:r>
+                float inputs:roughness = 0.5
+                float inputs:roughness.connect = </Root/Pole/M_Pole/roughness.outputs:r>
+                token outputs:surface
+            }
+
+            def Shader "diffuseColor"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Pole/0/M_arrow_baseColor_1.png@
+                float2 inputs:st.connect = </Root/Pole/M_Pole/diffuseColor/TexCoordReader.outputs:result>
+                color3f outputs:rgb
+
+                def Shader "TexCoordReader"
+                {
+                    uniform token info:id = "UsdPrimvarReader_float2"
+                    token inputs:varname.connect = </Root/Pole/M_Pole/UsdPreviewSurface.inputs:frame:stPrimvarName>
+                    float2 outputs:result
+                }
+            }
+
+            def Shader "roughness"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Pole/0/M_arrow_roughness_1.jpg@
+                float2 inputs:st.connect = </Root/Pole/M_Pole/roughness/TexCoordReader.outputs:result>
+                float outputs:r
+
+                def Shader "TexCoordReader"
+                {
+                    uniform token info:id = "UsdPrimvarReader_float2"
+                    token inputs:varname.connect = </Root/Pole/M_Pole/UsdPreviewSurface.inputs:frame:stPrimvarName>
+                    float2 outputs:result
+                }
+            }
+
+            def Shader "metallic"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Pole/0/M_arrow_metallic_1.jpg@
+                float2 inputs:st.connect = </Root/Pole/M_Pole/metallic/TexCoordReader.outputs:result>
+                float outputs:r
+
+                def Shader "TexCoordReader"
+                {
+                    uniform token info:id = "UsdPrimvarReader_float2"
+                    token inputs:varname.connect = </Root/Pole/M_Pole/UsdPreviewSurface.inputs:frame:stPrimvarName>
+                    float2 outputs:result
+                }
+            }
+
+            def Shader "emissiveColor"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Pole/0/M_arrow_emissive_1.jpg@
+                float2 inputs:st.connect = </Root/Pole/M_Pole/emissiveColor/TexCoordReader.outputs:result>
+                color3f outputs:rgb
+
+                def Shader "TexCoordReader"
+                {
+                    uniform token info:id = "UsdPrimvarReader_float2"
+                    token inputs:varname.connect = </Root/Pole/M_Pole/UsdPreviewSurface.inputs:frame:stPrimvarName>
+                    float2 outputs:result
+                }
+            }
+
+            def Shader "opacity"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Pole/0/arrow_opacity_1.png@
+                float2 inputs:st.connect = </Root/Pole/M_Pole/opacity/TexCoordReader.outputs:result>
+                float outputs:r
+
+                def Shader "TexCoordReader"
+                {
+                    uniform token info:id = "UsdPrimvarReader_float2"
+                    token inputs:varname.connect = </Root/Pole/M_Pole/UsdPreviewSurface.inputs:frame:stPrimvarName>
+                    float2 outputs:result
+                }
+            }
+
+            def Shader "occlusion"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Pole/0/M_arrow_normal_1.jpg@
+                float2 inputs:st.connect = </Root/Pole/M_Pole/occlusion/TexCoordReader.outputs:result>
+                float outputs:r
+
+                def Shader "TexCoordReader"
+                {
+                    uniform token info:id = "UsdPrimvarReader_float2"
+                    token inputs:varname.connect = </Root/Pole/M_Pole/UsdPreviewSurface.inputs:frame:stPrimvarName>
+                    float2 outputs:result
+                }
+            }
+
+            def Shader "normal"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Pole/0/M_arrow_normal_1.jpg@
+                float2 inputs:st.connect = </Root/Pole/M_Pole/normal/TexCoordReader.outputs:result>
+                normal3f outputs:rgb
+
+                def Shader "TexCoordReader"
+                {
+                    uniform token info:id = "UsdPrimvarReader_float2"
+                    token inputs:varname.connect = </Root/Pole/M_Pole/UsdPreviewSurface.inputs:frame:stPrimvarName>
+                    float2 outputs:result
+                }
+            }
+        }
+
+        over "arrow_geo"
+        {
+            over "arrow_geo_geometry"
+            {
+                over "arrow_geo_geometry" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </Root/Pole/M_Pole> (
+                        bindMaterialAs = "weakerThanDescendants"
+                    )
+                }
+            }
+        }
+    }
+}
+

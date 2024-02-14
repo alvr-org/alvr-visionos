@@ -4,6 +4,7 @@
 #if os(visionOS)
 import CompositorServices
 import Metal
+import MetalFX
 import MetalKit
 import simd
 import Spatial
@@ -18,6 +19,12 @@ let maxBuffersInFlight = 3
 
 enum RendererError: Error {
     case badVertexDescriptor
+}
+
+enum AAPLScalingMode: Int {
+    case defaultScaling
+    case spatialScaling
+   // case temporalScaling
 }
 
 extension LayerRenderer.Clock.Instant.Duration {
@@ -99,22 +106,42 @@ class Renderer {
     var lastIpd:Float = -1
     var framesRendered:Int = 0
     
+    
+    //MetalFX zone
+    let renderTarget: AAPLRenderTarget
+
+    var mfxDirty: Bool = true
+    var mfxScalingMode = AAPLScalingMode.defaultScaling
+    var mfxSpatialScaler: MTLFXSpatialScaler!
+  //  var mfxTemporalScaler: MTLFXTemporalScaler!  //MTLFXTemporalScaler is unavailable in visionOS
+  //  var isDepthReversed: Bool = false
+  //  var mfxMakeMotionVectors: Bool = false
+
+ //   var pixelJitter = simd_float2()
+ //   var ndcJitter = simd_float2()
+ //   var texelJitter = simd_float2()
+    //End MetalFX zone
+    
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
         self.device = layerRenderer.device
         self.commandQueue = self.device.makeCommandQueue()!
 
+        //int 768
         let uniformBufferSize = alignedUniformsSize * maxBuffersInFlight
 
+        //layerRenderer.configuration.baseNSObject.foveation_max_ppd
+        //_foveation_max_ppd = float 26
         self.dynamicUniformBuffer = self.device.makeBuffer(length:uniformBufferSize,
                                                            options:[MTLResourceOptions.storageModeShared])!
-
         self.dynamicUniformBuffer.label = "UniformBuffer"
 
         uniforms = UnsafeMutableRawPointer(dynamicUniformBuffer.contents()).bindMemory(to:UniformsArray.self, capacity:1)
 
         mtlVertexDescriptor = Renderer.buildMetalVertexDescriptor()
-
+        
+        renderTarget = AAPLRenderTarget(mtlDevice: device)
+      //  renderTarget.resize(width: Int(view.drawableSize.width), height: Int(view.drawableSize.height))
         do {
             pipelineState = try Renderer.buildRenderPipelineWithDevice(device: device,
                                                                        layerRenderer: layerRenderer,
@@ -164,6 +191,48 @@ class Renderer {
             }
             renderThread.name = "Render Thread"
             renderThread.start()
+        }
+    }
+    
+    /// Checks the current scaling mode and free unused resources, if necessary.
+    func releaseMetalFXResources() {
+
+        // Free the spatial upscaling effect if you're not using it.
+        if mfxScalingMode != .spatialScaling {
+            mfxSpatialScaler = nil
+        }
+        
+    }
+    
+    /// Creates the MetalFX spatial scaler.
+    ///
+    /// If you're using the spatial scaler, please keep in mind that it expects an antialiased input texture.
+    /// Since this sample focuses on showing you how to use MetalFX upscaling, it doesn't perform an antialiasing step here.
+    /// For example, you may prepass your input texture with a shader that computes antialiasing.
+    func setupSpatialScaler() {
+        let desc = MTLFXSpatialScalerDescriptor()
+        desc.inputWidth = renderTarget.renderSize.width
+        desc.inputHeight = renderTarget.renderSize.height
+        desc.outputWidth = renderTarget.windowSize.width
+        desc.outputHeight = renderTarget.windowSize.height
+        desc.colorTextureFormat = renderTarget.currentFrameColor.pixelFormat
+        desc.outputTextureFormat = renderTarget.currentFrameUpscaledColor.pixelFormat
+        desc.colorProcessingMode = .perceptual
+        
+        guard let spatialScaler = desc.makeSpatialScaler(device: device) else {
+            print("The spatial scaler effect is not usable!")
+            mfxScalingMode = .defaultScaling
+            return
+        }
+        
+        mfxSpatialScaler = spatialScaler
+    }
+    
+    /// Releases the previous resources, if necessary, and sets up the MetalFX scalers.
+    func setupMetalFX() {
+        releaseMetalFXResources()
+        if mfxScalingMode == .spatialScaling {
+            setupSpatialScaler()
         }
     }
 
@@ -281,10 +350,32 @@ class Renderer {
         ]
 
         return try textureLoader.newTexture(name: textureName,
-                                            scaleFactor: 1.0,
+                                            scaleFactor: 2.0,
                                             bundle: nil,
                                             options: textureLoaderOptions)
 
+    }
+    
+    func upscaleTexture(_ commandBuffer: MTLCommandBuffer) -> MTLTexture {
+        var currentSourceTexture = renderTarget.currentFrameColor!
+        
+        if let spatialScaler = mfxSpatialScaler {
+            spatialScaler.colorTexture = currentSourceTexture
+            spatialScaler.outputTexture = renderTarget.currentFrameUpscaledColor!
+            spatialScaler.encode(commandBuffer: commandBuffer)
+            
+            currentSourceTexture = renderTarget.currentFrameUpscaledColor
+        }
+        
+        return currentSourceTexture
+    }
+    
+    func adjustRenderScale(_ newRenderScale: Float) {
+        let oldRenderScale = renderTarget.renderScale
+        renderTarget.adjustRenderScale(newRenderScale)
+        if oldRenderScale != renderTarget.renderScale {
+            setupMetalFX()
+        }
     }
 
     private func updateDynamicBufferState() {
@@ -483,6 +574,7 @@ class Renderer {
         }
     }
 
+    /// TODO: Add SpatialScaler here
     func renderFrame() {
         /// Per frame updates hare
         framesRendered += 1
@@ -541,7 +633,13 @@ class Renderer {
             alvrInitialized = true
             // TODO(zhuowei): ???
             let refreshRates:[Float] = [90, 60, 45]
-            alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(drawable.colorTextures[0].width), UInt32(drawable.colorTextures[0].height), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
+            
+            //Width and height half of actual expected value
+            let width = drawable.colorTextures[0].width * 2
+            let height = drawable.colorTextures[0].height * 2
+            print("Initializing with width: \(width) and height: \(height)")
+
+            alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(width), UInt32(height), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
             alvr_resume()
         }
         if !inputRunning {
@@ -702,14 +800,13 @@ class Renderer {
         }
         
         renderEncoder.setFragmentTexture(colorMap, index: TextureIndex.color.rawValue)
-        
         for submesh in mesh.submeshes {
             renderEncoder.drawIndexedPrimitives(type: submesh.primitiveType,
                                                 indexCount: submesh.indexCount,
                                                 indexType: submesh.indexType,
                                                 indexBuffer: submesh.indexBuffer.buffer,
                                                 indexBufferOffset: submesh.indexBuffer.offset)
-            
+
         }
         
         renderEncoder.popDebugGroup()
@@ -743,6 +840,7 @@ class Renderer {
         
         renderEncoder.label = "Primary Render Encoder"
         
+        
         renderEncoder.pushDebugGroup("Draw Box")
         
         renderEncoder.setCullMode(.back)
@@ -755,8 +853,11 @@ class Renderer {
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         
+        //Viewports each width 1920 x 1824
+        //Max res = 3840 x 1824?
+        //Seems off since this number, that's what Quest 2's per eye is!
         let viewports = drawable.views.map { $0.textureMap.viewport }
-        
+                
         renderEncoder.setViewports(viewports)
         
         if drawable.views.count > 1 {
@@ -805,7 +906,7 @@ class Renderer {
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-        renderEncoder.popDebugGroup()
+       // renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
     }
     

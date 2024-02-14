@@ -5,15 +5,20 @@
 import SwiftUI
 #if os(visionOS)
 import CompositorServices
+import RealityKitContent
 #endif
 
 #if os(visionOS)
 struct ContentStageConfiguration: CompositorLayerConfiguration {
     func makeConfiguration(capabilities: LayerRenderer.Capabilities, configuration: inout LayerRenderer.Configuration) {
         configuration.depthFormat = .depth32Float
-        configuration.colorFormat = .bgra8Unorm_srgb
+       // configuration.depthFormat = .depth32Float_stencil8
+
+     ///   configuration.colorFormat = .bgra8Unorm_srgb
+        configuration.colorFormat = .rgba16Float
+
     
-        let foveationEnabled = capabilities.supportsFoveation && false
+        let foveationEnabled = capabilities.supportsFoveation && true
         configuration.isFoveationEnabled = foveationEnabled
         
         let options: LayerRenderer.Capabilities.SupportedLayoutsOptions = foveationEnabled ? [.foveationEnabled] : []
@@ -27,18 +32,50 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
 #if os(visionOS)
 @main
 struct MetalRendererApp: App {
+    @State private var boundaryImmersionStyle: ImmersionStyle = .mixed
+    @State private var model = ViewModel()
     var body: some Scene {
-#if false
-        WindowGroup {
-            ContentView()
-        }.windowStyle(.volumetric)
+#if true
+        // The main window that presents the app's modules.
+        WindowGroup("Hello World", id: "modules") {
+            Modules()
+                .environment(model)
+        }
+        .windowStyle(.plain)
+        
+        WindowGroup(id: Module.globe.name) {
+            Globe()
+                .environment(model)
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
 #endif
-        ImmersiveSpace {
+        
+        WindowGroup(id: "Boundary") {
+            BoundaryView()
+                .environment(model)
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 4, height: 4, depth: 4, in: .meters)
+
+        //Create ALVR connection external to ImmersiveSpace so it will not cancel on dismissImmersiveSpace
+        //Store origin of immersion,
+        ImmersiveSpace(id: "Client") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
                 let renderer = Renderer(layerRenderer)
                 renderer.startRenderLoop()
             }
         }
+    }
+    
+    init() {
+        //Register all the custom components and systems that the app uses.
+     //   RotationComponent.registerComponent()
+     //   RotationSystem.registerSystem()
+     //   SunPositionComponent.registerComponent()
+     //   SunPositionSystem.registerSystem()
+        //ALVRInitialize
+        //ALVRServerComponent.registerComponent()
     }
 }
 #endif
@@ -55,7 +92,7 @@ struct Main {
         var videoFormat:CMFormatDescription? = nil
         let refreshRates:[Float] = [60]
         alvr_initialize(nil, nil, 1024, 1024, refreshRates, Int32(refreshRates.count), true)
-        alvr_resume()
+        alvr_resume()++ 
         alvr_request_idr()
         print("alvr resume!")
         var alvrEvent = AlvrEvent()
