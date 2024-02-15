@@ -68,7 +68,7 @@ struct Main {
         var videoFormat:CMFormatDescription? = nil
         let refreshRates:[Float] = [60]
         alvr_initialize(nil, nil, 1024, 1024, refreshRates, Int32(refreshRates.count), true)
-        alvr_resume() 
+        alvr_resume()
         alvr_request_idr()
         print("alvr resume!")
         var alvrEvent = AlvrEvent()
