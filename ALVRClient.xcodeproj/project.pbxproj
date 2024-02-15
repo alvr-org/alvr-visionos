@@ -7,31 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		8E1240F22B7CAFB8005B75F2 /* CubeEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240F12B7CAFB8005B75F2 /* CubeEntity.swift */; };
+		8E1240F42B7CB05B005B75F2 /* CubeEntity+Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240F32B7CB05B005B75F2 /* CubeEntity+Configuration.swift */; };
+		8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240FE2B7CC02E005B75F2 /* Entry.swift */; };
+		8E1241012B7CC06C005B75F2 /* Cube.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1241002B7CC06C005B75F2 /* Cube.swift */; };
+		8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1241022B7CC0E1005B75F2 /* EntryControls.swift */; };
 		8E739C7D2B788FC90045ED16 /* RealityKitContent in Resources */ = {isa = PBXBuildFile; fileRef = 8E739C7C2B788FC90045ED16 /* RealityKitContent */; };
 		8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E739C8A2B78990A0045ED16 /* ViewModel.swift */; };
 		8EF45AFE2B7899A6000660BF /* Module.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45AFD2B7899A6000660BF /* Module.swift */; };
-		8EF45B012B789A16000660BF /* Globe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B002B789A16000660BF /* Globe.swift */; };
-		8EF45B042B789ADA000660BF /* Earth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B032B789ADA000660BF /* Earth.swift */; };
-		8EF45B0E2B78A111000660BF /* EarthEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B0D2B78A111000660BF /* EarthEntity.swift */; };
-		8EF45B102B78A160000660BF /* EarthEntity+Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B0F2B78A160000660BF /* EarthEntity+Configuration.swift */; };
 		8EF45B132B78A244000660BF /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 8EF45B122B78A244000660BF /* RealityKitContent */; };
 		8EF45B162B78A487000660BF /* RotationSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B152B78A487000660BF /* RotationSystem.swift */; };
-		8EF45B182B78A4D2000660BF /* Entity+Sunlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B172B78A4D2000660BF /* Entity+Sunlight.swift */; };
-		8EF45B1A2B78A54D000660BF /* GlobeControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B192B78A54D000660BF /* GlobeControls.swift */; };
-		8EF45B1D2B78A596000660BF /* DragRotationModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B1C2B78A596000660BF /* DragRotationModifier.swift */; };
-		8EF45B1F2B78AB60000660BF /* GlobeToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B1E2B78AB60000660BF /* GlobeToggle.swift */; };
-		8EF45B222B78B08E000660BF /* Modules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B212B78B08E000660BF /* Modules.swift */; };
-		8EF45B242B78B0B5000660BF /* TableOfContents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B232B78B0B5000660BF /* TableOfContents.swift */; };
-		8EF45B262B78B0C6000660BF /* ModuleCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B252B78B0C6000660BF /* ModuleCard.swift */; };
-		8EF45B282B78B0F6000660BF /* TypeTextModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B272B78B0F6000660BF /* TypeTextModifier.swift */; };
-		8EF45B2A2B78B112000660BF /* ModuleDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B292B78B112000660BF /* ModuleDetail.swift */; };
-		8EF45B2C2B78B138000660BF /* GlobeModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B2B2B78B138000660BF /* GlobeModule.swift */; };
-		8EF45B2F2B78B1BE000660BF /* SettingsButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B2E2B78B1BE000660BF /* SettingsButton.swift */; };
-		8EF45B312B78B1ED000660BF /* GlobeSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B302B78B1ED000660BF /* GlobeSettings.swift */; };
-		8EF45B332B78B1FE000660BF /* EarthSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B322B78B1FE000660BF /* EarthSettings.swift */; };
-		8EF45B352B78B214000660BF /* SliderGridRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B342B78B214000660BF /* SliderGridRow.swift */; };
-		8EF45B382B78B6F3000660BF /* ClientToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B372B78B6F3000660BF /* ClientToggle.swift */; };
-		8EF45B3A2B7968D2000660BF /* BoundaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B392B7968D2000660BF /* BoundaryView.swift */; };
 		8EF45B3C2B799374000660BF /* AAPLRenderTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B3B2B799374000660BF /* AAPLRenderTarget.swift */; };
 		C588CC212B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; };
 		C588CC222B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Embed Libraries */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -60,30 +45,15 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		8E1240F12B7CAFB8005B75F2 /* CubeEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CubeEntity.swift; sourceTree = "<group>"; };
+		8E1240F32B7CB05B005B75F2 /* CubeEntity+Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CubeEntity+Configuration.swift"; sourceTree = "<group>"; };
+		8E1240FE2B7CC02E005B75F2 /* Entry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entry.swift; sourceTree = "<group>"; };
+		8E1241002B7CC06C005B75F2 /* Cube.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cube.swift; sourceTree = "<group>"; };
+		8E1241022B7CC0E1005B75F2 /* EntryControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryControls.swift; sourceTree = "<group>"; };
 		8E739C7C2B788FC90045ED16 /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
 		8E739C8A2B78990A0045ED16 /* ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel.swift; sourceTree = "<group>"; };
 		8EF45AFD2B7899A6000660BF /* Module.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Module.swift; sourceTree = "<group>"; };
-		8EF45B002B789A16000660BF /* Globe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Globe.swift; sourceTree = "<group>"; };
-		8EF45B032B789ADA000660BF /* Earth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Earth.swift; sourceTree = "<group>"; };
-		8EF45B0D2B78A111000660BF /* EarthEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarthEntity.swift; sourceTree = "<group>"; };
-		8EF45B0F2B78A160000660BF /* EarthEntity+Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EarthEntity+Configuration.swift"; sourceTree = "<group>"; };
 		8EF45B152B78A487000660BF /* RotationSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RotationSystem.swift; sourceTree = "<group>"; };
-		8EF45B172B78A4D2000660BF /* Entity+Sunlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Entity+Sunlight.swift"; sourceTree = "<group>"; };
-		8EF45B192B78A54D000660BF /* GlobeControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobeControls.swift; sourceTree = "<group>"; };
-		8EF45B1C2B78A596000660BF /* DragRotationModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragRotationModifier.swift; sourceTree = "<group>"; };
-		8EF45B1E2B78AB60000660BF /* GlobeToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobeToggle.swift; sourceTree = "<group>"; };
-		8EF45B212B78B08E000660BF /* Modules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Modules.swift; sourceTree = "<group>"; };
-		8EF45B232B78B0B5000660BF /* TableOfContents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableOfContents.swift; sourceTree = "<group>"; };
-		8EF45B252B78B0C6000660BF /* ModuleCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleCard.swift; sourceTree = "<group>"; };
-		8EF45B272B78B0F6000660BF /* TypeTextModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeTextModifier.swift; sourceTree = "<group>"; };
-		8EF45B292B78B112000660BF /* ModuleDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleDetail.swift; sourceTree = "<group>"; };
-		8EF45B2B2B78B138000660BF /* GlobeModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobeModule.swift; sourceTree = "<group>"; };
-		8EF45B2E2B78B1BE000660BF /* SettingsButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsButton.swift; sourceTree = "<group>"; };
-		8EF45B302B78B1ED000660BF /* GlobeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobeSettings.swift; sourceTree = "<group>"; };
-		8EF45B322B78B1FE000660BF /* EarthSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EarthSettings.swift; sourceTree = "<group>"; };
-		8EF45B342B78B214000660BF /* SliderGridRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SliderGridRow.swift; sourceTree = "<group>"; };
-		8EF45B372B78B6F3000660BF /* ClientToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientToggle.swift; sourceTree = "<group>"; };
-		8EF45B392B7968D2000660BF /* BoundaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundaryView.swift; sourceTree = "<group>"; };
 		8EF45B3B2B799374000660BF /* AAPLRenderTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AAPLRenderTarget.swift; sourceTree = "<group>"; };
 		C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ALVRClientCore.xcframework; sourceTree = SOURCE_ROOT; };
 		C5E5902A2B6379ED00328ED6 /* ALVRClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ALVRClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -115,6 +85,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		8E1240FD2B7CC021005B75F2 /* Entry */ = {
+			isa = PBXGroup;
+			children = (
+				8E1240FE2B7CC02E005B75F2 /* Entry.swift */,
+				8E1241022B7CC0E1005B75F2 /* EntryControls.swift */,
+			);
+			path = Entry;
+			sourceTree = "<group>";
+		};
 		8E739C892B7898EC0045ED16 /* Model */ = {
 			isa = PBXGroup;
 			children = (
@@ -124,21 +103,10 @@
 			path = Model;
 			sourceTree = "<group>";
 		};
-		8EF45AFF2B7899FC000660BF /* Globe */ = {
-			isa = PBXGroup;
-			children = (
-				8EF45B002B789A16000660BF /* Globe.swift */,
-				8EF45B192B78A54D000660BF /* GlobeControls.swift */,
-				8EF45B1E2B78AB60000660BF /* GlobeToggle.swift */,
-				8EF45B2B2B78B138000660BF /* GlobeModule.swift */,
-			);
-			path = Globe;
-			sourceTree = "<group>";
-		};
 		8EF45B022B789AA0000660BF /* RealityViews */ = {
 			isa = PBXGroup;
 			children = (
-				8EF45B032B789ADA000660BF /* Earth.swift */,
+				8E1241002B7CC06C005B75F2 /* Cube.swift */,
 			);
 			path = RealityViews;
 			sourceTree = "<group>";
@@ -146,9 +114,8 @@
 		8EF45B0C2B78A0FA000660BF /* Entities */ = {
 			isa = PBXGroup;
 			children = (
-				8EF45B0D2B78A111000660BF /* EarthEntity.swift */,
-				8EF45B0F2B78A160000660BF /* EarthEntity+Configuration.swift */,
-				8EF45B172B78A4D2000660BF /* Entity+Sunlight.swift */,
+				8E1240F12B7CAFB8005B75F2 /* CubeEntity.swift */,
+				8E1240F32B7CB05B005B75F2 /* CubeEntity+Configuration.swift */,
 			);
 			path = Entities;
 			sourceTree = "<group>";
@@ -166,45 +133,6 @@
 				8EF45B152B78A487000660BF /* RotationSystem.swift */,
 			);
 			path = Systems;
-			sourceTree = "<group>";
-		};
-		8EF45B1B2B78A586000660BF /* Modifiers */ = {
-			isa = PBXGroup;
-			children = (
-				8EF45B1C2B78A596000660BF /* DragRotationModifier.swift */,
-				8EF45B272B78B0F6000660BF /* TypeTextModifier.swift */,
-			);
-			path = Modifiers;
-			sourceTree = "<group>";
-		};
-		8EF45B202B78B079000660BF /* Modules */ = {
-			isa = PBXGroup;
-			children = (
-				8EF45B212B78B08E000660BF /* Modules.swift */,
-				8EF45B232B78B0B5000660BF /* TableOfContents.swift */,
-				8EF45B252B78B0C6000660BF /* ModuleCard.swift */,
-				8EF45B292B78B112000660BF /* ModuleDetail.swift */,
-			);
-			path = Modules;
-			sourceTree = "<group>";
-		};
-		8EF45B2D2B78B1B3000660BF /* Settings */ = {
-			isa = PBXGroup;
-			children = (
-				8EF45B2E2B78B1BE000660BF /* SettingsButton.swift */,
-				8EF45B302B78B1ED000660BF /* GlobeSettings.swift */,
-				8EF45B322B78B1FE000660BF /* EarthSettings.swift */,
-				8EF45B342B78B214000660BF /* SliderGridRow.swift */,
-			);
-			path = Settings;
-			sourceTree = "<group>";
-		};
-		8EF45B362B78B2B2000660BF /* Client */ = {
-			isa = PBXGroup;
-			children = (
-				8EF45B372B78B6F3000660BF /* ClientToggle.swift */,
-			);
-			path = Client;
 			sourceTree = "<group>";
 		};
 		C5E590212B6379ED00328ED6 = {
@@ -230,14 +158,10 @@
 		C5E5902C2B6379ED00328ED6 /* ALVRClient */ = {
 			isa = PBXGroup;
 			children = (
-				8EF45B362B78B2B2000660BF /* Client */,
-				8EF45B2D2B78B1B3000660BF /* Settings */,
-				8EF45B202B78B079000660BF /* Modules */,
-				8EF45B1B2B78A586000660BF /* Modifiers */,
+				8E1240FD2B7CC021005B75F2 /* Entry */,
 				8EF45B142B78A477000660BF /* Systems */,
 				8EF45B0C2B78A0FA000660BF /* Entities */,
 				8EF45B022B789AA0000660BF /* RealityViews */,
-				8EF45AFF2B7899FC000660BF /* Globe */,
 				8E739C892B7898EC0045ED16 /* Model */,
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
 				C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */,
@@ -251,7 +175,6 @@
 				C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */,
 				C5E5903F2B6379EE00328ED6 /* Info.plist */,
 				C5E5903A2B6379ED00328ED6 /* Preview Content */,
-				8EF45B392B7968D2000660BF /* BoundaryView.swift */,
 				8EF45B3B2B799374000660BF /* AAPLRenderTarget.swift */,
 			);
 			path = ALVRClient;
@@ -350,36 +273,21 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8EF45B312B78B1ED000660BF /* GlobeSettings.swift in Sources */,
-				8EF45B2A2B78B112000660BF /* ModuleDetail.swift in Sources */,
-				8EF45B182B78A4D2000660BF /* Entity+Sunlight.swift in Sources */,
-				8EF45B222B78B08E000660BF /* Modules.swift in Sources */,
+				8E1240F42B7CB05B005B75F2 /* CubeEntity+Configuration.swift in Sources */,
 				C5E590382B6379ED00328ED6 /* Shaders.metal in Sources */,
-				8EF45B2F2B78B1BE000660BF /* SettingsButton.swift in Sources */,
-				8EF45B1D2B78A596000660BF /* DragRotationModifier.swift in Sources */,
+				8E1240F22B7CAFB8005B75F2 /* CubeEntity.swift in Sources */,
 				D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */,
-				8EF45B042B789ADA000660BF /* Earth.swift in Sources */,
+				8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */,
+				8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */,
+				8E1241012B7CC06C005B75F2 /* Cube.swift in Sources */,
 				D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */,
-				8EF45B3A2B7968D2000660BF /* BoundaryView.swift in Sources */,
-				8EF45B0E2B78A111000660BF /* EarthEntity.swift in Sources */,
-				8EF45B352B78B214000660BF /* SliderGridRow.swift in Sources */,
-				8EF45B012B789A16000660BF /* Globe.swift in Sources */,
-				8EF45B102B78A160000660BF /* EarthEntity+Configuration.swift in Sources */,
 				C5E590342B6379ED00328ED6 /* ContentView.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
 				8EF45AFE2B7899A6000660BF /* Module.swift in Sources */,
 				8EF45B3C2B799374000660BF /* AAPLRenderTarget.swift in Sources */,
 				8EF45B162B78A487000660BF /* RotationSystem.swift in Sources */,
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
-				8EF45B262B78B0C6000660BF /* ModuleCard.swift in Sources */,
-				8EF45B1A2B78A54D000660BF /* GlobeControls.swift in Sources */,
 				8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */,
-				8EF45B382B78B6F3000660BF /* ClientToggle.swift in Sources */,
-				8EF45B282B78B0F6000660BF /* TypeTextModifier.swift in Sources */,
-				8EF45B2C2B78B138000660BF /* GlobeModule.swift in Sources */,
-				8EF45B332B78B1FE000660BF /* EarthSettings.swift in Sources */,
-				8EF45B242B78B0B5000660BF /* TableOfContents.swift in Sources */,
-				8EF45B1F2B78AB60000660BF /* GlobeToggle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

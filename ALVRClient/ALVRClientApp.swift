@@ -12,7 +12,6 @@ import RealityKitContent
 struct ContentStageConfiguration: CompositorLayerConfiguration {
     func makeConfiguration(capabilities: LayerRenderer.Capabilities, configuration: inout LayerRenderer.Configuration) {
         configuration.depthFormat = .depth32Float
-       // configuration.depthFormat = .depth32Float_stencil8
 
      ///   configuration.colorFormat = .bgra8Unorm_srgb
         configuration.colorFormat = .rgba16Float
@@ -36,31 +35,15 @@ struct MetalRendererApp: App {
     @State private var model = ViewModel()
     var body: some Scene {
 #if true
-        // The main window that presents the app's modules.
-        WindowGroup("Hello World", id: "modules") {
-            Modules()
-                .environment(model)
-        }
-        .windowStyle(.plain)
-        
-        WindowGroup(id: Module.globe.name) {
-            Globe()
+        //Entry point, this is the default window
+        WindowGroup(id: Module.entry.name) {
+            Entry()
                 .environment(model)
         }
         .windowStyle(.volumetric)
         .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
 #endif
-        
-        WindowGroup(id: "Boundary") {
-            BoundaryView()
-                .environment(model)
-        }
-        .windowStyle(.volumetric)
-        .defaultSize(width: 4, height: 4, depth: 4, in: .meters)
-
-        //Create ALVR connection external to ImmersiveSpace so it will not cancel on dismissImmersiveSpace
-        //Store origin of immersion,
-        ImmersiveSpace(id: "Client") {
+        ImmersiveSpace(id: Module.client.name) {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
                 let renderer = Renderer(layerRenderer)
                 renderer.startRenderLoop()
@@ -70,10 +53,8 @@ struct MetalRendererApp: App {
     
     init() {
         //Register all the custom components and systems that the app uses.
-     //   RotationComponent.registerComponent()
-     //   RotationSystem.registerSystem()
-     //   SunPositionComponent.registerComponent()
-     //   SunPositionSystem.registerSystem()
+        RotationComponent.registerComponent()
+        RotationSystem.registerSystem()
         //ALVRInitialize
         //ALVRServerComponent.registerComponent()
     }

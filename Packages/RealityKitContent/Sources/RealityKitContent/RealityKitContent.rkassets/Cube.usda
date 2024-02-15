@@ -1,0 +1,141 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "Root" (
+    customData = {
+        float3 rotationEulerHint = (0.78539807, 0, 0)
+    }
+)
+{
+    reorder nameChildren = ["GridMaterial", "Cube"]
+    rel material:binding = None (
+        bindMaterialAs = "weakerThanDescendants"
+    )
+    quatf xformOp:orient = (0.92387956, 0.3826834, 0, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+    def Cube "Cube" (
+        active = true
+        prepend apiSchemas = ["MaterialBindingAPI"]
+        customData = {
+            float3 rotationEulerHint = (0, 0, 0.78539807)
+        }
+    )
+    {
+        rel material:binding = </Root/Cube/DefaultMaterial> (
+            bindMaterialAs = "weakerThanDescendants"
+        )
+        double size = 0.25
+        quatf xformOp:orient = (0.92387956, 0, 0, 0.3826834)
+        float3 xformOp:scale = (2, 2, 2)
+        float3 xformOp:translate = (0, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+
+        def Material "DefaultMaterial"
+        {
+            reorder nameChildren = ["DefaultSurfaceShader", "PreviewSurface", "DiffuseLayer", "OpacityLayer"]
+            token outputs:mtlx:surface.connect = </Root/Cube/DefaultMaterial/PreviewSurface.outputs:out>
+            token outputs:realitykit:vertex
+            token outputs:surface.connect = </Root/Cube/DefaultMaterial/DefaultSurfaceShader.outputs:surface>
+            float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (194.86719, 60.88672)
+            float2 ui:nodegraph:realitykit:subgraphOutputs:size = (182, 99)
+            int ui:nodegraph:realitykit:subgraphOutputs:stackingOrder = 29
+
+            def Shader "DefaultSurfaceShader" (
+                active = false
+            )
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (1, 1, 1)
+                float inputs:roughness = 0.75
+                token outputs:surface
+            }
+
+            def Shader "PreviewSurface" (
+                active = true
+            )
+            {
+                uniform token info:id = "ND_UsdPreviewSurface_surfaceshader"
+                float inputs:clearcoat
+                float inputs:clearcoatRoughness
+                color3f inputs:diffuseColor.connect = </Root/Cube/DefaultMaterial/DiffuseLayer.outputs:out>
+                color3f inputs:emissiveColor
+                float inputs:ior
+                float inputs:metallic.connect = None
+                float3 inputs:normal.connect = None
+                float inputs:occlusion
+                float inputs:opacity.connect = </Root/Cube/DefaultMaterial/OpacityLayer.outputs:out>
+                float inputs:roughness.connect = None
+                token outputs:out
+                float2 ui:nodegraph:node:pos = (-122.90011, 45.47363)
+                float2 ui:nodegraph:node:size = (160, 307)
+                int ui:nodegraph:node:stackingOrder = 65
+                string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["Advanced"]
+            }
+
+            def Shader "DiffuseLayer"
+            {
+                uniform token info:id = "ND_image_color3"
+                asset inputs:file = @Materials/ColorMap.png@
+                string inputs:filtertype
+                color3f outputs:out
+                float2 ui:nodegraph:node:pos = (-367.46756, -200.68283)
+                float2 ui:nodegraph:node:size = (149, 199)
+                int ui:nodegraph:node:stackingOrder = 57
+                string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["inputs:default", "inputs:texcoord"]
+            }
+
+            def Shader "OpacityLayer"
+            {
+                uniform token info:id = "ND_image_float"
+                asset inputs:file = @Materials/OpacityMap.png@
+                string inputs:filtertype
+                float2 inputs:texcoord
+                string inputs:uaddressmode
+                string inputs:vaddressmode
+                float outputs:out
+                float2 ui:nodegraph:node:pos = (-356.00992, 61.09856)
+                float2 ui:nodegraph:node:size = (149, 199)
+                int ui:nodegraph:node:stackingOrder = 62
+                string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["inputs:texcoord", "inputs:file"]
+            }
+        }
+
+        def RealityKitComponent "Collider"
+        {
+            uint group = 1
+            uniform token info:id = "RealityKit.Collider"
+            uint mask = 4294967295
+            token type = "Default"
+
+            def RealityKitStruct "Shape"
+            {
+                float3 extent = (0.25, 0.25, 0.25)
+                token shapeType = "Box"
+
+                def RealityKitStruct "pose"
+                {
+                }
+            }
+        }
+    }
+
+    def RealityKitComponent "Anchoring" (
+        active = false
+    )
+    {
+        uniform token info:id = "RealityKit.Anchoring"
+
+        def RealityKitStruct "descriptor"
+        {
+            token alignment = "Horizontal"
+            token classification = "Floor"
+            token type = "Plane"
+        }
+    }
+}
+

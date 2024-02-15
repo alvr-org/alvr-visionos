@@ -4,7 +4,7 @@
 #if os(visionOS)
 import CompositorServices
 import Metal
-import MetalFX
+///import MetalFX
 import MetalKit
 import simd
 import Spatial
@@ -112,7 +112,7 @@ class Renderer {
 
     var mfxDirty: Bool = true
     var mfxScalingMode = AAPLScalingMode.defaultScaling
-    var mfxSpatialScaler: MTLFXSpatialScaler!
+  ///  var mfxSpatialScaler: MTLFXSpatialScaler!
   //  var mfxTemporalScaler: MTLFXTemporalScaler!  //MTLFXTemporalScaler is unavailable in visionOS
   //  var isDepthReversed: Bool = false
   //  var mfxMakeMotionVectors: Bool = false
@@ -199,7 +199,7 @@ class Renderer {
 
         // Free the spatial upscaling effect if you're not using it.
         if mfxScalingMode != .spatialScaling {
-            mfxSpatialScaler = nil
+    //        mfxSpatialScaler = nil
         }
         
     }
@@ -209,6 +209,7 @@ class Renderer {
     /// If you're using the spatial scaler, please keep in mind that it expects an antialiased input texture.
     /// Since this sample focuses on showing you how to use MetalFX upscaling, it doesn't perform an antialiasing step here.
     /// For example, you may prepass your input texture with a shader that computes antialiasing.
+#if false
     func setupSpatialScaler() {
         let desc = MTLFXSpatialScalerDescriptor()
         desc.inputWidth = renderTarget.renderSize.width
@@ -235,6 +236,7 @@ class Renderer {
             setupSpatialScaler()
         }
     }
+#endif
 
     class func buildMetalVertexDescriptor() -> MTLVertexDescriptor {
         // Create a Metal vertex descriptor specifying how vertices will by laid out for input into our render
@@ -355,7 +357,7 @@ class Renderer {
                                             options: textureLoaderOptions)
 
     }
-    
+#if false
     func upscaleTexture(_ commandBuffer: MTLCommandBuffer) -> MTLTexture {
         var currentSourceTexture = renderTarget.currentFrameColor!
         
@@ -377,6 +379,7 @@ class Renderer {
             setupMetalFX()
         }
     }
+#endif
 
     private func updateDynamicBufferState() {
         /// Update the state of our uniform buffers before rendering
