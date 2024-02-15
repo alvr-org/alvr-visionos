@@ -17,7 +17,6 @@
 		8EF45AFE2B7899A6000660BF /* Module.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45AFD2B7899A6000660BF /* Module.swift */; };
 		8EF45B132B78A244000660BF /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 8EF45B122B78A244000660BF /* RealityKitContent */; };
 		8EF45B162B78A487000660BF /* RotationSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B152B78A487000660BF /* RotationSystem.swift */; };
-		8EF45B3C2B799374000660BF /* AAPLRenderTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B3B2B799374000660BF /* AAPLRenderTarget.swift */; };
 		C588CC212B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; };
 		C588CC222B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Embed Libraries */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */; };
@@ -54,7 +53,6 @@
 		8E739C8A2B78990A0045ED16 /* ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel.swift; sourceTree = "<group>"; };
 		8EF45AFD2B7899A6000660BF /* Module.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Module.swift; sourceTree = "<group>"; };
 		8EF45B152B78A487000660BF /* RotationSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RotationSystem.swift; sourceTree = "<group>"; };
-		8EF45B3B2B799374000660BF /* AAPLRenderTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AAPLRenderTarget.swift; sourceTree = "<group>"; };
 		C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ALVRClientCore.xcframework; sourceTree = SOURCE_ROOT; };
 		C5E5902A2B6379ED00328ED6 /* ALVRClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ALVRClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ALVRClientApp.swift; sourceTree = "<group>"; };
@@ -175,7 +173,6 @@
 				C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */,
 				C5E5903F2B6379EE00328ED6 /* Info.plist */,
 				C5E5903A2B6379ED00328ED6 /* Preview Content */,
-				8EF45B3B2B799374000660BF /* AAPLRenderTarget.swift */,
 			);
 			path = ALVRClient;
 			sourceTree = "<group>";
@@ -284,7 +281,6 @@
 				C5E590342B6379ED00328ED6 /* ContentView.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
 				8EF45AFE2B7899A6000660BF /* Module.swift in Sources */,
-				8EF45B3C2B799374000660BF /* AAPLRenderTarget.swift in Sources */,
 				8EF45B162B78A487000660BF /* RotationSystem.swift in Sources */,
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
 				8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */,

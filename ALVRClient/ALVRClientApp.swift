@@ -57,14 +57,6 @@ struct MetalRendererApp: App {
         RotationComponent.registerComponent()
         RotationSystem.registerSystem()
     }
-    
-    init() {
-        //Register all the custom components and systems that the app uses.
-        RotationComponent.registerComponent()
-        RotationSystem.registerSystem()
-        //ALVRInitialize
-        //ALVRServerComponent.registerComponent()
-    }
 }
 #endif
 
