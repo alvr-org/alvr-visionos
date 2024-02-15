@@ -12,6 +12,8 @@
 		8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240FE2B7CC02E005B75F2 /* Entry.swift */; };
 		8E1241012B7CC06C005B75F2 /* Cube.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1241002B7CC06C005B75F2 /* Cube.swift */; };
 		8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1241022B7CC0E1005B75F2 /* EntryControls.swift */; };
+		8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E458AB22B7E05FB0019FC73 /* EventHandler.swift */; };
+		8E458AB52B7E2C010019FC73 /* WorldTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E458AB42B7E2C010019FC73 /* WorldTracker.swift */; };
 		8E739C7D2B788FC90045ED16 /* RealityKitContent in Resources */ = {isa = PBXBuildFile; fileRef = 8E739C7C2B788FC90045ED16 /* RealityKitContent */; };
 		8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E739C8A2B78990A0045ED16 /* ViewModel.swift */; };
 		8EF45AFE2B7899A6000660BF /* Module.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45AFD2B7899A6000660BF /* Module.swift */; };
@@ -49,6 +51,8 @@
 		8E1240FE2B7CC02E005B75F2 /* Entry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entry.swift; sourceTree = "<group>"; };
 		8E1241002B7CC06C005B75F2 /* Cube.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cube.swift; sourceTree = "<group>"; };
 		8E1241022B7CC0E1005B75F2 /* EntryControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryControls.swift; sourceTree = "<group>"; };
+		8E458AB22B7E05FB0019FC73 /* EventHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventHandler.swift; sourceTree = "<group>"; };
+		8E458AB42B7E2C010019FC73 /* WorldTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldTracker.swift; sourceTree = "<group>"; };
 		8E739C7C2B788FC90045ED16 /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
 		8E739C8A2B78990A0045ED16 /* ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel.swift; sourceTree = "<group>"; };
 		8EF45AFD2B7899A6000660BF /* Module.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Module.swift; sourceTree = "<group>"; };
@@ -158,6 +162,8 @@
 				C5E590332B6379ED00328ED6 /* ContentView.swift */,
 				C5E590352B6379ED00328ED6 /* Renderer.swift */,
 				D61E6FDF2B71CE080076031A /* VideoHandler.swift */,
+				8E458AB22B7E05FB0019FC73 /* EventHandler.swift */,
+				8E458AB42B7E2C010019FC73 /* WorldTracker.swift */,
 				D68FA8082B742F6F0052B7FF /* FFR.swift */,
 				C5E590372B6379ED00328ED6 /* Shaders.metal */,
 				C5E590392B6379ED00328ED6 /* ShaderTypes.h */,
@@ -263,9 +269,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				8E1240F42B7CB05B005B75F2 /* CubeEntity+Configuration.swift in Sources */,
+				8E458AB52B7E2C010019FC73 /* WorldTracker.swift in Sources */,
 				C5E590382B6379ED00328ED6 /* Shaders.metal in Sources */,
 				8E1240F22B7CAFB8005B75F2 /* CubeEntity.swift in Sources */,
 				D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */,
+				8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */,
 				8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */,
 				8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */,
 				8E1241012B7CC06C005B75F2 /* Cube.swift in Sources */,
@@ -410,6 +418,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
+				DEVELOPMENT_TEAM = B83769SAG5;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_ARCHS = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -427,6 +436,7 @@
 					"$(PROJECT_DIR)",
 				);
 				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.panthervoyage.ALVRClient;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
 				SUPPORTS_MACCATALYST = YES;
@@ -446,6 +456,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
+				DEVELOPMENT_TEAM = B83769SAG5;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_ARCHS = x86_64;
 				GCC_OPTIMIZATION_LEVEL = 0;
@@ -464,6 +475,7 @@
 					"$(PROJECT_DIR)",
 				);
 				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.panthervoyage.ALVRClient;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
 				SUPPORTS_MACCATALYST = YES;

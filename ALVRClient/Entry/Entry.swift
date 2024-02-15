@@ -9,9 +9,6 @@ import SwiftUI
 struct Entry: View {
     @Environment(ViewModel.self) private var model
 
-    @State var axRotateClockwise: Bool = false
-    @State var axRotateCounterClockwise: Bool = true
-
     var body: some View {
         ZStack(alignment: Alignment(horizontal: .controlPanelGuide, vertical: .bottom)) {
             Cube(
@@ -22,8 +19,8 @@ struct Entry: View {
                 context[HorizontalAlignment.center]
             }
 
-            EntryControls()
-                .offset(y: -70)
+                EntryControls()
+                    .offset(y: -70)
         }
         .onDisappear {
             model.isShowingEntry = false

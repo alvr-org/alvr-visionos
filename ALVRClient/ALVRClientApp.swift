@@ -35,6 +35,23 @@ struct MetalRendererApp: App {
         WindowGroup(id: Module.entry.name) {
             Entry()
                 .environment(model)
+                .environmentObject(EventHandler.shared)
+                .onAppear {
+                    let group = DispatchGroup()
+
+                    group.enter()
+                    DispatchQueue.global(qos: .background).async {
+                        EventHandler.shared.initializeAlvr()
+                        Task {
+                            await WorldTracker.shared.initializeAr()
+                        }
+                        group.leave()
+                    }
+                
+                    group.notify(queue: .main) {
+                        EventHandler.shared.start()
+                    }
+                }
         }
         .windowStyle(.volumetric)
         .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)

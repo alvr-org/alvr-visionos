@@ -12,13 +12,18 @@ struct EntryControls: View {
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
+    @ObservedObject var eventHandler = EventHandler.shared
 
     var body: some View {
         @Bindable var model = model
-
+        
         HStack(spacing: 17) {
-            Toggle(isOn: $model.isShowingClient) {
-                Label("Connect to ALVR", systemImage: "visionpro")
+            if eventHandler.connectionState == .connected {
+                Toggle(isOn: $model.isShowingClient) {
+                    Label("Enter ALVR", systemImage: "visionpro")
+                }
+            } else {
+                Text("Connecting to ALVR...")
             }
             
         }
@@ -33,11 +38,11 @@ struct EntryControls: View {
             Task {
                 if isShowing {
                     await openImmersiveSpace(id: Module.client.name)
-                    dismissWindow(id: Module.entry.name)
+                    //dismissWindow(id: Module.entry.name)
                 } else {
                     // TODO: Re-open entry through user input to dismiss immersive space
-                    // once client connection is separated from render loop
                     await dismissImmersiveSpace()
+                    WorldTracker.shared.reset()
                 }
             }
         }
