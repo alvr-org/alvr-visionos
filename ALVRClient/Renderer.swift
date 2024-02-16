@@ -622,23 +622,13 @@ class Renderer {
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
         let framePreviouslyPredictedPose = queuedFrame != nil ? lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
-        if renderingStreaming && framePreviouslyPredictedPose != nil {
-            // TODO: maybe find some mutable pointer hax to just copy in the ground truth, instead of asking for a value in the past.
-            let time = Double(queuedFrame!.timestamp) / Double(NSEC_PER_SEC)
-            //let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
-            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
-            drawable.deviceAnchor = deviceAnchor
-            
-            //print("found anchor for frame!", deviceAnchorLoc, queuedFrame!.timestamp, deviceAnchor?.originFromAnchorTransform)
+
+        if renderingStreaming && queuedFrame != nil && framePreviouslyPredictedPose == nil {
+            print("missing anchor!!", queuedFrame!.timestamp)
         }
         
-        if drawable.deviceAnchor == nil {
-            if renderingStreaming && queuedFrame != nil {
-                print("missing anchor!!", queuedFrame!.timestamp)
-            }
-            let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
-            drawable.deviceAnchor = deviceAnchor
-        }
+        let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
+        drawable.deviceAnchor = deviceAnchor
         
         /*if let queuedFrame = queuedFrame {
             let test_ts = queuedFrame.timestamp
