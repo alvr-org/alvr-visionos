@@ -550,18 +550,18 @@ class Renderer {
         }
         
         guard let frame = layerRenderer.queryNextFrame() else { return }
+        guard let timing = frame.predictTiming() else { return }
+        let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
         frame.startUpdate()
         
         frame.endUpdate()
         
-        let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
-        
-        if !renderingStreaming {
-            guard let timing = frame.predictTiming() else { return }
+        //if !renderingStreaming {
             LayerRenderer.Clock().wait(until: timing.optimalInputTime)
-        }
+        //}
         
+        frame.startSubmission()
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             fatalError("Failed to create command buffer")
@@ -615,7 +615,7 @@ class Renderer {
         framesSinceLastDecode += 1
         objc_sync_exit(frameQueueLock)
         
-        frame.startSubmission()
+        
         
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
