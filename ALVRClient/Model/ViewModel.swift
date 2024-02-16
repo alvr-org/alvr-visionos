@@ -16,6 +16,4 @@ class ViewModel {
     // Client
     var isShowingClient: Bool = false
 
-    // Server
-    var alvrInitialized: Bool = false
 }

@@ -70,7 +70,6 @@ class EventHandler: ObservableObject {
         eventsThread = nil
     }
 
-    //Stop this thread when render starts?  idk
     func handleAlvrEvents() {
         while inputRunning {
             var alvrEvent = AlvrEvent()

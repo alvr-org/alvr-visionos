@@ -38,7 +38,7 @@ struct EntryControls: View {
             Task {
                 if isShowing {
                     await openImmersiveSpace(id: Module.client.name)
-                    //dismissWindow(id: Module.entry.name)
+                    dismissWindow(id: Module.entry.name)
                 } else {
                     // TODO: Re-open entry through user input to dismiss immersive space
                     await dismissImmersiveSpace()
