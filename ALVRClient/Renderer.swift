@@ -556,13 +556,8 @@ class Renderer {
         let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
         frame.startUpdate()
-        
         frame.endUpdate()
-        
-        //if !renderingStreaming {
-            LayerRenderer.Clock().wait(until: timing.optimalInputTime)
-        //}
-        
+        LayerRenderer.Clock().wait(until: timing.optimalInputTime)
         frame.startSubmission()
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
