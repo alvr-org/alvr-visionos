@@ -382,6 +382,7 @@ class Renderer {
                 alvr_request_idr()
                 framesSinceLastIDR = 0
                 framesSinceLastDecode = 0
+                lastIpd = -1
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
                 streamingActive = false
@@ -392,6 +393,7 @@ class Renderer {
                 framesRendered = 0
                 framesSinceLastIDR = 0
                 framesSinceLastDecode = 0
+                lastIpd = -1
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
             case ALVR_EVENT_CREATE_DECODER.rawValue:
