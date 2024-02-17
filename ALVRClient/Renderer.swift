@@ -487,7 +487,7 @@ class Renderer {
                                 else {
                                     frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
                                 }
-                                if frameQueue.count > 1 {
+                                if frameQueue.count > 2 {
                                     frameQueue.removeFirst()
                                 }
                                 
