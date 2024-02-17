@@ -371,7 +371,7 @@ class Renderer {
                 hudMessageBuffer.deallocate()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started: \(alvrEvent.STREAMING_STARTED)")
-                guard let settings = getAlvrSettings() else {
+                guard let settings = Settings.getAlvrSettings() else {
                     fatalError("streaming started: failed to retrieve alvr settings")
                 }
 
