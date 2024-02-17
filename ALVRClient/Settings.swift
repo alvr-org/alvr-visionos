@@ -48,16 +48,21 @@ struct Settings: Codable {
     let video: VideoConfig
 }
 
-func getAlvrSettings() -> Settings? {
-    let len = alvr_get_settings_json(nil)
+func parseSettingsJsonCString<T: Decodable>(getJson: (UnsafeMutablePointer<CChar>?) -> UInt64, type: T.Type) -> T? {
+    let len = getJson(nil)
     if len == 0 {
         return nil
     }
-    let settingsJsonBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(len))
-    defer { settingsJsonBuffer.deallocate() }
 
-    alvr_get_settings_json(settingsJsonBuffer.baseAddress)
-    let settingsData = Data(bytesNoCopy: settingsJsonBuffer.baseAddress!, count: Int(len) - 1, deallocator: .none)
+    let buffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(len))
+    defer { buffer.deallocate() }
 
-    return try! JSONDecoder().decode(Settings.self, from: settingsData)
+    _ = getJson(buffer.baseAddress)
+    let data = Data(bytesNoCopy: buffer.baseAddress!, count: Int(len) - 1, deallocator: .none)
+
+    return try! JSONDecoder().decode(T.self, from: data)
+}
+
+func getAlvrSettings() -> Settings? {
+    return parseSettingsJsonCString(getJson: alvr_get_settings_json, type: Settings.self)
 }
