@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9ED257172B8062A2008DC22F /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED257162B8062A1008DC22F /* Settings.swift */; };
 		C588CC212B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; };
 		C588CC222B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Embed Libraries */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */; };
@@ -34,6 +35,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		9ED257162B8062A1008DC22F /* Settings.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ALVRClientCore.xcframework; sourceTree = SOURCE_ROOT; };
 		C5E5902A2B6379ED00328ED6 /* ALVRClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ALVRClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ALVRClientApp.swift; sourceTree = "<group>"; };
@@ -85,6 +87,7 @@
 		C5E5902C2B6379ED00328ED6 /* ALVRClient */ = {
 			isa = PBXGroup;
 			children = (
+				9ED257162B8062A1008DC22F /* Settings.swift */,
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
 				C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */,
 				C5E590332B6379ED00328ED6 /* ContentView.swift */,
@@ -193,6 +196,7 @@
 				D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */,
 				D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */,
 				C5E590342B6379ED00328ED6 /* ContentView.swift in Sources */,
+				9ED257172B8062A2008DC22F /* Settings.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
 			);

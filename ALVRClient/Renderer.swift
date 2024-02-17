@@ -24,54 +24,6 @@ enum ConfigurationError: Error {
     case badJson
 }
 
-enum Switch<C>: Codable where C: Codable {
-    case disabled
-    case content(C)
-
-    enum RawJsonKeys: String, CodingKey {
-        case Enabled
-    }
-
-    init(from decoder: Decoder) throws {
-        let disabledValueContainer = try decoder.singleValueContainer()
-        let container = try? decoder.container(keyedBy: RawJsonKeys.self)
-
-        if let value = try? disabledValueContainer.decode(String.self) {
-            if value == "Disabled" {
-                self = .disabled
-            } else {
-                throw ConfigurationError.badJson
-            }
-        } else if let value = try? container?.decode(C.self, forKey: .Enabled) {
-            self = .content(value)
-        } else {
-            throw ConfigurationError.badJson
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        switch (self) {
-        case .disabled:
-            try container.encode("Disabled")
-        case .content(let value):
-            try container.encode(value)
-        }
-    }
-}
-
-struct VideoConfig: Codable {
-    let foveatedEncoding: Switch<FoveationSettings>
-
-    enum CodingKeys: String, CodingKey {
-        case foveatedEncoding = "foveated_encoding"
-    }
-}
-
-struct Settings: Codable {
-    let video: VideoConfig
-}
-
 extension LayerRenderer.Clock.Instant.Duration {
     var timeInterval: TimeInterval {
         let nanoseconds = TimeInterval(components.attoseconds / 1_000_000_000)
@@ -423,12 +375,10 @@ class Renderer {
                 hudMessageBuffer.deallocate()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started: \(alvrEvent.STREAMING_STARTED)")
-                let settingsJsonBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
-                alvr_get_settings_json(settingsJsonBuffer.baseAddress)
-                let settingsJsonStr = String(cString: settingsJsonBuffer.baseAddress!, encoding: .utf8)!
-                let settingsData = settingsJsonStr.data(using: .utf8)!
+                guard let settings = getAlvrSettings() else {
+                    fatalError("streaming started: failed to retrieve alvr settings")
+                }
 
-                let settings = try! JSONDecoder().decode(Settings.self, from: settingsData)
                 let foveationVars = FFR.calculateFoveationVars(alvrEvent: alvrEvent.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
                 videoFramePipelineState = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
                     device: device,
