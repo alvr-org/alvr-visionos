@@ -20,6 +20,58 @@ enum RendererError: Error {
     case badVertexDescriptor
 }
 
+enum ConfigurationError: Error {
+    case badJson
+}
+
+enum Switch<C>: Codable where C: Codable {
+    case disabled
+    case content(C)
+
+    enum RawJsonKeys: String, CodingKey {
+        case Enabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let disabledValueContainer = try decoder.singleValueContainer()
+        let container = try? decoder.container(keyedBy: RawJsonKeys.self)
+
+        if let value = try? disabledValueContainer.decode(String.self) {
+            if value == "Disabled" {
+                self = .disabled
+            } else {
+                throw ConfigurationError.badJson
+            }
+        } else if let value = try? container?.decode(C.self, forKey: .Enabled) {
+            self = .content(value)
+        } else {
+            throw ConfigurationError.badJson
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch (self) {
+        case .disabled:
+            try container.encode("Disabled")
+        case .content(let value):
+            try container.encode(value)
+        }
+    }
+}
+
+struct VideoConfig: Codable {
+    let foveatedEncoding: Switch<FoveationSettings>
+
+    enum CodingKeys: String, CodingKey {
+        case foveatedEncoding = "foveated_encoding"
+    }
+}
+
+struct Settings: Codable {
+    let video: VideoConfig
+}
+
 extension LayerRenderer.Clock.Instant.Duration {
     var timeInterval: TimeInterval {
         let nanoseconds = TimeInterval(components.attoseconds / 1_000_000_000)
@@ -371,13 +423,20 @@ class Renderer {
                 hudMessageBuffer.deallocate()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started: \(alvrEvent.STREAMING_STARTED)")
-                let foveationVars = FFR.calculateFoveationVars(alvrEvent.STREAMING_STARTED)
+                let settingsJsonBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
+                alvr_get_settings_json(settingsJsonBuffer.baseAddress)
+                let settingsJsonStr = String(cString: settingsJsonBuffer.baseAddress!, encoding: .utf8)!
+                let settingsData = settingsJsonStr.data(using: .utf8)!
+
+                let settings = try! JSONDecoder().decode(Settings.self, from: settingsData)
+                let foveationVars = FFR.calculateFoveationVars(alvrEvent: alvrEvent.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
                 videoFramePipelineState = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
                     device: device,
                     layerRenderer: layerRenderer,
                     mtlVertexDescriptor: mtlVertexDescriptor,
                     foveationVars: foveationVars
                 )
+
                 streamingActive = true
                 alvr_request_idr()
                 framesSinceLastIDR = 0
@@ -394,8 +453,8 @@ class Renderer {
                 framesSinceLastDecode = 0
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
-            case ALVR_EVENT_CREATE_DECODER.rawValue:
-                print("create decoder: \(alvrEvent.CREATE_DECODER)")
+            case ALVR_EVENT_DECODER_CONFIG.rawValue:
+                print("create decoder: \(alvrEvent.DECODER_CONFIG)")
                 // Don't reinstantiate the decoder if it's already created.
                 // TODO: Switching from H264 -> HEVC at runtime?
                 if vtDecompressionSession != nil {
@@ -907,7 +966,7 @@ class Renderer {
         let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
         lastRequestedTimestamp = targetTimestampNS
-        alvr_send_tracking(targetTimestampNS, &trackingMotion, 1)
+        alvr_send_tracking(targetTimestampNS, &trackingMotion, 1, nil, nil)
     }
     
     func lookupDeviceAnchorFor(timestamp: UInt64) -> simd_float4x4? {
