@@ -20,10 +20,6 @@ enum RendererError: Error {
     case badVertexDescriptor
 }
 
-enum ConfigurationError: Error {
-    case badJson
-}
-
 extension LayerRenderer.Clock.Instant.Duration {
     var timeInterval: TimeInterval {
         let nanoseconds = TimeInterval(components.attoseconds / 1_000_000_000)

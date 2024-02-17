@@ -1,5 +1,9 @@
 import Foundation
 
+enum SettingsError: Error {
+    case badJson
+}
+
 enum Switch<C>: Codable where C: Codable {
     case disabled
     case content(C)
@@ -16,12 +20,12 @@ enum Switch<C>: Codable where C: Codable {
             if value == "Disabled" {
                 self = .disabled
             } else {
-                throw ConfigurationError.badJson
+                throw SettingsError.badJson
             }
         } else if let value = try? container?.decode(C.self, forKey: .Enabled) {
             self = .content(value)
         } else {
-            throw ConfigurationError.badJson
+            throw SettingsError.badJson
         }
     }
 
