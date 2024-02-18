@@ -417,11 +417,11 @@ class Renderer {
             let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
             WorldTracker.shared.sendTracking(targetTimestamp: targetTimestamp)
         }
-        
-        
+
+
         EventHandler.shared.lastQueuedFrame = queuedFrame
     }
-    
+
     func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?, framePose: simd_float4x4) {
         self.updateDynamicBufferState()
         
