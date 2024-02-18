@@ -8,41 +8,36 @@ import SwiftUI
 /// The cube content for a volume.
 struct Entry: View {
     @Environment(ViewModel.self) private var model
+    @ObservedObject var eventHandler = EventHandler.shared
 
     var body: some View {
-        ZStack(alignment: Alignment(horizontal: .controlPanelGuide, vertical: .bottom)) {
-            Cube(
-                cubeConfiguration: model.cubeEntity,
-                animateUpdates: true
-            )
-            .alignmentGuide(.controlPanelGuide) { context in
-                context[HorizontalAlignment.center]
+        VStack {
+            Text("ALVR")
+                .font(.system(size: 50, weight: .bold))
+            
+            if eventHandler.hostname != "" && eventHandler.IP != "" {
+                let columns = [
+                    GridItem(.fixed(100), alignment: .trailing),
+                    GridItem(.fixed(150), alignment: .leading)
+                ]
+
+                LazyVGrid(columns: columns) {
+                    Text("hostname:")
+                    Text(eventHandler.hostname)
+                    Text("IP:")
+                    Text(eventHandler.IP)
+                }
+                .frame(width: 250, alignment: .center)
             }
-
-                EntryControls()
-                    .offset(y: -70)
         }
-        .onDisappear {
-            model.isShowingEntry = false
-        }
+        .frame(minWidth: 350, minHeight: 200)
+        .glassBackgroundEffect()
+        
+        EntryControls()
     }
-}
-
-extension HorizontalAlignment {
-    /// A custom alignment to center the control panel under the cube.
-    private struct ControlPanelAlignment: AlignmentID {
-        static func defaultValue(in context: ViewDimensions) -> CGFloat {
-            context[HorizontalAlignment.center]
-        }
-    }
-
-    /// A custom alignment guide to center the control panel under the cube.
-    static let controlPanelGuide = HorizontalAlignment(
-        ControlPanelAlignment.self
-    )
 }
 
 #Preview {
-    Cube()
+    Entry()
         .environment(ViewModel())
 }

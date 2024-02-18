@@ -19,6 +19,8 @@ class EventHandler: ObservableObject {
     
     
     @Published var connectionState: ConnectionState = .disconnected
+    @Published var hostname: String = ""
+    @Published var IP: String = ""
     
     var renderStarted = false
     
@@ -47,6 +49,7 @@ class EventHandler: ObservableObject {
     
     func initializeAlvr() {
         if !alvrInitialized {
+            print("Initialize ALVR")
             alvrInitialized = true
             let refreshRates:[Float] = [90, 60, 45]
             alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(1920*2), UInt32(1824*2), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
@@ -56,6 +59,7 @@ class EventHandler: ObservableObject {
     
     func start() {
         if !inputRunning {
+            print("Starting event thread")
             inputRunning = true
             eventsThread = Thread {
                 self.handleAlvrEvents()
@@ -66,8 +70,12 @@ class EventHandler: ObservableObject {
     }
     
     func stop() {
-        eventsThread?.cancel()
-        eventsThread = nil
+        print("Stopping")
+        inputRunning = false
+        renderStarted = false
+        updateConnectionState(.disconnected)
+        alvr_destroy()
+        alvrInitialized = false
     }
 
     func handleAlvrEvents() {
@@ -83,7 +91,9 @@ class EventHandler: ObservableObject {
                 print("hud message updated")
                 let hudMessageBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
                 alvr_hud_message(hudMessageBuffer.baseAddress)
-                print(String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8)!)
+                let message = String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8)!
+                parseMessage(message)
+                print(message)
                 hudMessageBuffer.deallocate()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started \(alvrEvent.STREAMING_STARTED)")
@@ -113,15 +123,13 @@ class EventHandler: ObservableObject {
                 if vtDecompressionSession != nil {
                    continue
                }
-               while true {
+               while alvrInitialized {
                    guard let (nal, timestamp) = VideoHandler.pollNal() else {
                        fatalError("create decoder: failed to poll nal?!")
                        break
                    }
-                   print(nal.count, timestamp)
                    NSLog("%@", nal as NSData)
                    let val = (nal[4] & 0x7E) >> 1
-                   print("NAL type of \(val)")
                    if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
                        // here we go!
                        (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS)
@@ -224,11 +232,41 @@ class EventHandler: ObservableObject {
                  print("msg")
              }
         }
+        print("Events thread stopped")
     }
     
     func updateConnectionState(_ newState: ConnectionState) {
         DispatchQueue.main.async {
             self.connectionState = newState
+        }
+    }
+
+    func parseMessage(_ message: String) {
+        let lines = message.components(separatedBy: "\n")
+        for line in lines {
+            let keyValuePair = line.split(separator: ":")
+            if keyValuePair.count == 2 {
+                let key = keyValuePair[0].trimmingCharacters(in: .whitespaces)
+                let value = keyValuePair[1].trimmingCharacters(in: .whitespaces)
+                
+                if key == "hostname" {
+                    updateHostname(value)
+                } else if key == "IP" {
+                    updateIP(value)
+                }
+            }
+        }
+    }
+
+    func updateHostname(_ newHostname: String) {
+        DispatchQueue.main.async {
+            self.hostname = newHostname
+        }
+    }
+
+    func updateIP(_ newIP: String) {
+        DispatchQueue.main.async {
+            self.IP = newIP
         }
     }
 

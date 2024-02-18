@@ -7,18 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		8E1240F22B7CAFB8005B75F2 /* CubeEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240F12B7CAFB8005B75F2 /* CubeEntity.swift */; };
-		8E1240F42B7CB05B005B75F2 /* CubeEntity+Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240F32B7CB05B005B75F2 /* CubeEntity+Configuration.swift */; };
 		8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240FE2B7CC02E005B75F2 /* Entry.swift */; };
-		8E1241012B7CC06C005B75F2 /* Cube.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1241002B7CC06C005B75F2 /* Cube.swift */; };
 		8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1241022B7CC0E1005B75F2 /* EntryControls.swift */; };
 		8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E458AB22B7E05FB0019FC73 /* EventHandler.swift */; };
 		8E458AB52B7E2C010019FC73 /* WorldTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E458AB42B7E2C010019FC73 /* WorldTracker.swift */; };
-		8E739C7D2B788FC90045ED16 /* RealityKitContent in Resources */ = {isa = PBXBuildFile; fileRef = 8E739C7C2B788FC90045ED16 /* RealityKitContent */; };
 		8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E739C8A2B78990A0045ED16 /* ViewModel.swift */; };
-		8EF45AFE2B7899A6000660BF /* Module.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45AFD2B7899A6000660BF /* Module.swift */; };
-		8EF45B132B78A244000660BF /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 8EF45B122B78A244000660BF /* RealityKitContent */; };
-		8EF45B162B78A487000660BF /* RotationSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EF45B152B78A487000660BF /* RotationSystem.swift */; };
 		C588CC212B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; };
 		C588CC222B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Embed Libraries */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */; };
@@ -46,17 +39,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		8E1240F12B7CAFB8005B75F2 /* CubeEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CubeEntity.swift; sourceTree = "<group>"; };
-		8E1240F32B7CB05B005B75F2 /* CubeEntity+Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CubeEntity+Configuration.swift"; sourceTree = "<group>"; };
 		8E1240FE2B7CC02E005B75F2 /* Entry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entry.swift; sourceTree = "<group>"; };
-		8E1241002B7CC06C005B75F2 /* Cube.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cube.swift; sourceTree = "<group>"; };
 		8E1241022B7CC0E1005B75F2 /* EntryControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryControls.swift; sourceTree = "<group>"; };
 		8E458AB22B7E05FB0019FC73 /* EventHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventHandler.swift; sourceTree = "<group>"; };
 		8E458AB42B7E2C010019FC73 /* WorldTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldTracker.swift; sourceTree = "<group>"; };
-		8E739C7C2B788FC90045ED16 /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
 		8E739C8A2B78990A0045ED16 /* ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel.swift; sourceTree = "<group>"; };
-		8EF45AFD2B7899A6000660BF /* Module.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Module.swift; sourceTree = "<group>"; };
-		8EF45B152B78A487000660BF /* RotationSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RotationSystem.swift; sourceTree = "<group>"; };
 		C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ALVRClientCore.xcframework; sourceTree = SOURCE_ROOT; };
 		C5E5902A2B6379ED00328ED6 /* ALVRClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ALVRClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ALVRClientApp.swift; sourceTree = "<group>"; };
@@ -79,7 +66,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8EF45B132B78A244000660BF /* RealityKitContent in Frameworks */,
 				C588CC212B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -100,34 +86,8 @@
 			isa = PBXGroup;
 			children = (
 				8E739C8A2B78990A0045ED16 /* ViewModel.swift */,
-				8EF45AFD2B7899A6000660BF /* Module.swift */,
 			);
 			path = Model;
-			sourceTree = "<group>";
-		};
-		8EF45B022B789AA0000660BF /* RealityViews */ = {
-			isa = PBXGroup;
-			children = (
-				8E1241002B7CC06C005B75F2 /* Cube.swift */,
-			);
-			path = RealityViews;
-			sourceTree = "<group>";
-		};
-		8EF45B0C2B78A0FA000660BF /* Entities */ = {
-			isa = PBXGroup;
-			children = (
-				8E1240F12B7CAFB8005B75F2 /* CubeEntity.swift */,
-				8E1240F32B7CB05B005B75F2 /* CubeEntity+Configuration.swift */,
-			);
-			path = Entities;
-			sourceTree = "<group>";
-		};
-		8EF45B142B78A477000660BF /* Systems */ = {
-			isa = PBXGroup;
-			children = (
-				8EF45B152B78A487000660BF /* RotationSystem.swift */,
-			);
-			path = Systems;
 			sourceTree = "<group>";
 		};
 		C5E590212B6379ED00328ED6 = {
@@ -136,7 +96,6 @@
 				D68FA8042B73D5DD0052B7FF /* ALVRClient.xcconfig */,
 				D68FA8052B73D6260052B7FF /* Override.xcconfig */,
 				C5E5902C2B6379ED00328ED6 /* ALVRClient */,
-				C5E5902D2B6379ED00328ED6 /* Packages */,
 				C5E5902B2B6379ED00328ED6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -153,9 +112,6 @@
 			isa = PBXGroup;
 			children = (
 				8E1240FD2B7CC021005B75F2 /* Entry */,
-				8EF45B142B78A477000660BF /* Systems */,
-				8EF45B0C2B78A0FA000660BF /* Entities */,
-				8EF45B022B789AA0000660BF /* RealityViews */,
 				8E739C892B7898EC0045ED16 /* Model */,
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
 				C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */,
@@ -173,14 +129,6 @@
 				C5E5903A2B6379ED00328ED6 /* Preview Content */,
 			);
 			path = ALVRClient;
-			sourceTree = "<group>";
-		};
-		C5E5902D2B6379ED00328ED6 /* Packages */ = {
-			isa = PBXGroup;
-			children = (
-				8E739C7C2B788FC90045ED16 /* RealityKitContent */,
-			);
-			path = Packages;
 			sourceTree = "<group>";
 		};
 		C5E5903A2B6379ED00328ED6 /* Preview Content */ = {
@@ -209,7 +157,6 @@
 			);
 			name = ALVRClient;
 			packageProductDependencies = (
-				8EF45B122B78A244000660BF /* RealityKitContent */,
 			);
 			productName = ALVRClient;
 			productReference = C5E5902A2B6379ED00328ED6 /* ALVRClient.app */;
@@ -256,7 +203,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				C5E5903E2B6379EE00328ED6 /* Assets.xcassets in Resources */,
-				8E739C7D2B788FC90045ED16 /* RealityKitContent in Resources */,
 				C5E5903C2B6379ED00328ED6 /* Preview Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -268,20 +214,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8E1240F42B7CB05B005B75F2 /* CubeEntity+Configuration.swift in Sources */,
 				8E458AB52B7E2C010019FC73 /* WorldTracker.swift in Sources */,
 				C5E590382B6379ED00328ED6 /* Shaders.metal in Sources */,
-				8E1240F22B7CAFB8005B75F2 /* CubeEntity.swift in Sources */,
 				D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */,
 				8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */,
 				8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */,
 				8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */,
-				8E1241012B7CC06C005B75F2 /* Cube.swift in Sources */,
 				D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */,
 				C5E590342B6379ED00328ED6 /* ContentView.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
-				8EF45AFE2B7899A6000660BF /* Module.swift in Sources */,
-				8EF45B162B78A487000660BF /* RotationSystem.swift in Sources */,
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
 				8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */,
 			);
@@ -504,13 +445,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		8EF45B122B78A244000660BF /* RealityKitContent */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = RealityKitContent;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C5E590222B6379ED00328ED6 /* Project object */;
 }

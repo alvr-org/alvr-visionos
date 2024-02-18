@@ -84,12 +84,4 @@ class WorldTracker {
         return deviceAnchorsDictionary[timestamp]
     }
     
-    func reset() {
-        
-        objc_sync_enter(deviceAnchorsLock)
-        deviceAnchorsQueue.removeAll()
-        deviceAnchorsDictionary.removeAll()
-        objc_sync_exit(deviceAnchorsLock)
-        
-    }
 }

@@ -20,30 +20,29 @@ struct EntryControls: View {
         HStack(spacing: 17) {
             if eventHandler.connectionState == .connected {
                 Toggle(isOn: $model.isShowingClient) {
-                    Label("Enter ALVR", systemImage: "visionpro")
+                    Label("Enter", systemImage: "visionpro")
+                        .labelStyle(.titleAndIcon)
+                        .padding(15)
                 }
             } else {
-                Text("Connecting to ALVR...")
+                Label("Connecting...", systemImage: "visionpro")
+                    .labelStyle(.titleOnly)
+                    .padding(15)
             }
             
         }
         .toggleStyle(.button)
         .buttonStyle(.borderless)
-        .labelStyle(.titleAndIcon)
-        .padding(12)
-        .glassBackgroundEffect(in: .rect(cornerRadius: 50))    
+        .glassBackgroundEffect(in: .rect(cornerRadius: 50))
 
         //Enable Client
         .onChange(of: model.isShowingClient) { _, isShowing in
             Task {
                 if isShowing {
-                    await openImmersiveSpace(id: Module.client.name)
-                    dismissWindow(id: Module.entry.name)
-                } else {
-                    // TODO: Re-open entry through user input to dismiss immersive space
-                    await dismissImmersiveSpace()
-                    WorldTracker.shared.reset()
-                }
+                    print("Opening Immersive Space")
+                    await openImmersiveSpace(id: "Client")
+                    dismissWindow(id: "Entry")
+                } 
             }
         }
 
