@@ -10,7 +10,6 @@ struct EntryControls: View {
     @Environment(ViewModel.self) private var model
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     @ObservedObject var eventHandler = EventHandler.shared
 

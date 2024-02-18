@@ -378,13 +378,13 @@ class Renderer {
         
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
-        let framePreviouslyPredictedPose = queuedFrame != nil ? lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
+        let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
 
         if renderingStreaming && queuedFrame != nil && framePreviouslyPredictedPose == nil {
             print("missing anchor!!", queuedFrame!.timestamp)
         }
         
-        let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
+        let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
         drawable.deviceAnchor = deviceAnchor
         
         /*if let queuedFrame = queuedFrame {
@@ -394,11 +394,11 @@ class Renderer {
         
         let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
-            if self.alvrInitialized && queuedFrame != nil && self.lastSubmittedTimestamp != queuedFrame?.timestamp {
+            if EventHandler.shared.alvrInitialized && queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame?.timestamp {
                 let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
                 //print("Finished:", queuedFrame!.timestamp)
                 alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
-                self.lastSubmittedTimestamp = queuedFrame!.timestamp
+                EventHandler.shared.lastSubmittedTimestamp = queuedFrame!.timestamp
             }
             semaphore.signal()
         }
