@@ -265,14 +265,14 @@ class Renderer {
 
     private func updateDynamicBufferState() {
         /// Update the state of our uniform buffers before rendering
-        
+
         uniformBufferIndex = (uniformBufferIndex + 1) % maxBuffersInFlight
-        
+
         uniformBufferOffset = alignedUniformsSize * uniformBufferIndex
-        
+
         uniforms = UnsafeMutableRawPointer(dynamicUniformBuffer.contents() + uniformBufferOffset).bindMemory(to:UniformsArray.self, capacity:1)
     }
-    
+
     private func updateGameStateForVideoFrame(drawable: LayerRenderer.Drawable, framePose: simd_float4x4) {
         let simdDeviceAnchor = drawable.deviceAnchor != nil ? drawable.deviceAnchor!.originFromAnchorTransform : matrix_identity_float4x4
         
