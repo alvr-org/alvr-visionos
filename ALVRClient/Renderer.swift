@@ -65,7 +65,6 @@ class Renderer {
     var mesh: MTKMesh
 
     let layerRenderer: LayerRenderer
-
     // TODO(zhuowei): make this a real deque
     var metalTextureCache: CVMetalTextureCache!
     let mtlVertexDescriptor: MTLVertexDescriptor
@@ -77,9 +76,9 @@ class Renderer {
         self.layerRenderer = layerRenderer
         self.device = layerRenderer.device
         self.commandQueue = self.device.makeCommandQueue()!
-    
+
         let uniformBufferSize = alignedUniformsSize * maxBuffersInFlight
-    
+
         self.dynamicUniformBuffer = self.device.makeBuffer(length:uniformBufferSize,
                                                            options:[MTLResourceOptions.storageModeShared])!
 
@@ -216,7 +215,7 @@ class Renderer {
         pipelineDescriptor.depthAttachmentPixelFormat = layerRenderer.configuration.depthFormat
 
         pipelineDescriptor.maxVertexAmplificationCount = layerRenderer.properties.viewCount
-
+        
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
 
@@ -389,9 +388,9 @@ class Renderer {
         drawable.deviceAnchor = deviceAnchor
         
         /*if let queuedFrame = queuedFrame {
-         let test_ts = queuedFrame.timestamp
-         print("draw: \(test_ts)")
-         }*/
+            let test_ts = queuedFrame.timestamp
+            print("draw: \(test_ts)")
+        }*/
         
         let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
@@ -516,7 +515,6 @@ class Renderer {
     }
     
     func renderLoop() {
-        
         layerRenderer.waitUntilRunning()
         while EventHandler.shared.renderStarted {
             if layerRenderer.state == .invalidated {
