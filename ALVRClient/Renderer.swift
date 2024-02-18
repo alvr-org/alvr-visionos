@@ -73,8 +73,6 @@ class Renderer {
     var fullscreenQuadBuffer:MTLBuffer!
     var lastIpd:Float = -1
     
-    var missedAnchors: [UInt64: Int] = [:]
-
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
         self.device = layerRenderer.device
@@ -333,18 +331,13 @@ class Renderer {
         }
         
         guard let frame = layerRenderer.queryNextFrame() else { return }
-              
-        frame.startUpdate()
-        
-        frame.endUpdate()
-        
+        guard let timing = frame.predictTiming() else { return }
         let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
-        if !renderingStreaming {
-            guard let timing = frame.predictTiming() else { return }
-            LayerRenderer.Clock().wait(until: timing.optimalInputTime)
-        }
-        
+        frame.startUpdate()
+        frame.endUpdate()
+        LayerRenderer.Clock().wait(until: timing.optimalInputTime)
+        frame.startSubmission()
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             fatalError("Failed to create command buffer")
@@ -382,33 +375,18 @@ class Renderer {
         EventHandler.shared.framesSinceLastDecode += 1
         objc_sync_exit(EventHandler.shared.frameQueueLock)
         
-        frame.startSubmission()
+        
         
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
-        let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
-        if renderingStreaming && framePreviouslyPredictedPose != nil {
-            // TODO: maybe find some mutable pointer hax to just copy in the ground truth, instead of asking for a value in the past.
-            let time = Double(queuedFrame!.timestamp) / Double(NSEC_PER_SEC)
-            //let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: time)
-            let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
-            drawable.deviceAnchor = deviceAnchor
-            
-            //print("found anchor for frame!", deviceAnchorLoc, queuedFrame!.timestamp, deviceAnchor?.originFromAnchorTransform)
+        let framePreviouslyPredictedPose = queuedFrame != nil ? lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
+
+        if renderingStreaming && queuedFrame != nil && framePreviouslyPredictedPose == nil {
+            print("missing anchor!!", queuedFrame!.timestamp)
         }
         
-        if drawable.deviceAnchor == nil {
-            if renderingStreaming && queuedFrame != nil {
-                if let count = missedAnchors[queuedFrame!.timestamp] {
-                    missedAnchors[queuedFrame!.timestamp] = count + 1
-                } else {
-                    missedAnchors[queuedFrame!.timestamp] = 1
-                    print("missing anchor!!", queuedFrame!.timestamp)
-                }
-            }
-            let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
-            drawable.deviceAnchor = deviceAnchor
-        }
+        let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
+        drawable.deviceAnchor = deviceAnchor
         
         /*if let queuedFrame = queuedFrame {
          let test_ts = queuedFrame.timestamp
@@ -417,6 +395,12 @@ class Renderer {
         
         let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
+            if self.alvrInitialized && queuedFrame != nil && self.lastSubmittedTimestamp != queuedFrame?.timestamp {
+                let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
+                //print("Finished:", queuedFrame!.timestamp)
+                alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
+                self.lastSubmittedTimestamp = queuedFrame!.timestamp
+            }
             semaphore.signal()
         }
         
@@ -435,12 +419,6 @@ class Renderer {
             WorldTracker.shared.sendTracking(targetTimestamp: targetTimestamp)
         }
         
-        if EventHandler.shared.alvrInitialized && queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame?.timestamp {
-            let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
-            //print("Finished:", queuedFrame!.timestamp)
-            alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
-            EventHandler.shared.lastSubmittedTimestamp = queuedFrame!.timestamp
-        }
         
         EventHandler.shared.lastQueuedFrame = queuedFrame
     }
