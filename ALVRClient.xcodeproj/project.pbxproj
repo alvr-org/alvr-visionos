@@ -397,7 +397,6 @@
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_ARCHS = x86_64;
-				GCC_OPTIMIZATION_LEVEL = 0;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "For connecting to ALVR server on local network.";
