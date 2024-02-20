@@ -587,7 +587,7 @@ class Renderer {
             alvrInitialized = true
             // TODO(zhuowei): ???
             let refreshRates:[Float] = [90, 60, 45]
-            alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(drawable.colorTextures[0].width), UInt32(drawable.colorTextures[0].height), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
+            alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(drawable.colorTextures[0].width), UInt32(drawable.colorTextures[0].height), refreshRates, Int32(refreshRates.count), /*supports_foveated_encoding=*/true, /*external_decoder=*/ true)
             alvr_resume()
         }
         if !inputRunning {
@@ -907,7 +907,8 @@ class Renderer {
         deviceAnchorsDictionary[targetTimestampNS] = deviceAnchor.originFromAnchorTransform
         let orientation = simd_quaternion(deviceAnchor.originFromAnchorTransform)
         let position = deviceAnchor.originFromAnchorTransform.columns.3
-        var trackingMotion = AlvrDeviceMotion(device_id: Renderer.deviceIdHead, orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+        let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+        var trackingMotion = AlvrDeviceMotion(device_id: Renderer.deviceIdHead, pose: pose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
         let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
