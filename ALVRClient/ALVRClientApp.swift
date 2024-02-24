@@ -44,7 +44,7 @@ struct MetalRendererApp: App {
                     EventHandler.shared.start()
                 }
         }
-        .defaultSize(width: 350, height: 300)
+        .defaultSize(width: 650, height: 600)
         .windowStyle(.plain)
         .onChange(of: scenePhase) {
             switch scenePhase {

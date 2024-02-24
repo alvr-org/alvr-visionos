@@ -92,7 +92,9 @@ class WorldTracker {
             
             if update.anchor.id == worldOriginAnchor.id {
                 let anchorTransform = update.anchor.originFromAnchorTransform
-                self.worldTrackingSteamVRTransform = anchorTransform
+                if GlobalSettings.shared.keepSteamVRCenter {
+                    self.worldTrackingSteamVRTransform = anchorTransform
+                }
             }
             else {
                 // TODO: how long do these anchors persist...? Could be useful.
