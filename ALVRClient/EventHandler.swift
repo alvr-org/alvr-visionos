@@ -70,12 +70,14 @@ class EventHandler: ObservableObject {
     }
     
     func stop() {
-        print("Stopping")
-        inputRunning = false
-        renderStarted = false
+        if renderStarted {
+            print("Stopping")
+            inputRunning = false
+            renderStarted = false
+            alvr_destroy()
+            alvrInitialized = false
+        }
         updateConnectionState(.disconnected)
-        alvr_destroy()
-        alvrInitialized = false
     }
 
     func handleAlvrEvents() {
