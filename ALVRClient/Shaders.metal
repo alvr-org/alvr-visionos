@@ -21,20 +21,23 @@ typedef struct
 typedef struct
 {
     float4 position [[position]];
+    float4 color;
     float2 texCoord;
 } ColorInOut;
 
 vertex ColorInOut vertexShader(Vertex in [[stage_in]],
                                ushort amp_id [[amplification_id]],
-                               constant UniformsArray & uniformsArray [[ buffer(BufferIndexUniforms) ]])
+                               constant UniformsArray & uniformsArray [[ buffer(BufferIndexUniforms) ]],
+                               constant PlaneUniform & planeUniform [[ buffer(BufferIndexPlaneUniforms) ]])
 {
     ColorInOut out;
 
     Uniforms uniforms = uniformsArray.uniforms[amp_id];
     
     float4 position = float4(in.position, 1.0);
-    out.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * position;
+    out.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * planeUniform.planeTransform * position;
     out.texCoord = in.texCoord;
+    out.color = planeUniform.planeColor;
 
     return out;
 }
@@ -42,13 +45,7 @@ vertex ColorInOut vertexShader(Vertex in [[stage_in]],
 fragment float4 fragmentShader(ColorInOut in [[stage_in]],
                                texture2d<half> colorMap     [[ texture(TextureIndexColor) ]])
 {
-    constexpr sampler colorSampler(mip_filter::linear,
-                                   mag_filter::linear,
-                                   min_filter::linear);
-
-    half4 colorSample   = colorMap.sample(colorSampler, in.texCoord.xy);
-
-    return float4(colorSample);
+    return in.color;
 }
 
 // from ALVR
@@ -142,12 +139,13 @@ vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
     else {
         position.y *= uniforms.tangents[2];
     }
-    out.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * position;
+    out.position = uniforms.projectionMatrix * uniforms.modelViewMatrixFrame * position;
     if (amp_id == 0) {
         out.texCoord = in.texCoord;
     } else {
         out.texCoord = float2(in.texCoord.x + 0.5, in.texCoord.y);
     }
+    out.color = float4(1.0, 1.0, 1.0, 1.0);
 
     return out;
 }
@@ -190,4 +188,8 @@ fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<f
     float3 color = condition * lowValues + (1.0 - condition) * highValues;
     
     return float4(color.rgb, 1.0);
+}
+
+fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
+    return float4(0.0, 0.0, 0.0, 1.0);
 }

@@ -25,6 +25,7 @@ class WorldTracker {
     var worldTrackingAddedAnchor = false
     var worldTrackingSteamVRTransform: simd_float4x4 = matrix_identity_float4x4
     var worldOriginAnchor: WorldAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
+    var planeLock = NSObject()
     
     static let maxPrediction = 30 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
@@ -69,7 +70,7 @@ class WorldTracker {
     
     func processPlaneUpdates() async {
         for await update in planeDetection.anchorUpdates {
-            print(update.event, update.anchor.classification, update.anchor.id)
+            //print(update.event, update.anchor.classification, update.anchor.id, update.anchor.description)
             if update.anchor.classification == .window {
                 // Skip planes that are windows.
                 continue
@@ -88,7 +89,7 @@ class WorldTracker {
     // every time visionOS's centering changes.
     func processWorldTrackingUpdates() async {
         for await update in worldTracking.anchorUpdates {
-            print(update.anchor.id, update.anchor.description, update.description, update.event)
+            print(update.event, update.anchor.id, update.anchor.description)
             
             if update.anchor.id == worldOriginAnchor.id {
                 let anchorTransform = update.anchor.originFromAnchorTransform
@@ -109,13 +110,23 @@ class WorldTracker {
     }
     
     func updatePlane(_ anchor: PlaneAnchor) {
-        if planeAnchors[anchor.id] == nil {
-            planeAnchors[anchor.id] = anchor
-        }
+        lockPlaneAnchors()
+        planeAnchors[anchor.id] = anchor
+        unlockPlaneAnchors()
     }
 
     func removePlane(_ anchor: PlaneAnchor) {
+        lockPlaneAnchors()
         planeAnchors.removeValue(forKey: anchor.id)
+        unlockPlaneAnchors()
+    }
+    
+    func lockPlaneAnchors() {
+        objc_sync_enter(planeLock)
+    }
+    
+    func unlockPlaneAnchors() {
+         objc_sync_exit(planeLock)
     }
 
     
