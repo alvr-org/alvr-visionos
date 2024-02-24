@@ -11,6 +11,7 @@ struct Entry: View {
     @ObservedObject var eventHandler = EventHandler.shared
     @ObservedObject var globalSettings = GlobalSettings.shared
     @State private var dontKeepSteamVRCenter = false
+    @State private var showHandsOverlaid = false
 
     var body: some View {
         VStack {
@@ -21,6 +22,14 @@ struct Entry: View {
             Text("Options:")
                 .font(.system(size: 20, weight: .bold))
             VStack {
+                Toggle(isOn: $showHandsOverlaid) {
+                    Text("Show hands overlaid")
+                }
+                .toggleStyle(.switch)
+                .onChange(of: showHandsOverlaid) {
+                    globalSettings.showHandsOverlaid = showHandsOverlaid
+                }
+                
                 Toggle(isOn: $dontKeepSteamVRCenter) {
                     Text("Crown Button long-press also recenters SteamVR")
                 }

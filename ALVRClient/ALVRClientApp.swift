@@ -30,6 +30,7 @@ struct MetalRendererApp: App {
     @State private var model = ViewModel()
     @Environment(\.scenePhase) private var scenePhase
     @State private var clientImmersionStyle: ImmersionStyle = .full
+    @State private var clientHandVisibility: Visibility = .visible
 
     var body: some Scene {
         //Entry point, this is the default window chosen in Info.plist from UIApplicationPreferredDefaultSceneSessionRole
@@ -47,6 +48,8 @@ struct MetalRendererApp: App {
         .defaultSize(width: 650, height: 600)
         .windowStyle(.plain)
         .onChange(of: scenePhase) {
+            clientHandVisibility = GlobalSettings.shared.showHandsOverlaid ? .visible : .hidden
+            
             switch scenePhase {
             case .background:
                 if !model.isShowingClient {
@@ -71,7 +74,7 @@ struct MetalRendererApp: App {
             }
         }
         .immersionStyle(selection: $clientImmersionStyle, in: .full)
-        //.upperLimbVisibility(.hidden) // TODO: make this an option
+        .upperLimbVisibility(clientHandVisibility)
     }
     
 }

@@ -12,4 +12,5 @@ class GlobalSettings: ObservableObject {
     
     // TODO: configuration persistence
     var keepSteamVRCenter = true
+    var showHandsOverlaid = false
 }
