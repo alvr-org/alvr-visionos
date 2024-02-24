@@ -5,11 +5,9 @@
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>
-		<string>CPSceneSessionRoleImmersiveSpaceApplication</string>
+		<string>UIWindowSceneSessionRoleApplication</string>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
-		<key>UISceneConfigurations</key>
-		<dict/>
 	</dict>
 </dict>
 </plist>

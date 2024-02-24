@@ -27,20 +27,53 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
 #if os(visionOS)
 @main
 struct MetalRendererApp: App {
+    @State private var model = ViewModel()
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var clientImmersionStyle: ImmersionStyle = .full
+
     var body: some Scene {
-#if false
-        WindowGroup {
-            ContentView()
-        }.windowStyle(.volumetric)
-#endif
-        ImmersiveSpace {
+        //Entry point, this is the default window chosen in Info.plist from UIApplicationPreferredDefaultSceneSessionRole
+        WindowGroup(id: "Entry") {
+            Entry()
+                .environment(model)
+                .environmentObject(EventHandler.shared)
+                .task {
+                    model.isShowingClient = false
+                    EventHandler.shared.initializeAlvr()
+                    await WorldTracker.shared.initializeAr()
+                    EventHandler.shared.start()
+                }
+        }
+        .defaultSize(width: 350, height: 300)
+        .windowStyle(.plain)
+        .onChange(of: scenePhase) {
+            switch scenePhase {
+            case .background:
+                if !model.isShowingClient {
+                    //Lobby closed manually: disconnect ALVR
+                    EventHandler.shared.stop()
+                }
+            case .inactive:
+                // Scene inactive, currently no action for this
+                break
+            case .active:
+                // Scene active, currently no action for this
+                break
+            @unknown default:
+                break
+            }
+        }
+        
+        ImmersiveSpace(id: "Client") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
                 let renderer = Renderer(layerRenderer)
                 renderer.startRenderLoop()
             }
         }
+        .immersionStyle(selection: $clientImmersionStyle, in: .full)
         //.upperLimbVisibility(.hidden) // TODO: make this an option
     }
+    
 }
 #endif
 
