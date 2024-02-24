@@ -8,6 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		9ED257172B8062A2008DC22F /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED257162B8062A1008DC22F /* Settings.swift */; };
+		8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240FE2B7CC02E005B75F2 /* Entry.swift */; };
+		8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1241022B7CC0E1005B75F2 /* EntryControls.swift */; };
+		8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E458AB22B7E05FB0019FC73 /* EventHandler.swift */; };
+		8E458AB52B7E2C010019FC73 /* WorldTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E458AB42B7E2C010019FC73 /* WorldTracker.swift */; };
+		8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E739C8A2B78990A0045ED16 /* ViewModel.swift */; };
 		C588CC212B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; };
 		C588CC222B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Embed Libraries */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */; };
@@ -36,6 +41,11 @@
 
 /* Begin PBXFileReference section */
 		9ED257162B8062A1008DC22F /* Settings.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
+		8E1240FE2B7CC02E005B75F2 /* Entry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entry.swift; sourceTree = "<group>"; };
+		8E1241022B7CC0E1005B75F2 /* EntryControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryControls.swift; sourceTree = "<group>"; };
+		8E458AB22B7E05FB0019FC73 /* EventHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventHandler.swift; sourceTree = "<group>"; };
+		8E458AB42B7E2C010019FC73 /* WorldTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldTracker.swift; sourceTree = "<group>"; };
+		8E739C8A2B78990A0045ED16 /* ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel.swift; sourceTree = "<group>"; };
 		C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ALVRClientCore.xcframework; sourceTree = SOURCE_ROOT; };
 		C5E5902A2B6379ED00328ED6 /* ALVRClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ALVRClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ALVRClientApp.swift; sourceTree = "<group>"; };
@@ -65,13 +75,29 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		8E1240FD2B7CC021005B75F2 /* Entry */ = {
+			isa = PBXGroup;
+			children = (
+				8E1240FE2B7CC02E005B75F2 /* Entry.swift */,
+				8E1241022B7CC0E1005B75F2 /* EntryControls.swift */,
+			);
+			path = Entry;
+			sourceTree = "<group>";
+		};
+		8E739C892B7898EC0045ED16 /* Model */ = {
+			isa = PBXGroup;
+			children = (
+				8E739C8A2B78990A0045ED16 /* ViewModel.swift */,
+			);
+			path = Model;
+			sourceTree = "<group>";
+		};
 		C5E590212B6379ED00328ED6 = {
 			isa = PBXGroup;
 			children = (
 				D68FA8042B73D5DD0052B7FF /* ALVRClient.xcconfig */,
 				D68FA8052B73D6260052B7FF /* Override.xcconfig */,
 				C5E5902C2B6379ED00328ED6 /* ALVRClient */,
-				C5E5902D2B6379ED00328ED6 /* Packages */,
 				C5E5902B2B6379ED00328ED6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,12 +114,16 @@
 			isa = PBXGroup;
 			children = (
 				9ED257162B8062A1008DC22F /* Settings.swift */,
+				8E1240FD2B7CC021005B75F2 /* Entry */,
+				8E739C892B7898EC0045ED16 /* Model */,
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
 				C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */,
 				C5E590332B6379ED00328ED6 /* ContentView.swift */,
 				C5E590352B6379ED00328ED6 /* Renderer.swift */,
 				D61E6FDF2B71CE080076031A /* VideoHandler.swift */,
+				8E458AB22B7E05FB0019FC73 /* EventHandler.swift */,
 				D68FA8082B742F6F0052B7FF /* FFR.swift */,
+				8E458AB42B7E2C010019FC73 /* WorldTracker.swift */,
 				C5E590372B6379ED00328ED6 /* Shaders.metal */,
 				C5E590392B6379ED00328ED6 /* ShaderTypes.h */,
 				C5E5903D2B6379EE00328ED6 /* Assets.xcassets */,
@@ -102,13 +132,6 @@
 				C5E5903A2B6379ED00328ED6 /* Preview Content */,
 			);
 			path = ALVRClient;
-			sourceTree = "<group>";
-		};
-		C5E5902D2B6379ED00328ED6 /* Packages */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Packages;
 			sourceTree = "<group>";
 		};
 		C5E5903A2B6379ED00328ED6 /* Preview Content */ = {
@@ -166,6 +189,8 @@
 				Base,
 			);
 			mainGroup = C5E590212B6379ED00328ED6;
+			packageReferences = (
+			);
 			productRefGroup = C5E5902B2B6379ED00328ED6 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -192,13 +217,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8E458AB52B7E2C010019FC73 /* WorldTracker.swift in Sources */,
 				C5E590382B6379ED00328ED6 /* Shaders.metal in Sources */,
 				D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */,
+				8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */,
+				8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */,
+				8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */,
 				D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */,
 				C5E590342B6379ED00328ED6 /* ContentView.swift in Sources */,
 				9ED257172B8062A2008DC22F /* Settings.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
+				8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
