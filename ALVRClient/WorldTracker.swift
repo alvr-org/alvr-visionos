@@ -212,7 +212,6 @@ class WorldTracker {
     // TODO: figure out how stable Apple's predictions are into the future
     
     func sendTracking(targetTimestamp: Double) {
-        let targetTimestamp = CACurrentMediaTime() + Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC)
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         

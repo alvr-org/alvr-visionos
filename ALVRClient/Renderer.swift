@@ -442,6 +442,12 @@ class Renderer {
             print("missing anchor!!", queuedFrame!.timestamp)
         }
         
+        // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
+        if EventHandler.shared.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
+            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestamp)
+        }
+        
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
         drawable.deviceAnchor = deviceAnchor
         
@@ -470,12 +476,6 @@ class Renderer {
         commandBuffer.commit()
         
         frame.endSubmission()
-        
-        if EventHandler.shared.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
-            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestamp)
-        }
-        
         
         EventHandler.shared.lastQueuedFrame = queuedFrame
     }
