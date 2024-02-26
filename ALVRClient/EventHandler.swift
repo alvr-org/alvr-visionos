@@ -43,6 +43,7 @@ class EventHandler: ObservableObject {
     
     var framesRendered:Int = 0
     
+    var timeLastSentPeriodicUpdatedValues: Double = 0.0
     
     init() {}
     
@@ -92,8 +93,26 @@ class EventHandler: ObservableObject {
         }
     }
 
+    // Data which only needs to be sent periodically, such as battery percentage
+    func handlePeriodicUpdatedValues() {
+        if !UIDevice.current.isBatteryMonitoringEnabled {
+            UIDevice.current.isBatteryMonitoringEnabled = true
+        }
+        let batteryLevel = UIDevice.current.batteryLevel
+        let isCharging = UIDevice.current.batteryState == .charging
+        alvr_send_battery(WorldTracker.deviceIdHead, batteryLevel, isCharging)
+        
+        timeLastSentPeriodicUpdatedValues = CACurrentMediaTime()
+    }
+
     func handleAlvrEvents() {
         while inputRunning {
+            // Send periodic updated values, such as battery percentage, once every five seconds
+            let currentTime = CACurrentMediaTime()
+            if currentTime - timeLastSentPeriodicUpdatedValues >= 5.0 {
+                handlePeriodicUpdatedValues()
+            }
+
             var alvrEvent = AlvrEvent()
             let res = alvr_poll_event(&alvrEvent)
             if !res {
