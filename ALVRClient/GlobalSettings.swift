@@ -1,8 +1,5 @@
 //
 //  GlobalSettings.swift
-//  ALVRClient
-//
-//  Created by Max Thomas on 2/23/24.
 //
 
 import Foundation

@@ -1,8 +1,5 @@
 //
 //  ContentView.swift
-//  ALVRClient
-//
-//  Created by Zhuowei Zhang on 1/26/24.
 //
 
 import SwiftUI

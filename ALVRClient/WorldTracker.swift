@@ -1,7 +1,5 @@
 //
 //  WorldTracker.swift
-//  ALVRClient
-//
 //
 
 import Foundation

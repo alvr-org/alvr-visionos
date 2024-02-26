@@ -1,7 +1,5 @@
 //
 //  EventHandler.swift
-//  ALVRClient
-//
 //
 
 import Foundation
