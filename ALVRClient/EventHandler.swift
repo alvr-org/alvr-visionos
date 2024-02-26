@@ -50,7 +50,7 @@ class EventHandler: ObservableObject {
             print("Initialize ALVR")
             alvrInitialized = true
             let refreshRates:[Float] = [90, 60, 45]
-            alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(1920*2), UInt32(1824*2), refreshRates, Int32(refreshRates.count), /*external_decoder=*/ true)
+            alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(1920*2), UInt32(1824*2), refreshRates, Int32(refreshRates.count), /*supports_foveated_encoding=*/true, /*external_decoder=*/ true)
             alvr_resume()
         }
     }
@@ -116,8 +116,8 @@ class EventHandler: ObservableObject {
                   framesSinceLastDecode = 0
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
-            case ALVR_EVENT_CREATE_DECODER.rawValue:
-                print("create decoder \(alvrEvent.CREATE_DECODER)")
+            case ALVR_EVENT_DECODER_CONFIG.rawValue:
+                print("create decoder \(alvrEvent.DECODER_CONFIG)")
                 // Don't reinstantiate the decoder if it's already created.
                // TODO: Switching from H264 -> HEVC at runtime?
                 if vtDecompressionSession != nil {
