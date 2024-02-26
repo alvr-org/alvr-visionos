@@ -9,11 +9,40 @@ import SwiftUI
 struct Entry: View {
     @Environment(ViewModel.self) private var model
     @ObservedObject var eventHandler = EventHandler.shared
+    @ObservedObject var globalSettings = GlobalSettings.shared
+    @State private var dontKeepSteamVRCenter = false
+    @State private var showHandsOverlaid = false
 
     var body: some View {
         VStack {
             Text("ALVR")
                 .font(.system(size: 50, weight: .bold))
+                .padding()
+            
+            Text("Options:")
+                .font(.system(size: 20, weight: .bold))
+            VStack {
+                Toggle(isOn: $showHandsOverlaid) {
+                    Text("Show hands overlaid")
+                }
+                .toggleStyle(.switch)
+                .onChange(of: showHandsOverlaid) {
+                    globalSettings.showHandsOverlaid = showHandsOverlaid
+                }
+                
+                Toggle(isOn: $dontKeepSteamVRCenter) {
+                    Text("Crown Button long-press also recenters SteamVR")
+                }
+                .toggleStyle(.switch)
+                .onChange(of: dontKeepSteamVRCenter) {
+                    globalSettings.keepSteamVRCenter = !dontKeepSteamVRCenter
+                }
+            }
+            .frame(width: 450)
+            .padding()
+            
+            Text("Connection Information:")
+                .font(.system(size: 20, weight: .bold))
             
             if eventHandler.hostname != "" && eventHandler.IP != "" {
                 let columns = [
@@ -30,7 +59,7 @@ struct Entry: View {
                 .frame(width: 250, alignment: .center)
             }
         }
-        .frame(minWidth: 350, minHeight: 200)
+        .frame(minWidth: 650, minHeight: 500)
         .glassBackgroundEffect()
         
         EntryControls()

@@ -23,6 +23,7 @@
 		C5E5903E2B6379EE00328ED6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C5E5903D2B6379EE00328ED6 /* Assets.xcassets */; };
 		D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61E6FDF2B71CE080076031A /* VideoHandler.swift */; };
 		D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */ = {isa = PBXBuildFile; fileRef = D68FA8082B742F6F0052B7FF /* FFR.swift */; };
+		E702FBDC2B899B8700EE75D0 /* GlobalSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -61,6 +62,7 @@
 		D68FA8042B73D5DD0052B7FF /* ALVRClient.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ALVRClient.xcconfig; sourceTree = "<group>"; };
 		D68FA8052B73D6260052B7FF /* Override.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Override.xcconfig; sourceTree = "<group>"; };
 		D68FA8082B742F6F0052B7FF /* FFR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFR.swift; sourceTree = "<group>"; };
+		E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSettings.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -119,6 +121,7 @@
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
 				C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */,
 				C5E590332B6379ED00328ED6 /* ContentView.swift */,
+				E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */,
 				C5E590352B6379ED00328ED6 /* Renderer.swift */,
 				D61E6FDF2B71CE080076031A /* VideoHandler.swift */,
 				8E458AB22B7E05FB0019FC73 /* EventHandler.swift */,
@@ -222,6 +225,7 @@
 				D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */,
 				8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */,
 				8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */,
+				E702FBDC2B899B8700EE75D0 /* GlobalSettings.swift in Sources */,
 				8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */,
 				D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */,
 				C5E590342B6379ED00328ED6 /* ContentView.swift in Sources */,

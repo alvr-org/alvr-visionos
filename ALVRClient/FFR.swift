@@ -1,8 +1,5 @@
 //
 //  FFR.swift
-//  ALVRClient
-//
-//  Created by Shadowfacts on 2/7/24.
 //
 
 import Foundation

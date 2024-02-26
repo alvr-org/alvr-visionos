@@ -1,13 +1,12 @@
 //
 //  EventHandler.swift
-//  ALVRClient
-//
 //
 
 import Foundation
 import Metal
 import VideoToolbox
 import Combine
+import AVKit
 
 class EventHandler: ObservableObject {
     static let shared = EventHandler()
@@ -48,6 +47,7 @@ class EventHandler: ObservableObject {
     init() {}
     
     func initializeAlvr() {
+        fixAudioForDirectStereo()
         if !alvrInitialized {
             print("Initialize ALVR")
             alvrInitialized = true
@@ -58,6 +58,7 @@ class EventHandler: ObservableObject {
     }
     
     func start() {
+        fixAudioForDirectStereo()
         if !inputRunning {
             print("Starting event thread")
             inputRunning = true
@@ -70,12 +71,25 @@ class EventHandler: ObservableObject {
     }
     
     func stop() {
-        print("Stopping")
-        inputRunning = false
-        renderStarted = false
+        if renderStarted {
+            print("Stopping")
+            inputRunning = false
+            renderStarted = false
+            alvr_destroy()
+            alvrInitialized = false
+        }
         updateConnectionState(.disconnected)
-        alvr_destroy()
-        alvrInitialized = false
+    }
+
+    func fixAudioForDirectStereo() {
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(.playAndRecord, options: [.mixWithOthers, .allowBluetoothA2DP, .allowAirPlay])
+            try audioSession.setPreferredOutputNumberOfChannels(2)
+            try audioSession.setIntendedSpatialExperience(.bypassed)
+        } catch {
+            print("Failed to set the audio session configuration?")
+        }
     }
 
     func handleAlvrEvents() {
