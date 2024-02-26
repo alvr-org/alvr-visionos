@@ -72,12 +72,13 @@ class WorldTracker {
         deviceAnchorsDictionary[targetTimestampNS] = deviceAnchor.originFromAnchorTransform
         let orientation = simd_quaternion(deviceAnchor.originFromAnchorTransform)
         let position = deviceAnchor.originFromAnchorTransform.columns.3
-        var trackingMotion = AlvrDeviceMotion(device_id: WorldTracker.deviceIdHead, orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+        let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+        var trackingMotion = AlvrDeviceMotion(device_id: WorldTracker.deviceIdHead, pose: pose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
         let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
         EventHandler.shared.lastRequestedTimestamp = targetTimestampNS
-        alvr_send_tracking(targetTimestampNS, &trackingMotion, 1)
+        alvr_send_tracking(targetTimestampNS, &trackingMotion, 1, nil, nil)
     }
     
     func lookupDeviceAnchorFor(timestamp: UInt64) -> simd_float4x4? {

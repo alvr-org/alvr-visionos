@@ -128,7 +128,10 @@ class Renderer {
     
     func startRenderLoop() {
         Task {
-            let foveationVars = FFR.calculateFoveationVars(EventHandler.shared.streamEvent!.STREAMING_STARTED)
+            guard let settings = Settings.getAlvrSettings() else {
+                fatalError("streaming started: failed to retrieve alvr settings")
+            }
+            let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
             videoFramePipelineState = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
                                 device: device,
                                 layerRenderer: layerRenderer,
@@ -352,8 +355,7 @@ class Renderer {
         if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
             alvr_report_compositor_start(queuedFrame!.timestamp)
         }
-        
-        
+
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
             if abs(lastIpd - ipd) > 0.001 {

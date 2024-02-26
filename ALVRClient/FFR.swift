@@ -8,6 +8,24 @@
 import Foundation
 import Metal
 
+struct FoveationSettings: Codable {
+    var centerSizeX: Float = 0
+    var centerSizeY: Float = 0
+    var centerShiftX: Float = 0
+    var centerShiftY: Float = 0
+    var edgeRatioX: Float = 0
+    var edgeRatioY: Float = 0
+
+    enum CodingKeys: String, CodingKey {
+        case centerSizeX = "center_size_x"
+        case centerSizeY = "center_size_y"
+        case centerShiftX = "center_shift_x"
+        case centerShiftY = "center_shift_y"
+        case edgeRatioX = "edge_ratio_x"
+        case edgeRatioY = "edge_ratio_y"
+    }
+}
+
 struct FoveationVars {
     let enabled: Bool
     
@@ -30,8 +48,8 @@ struct FoveationVars {
 struct FFR {
     private init() {}
     
-    public static func calculateFoveationVars(_ data: StreamingStarted_Body) -> FoveationVars {
-        guard data.enable_foveation else {
+    public static func calculateFoveationVars(alvrEvent: StreamingStarted_Body, foveationSettings: SettingsCodables.Switch<FoveationSettings>) -> FoveationVars {
+        guard case .content(let settings) = foveationSettings else {
             return FoveationVars(
                 enabled: false,
                 targetEyeWidth: 0,
@@ -48,16 +66,16 @@ struct FFR {
                 edgeRatioY: 0
             )
         }
+
+        let targetEyeWidth = Float(alvrEvent.view_width)
+        let targetEyeHeight = Float(alvrEvent.view_height)
         
-        let targetEyeWidth = Float(data.view_width)
-        let targetEyeHeight = Float(data.view_height)
-        
-        let centerSizeX = data.foveation_center_size_x
-        let centerSizeY = data.foveation_center_size_y
-        let centerShiftX = data.foveation_center_shift_x
-        let centerShiftY = data.foveation_center_shift_y
-        let edgeRatioX = data.foveation_edge_ratio_x
-        let edgeRatioY = data.foveation_edge_ratio_y
+        let centerSizeX = settings.centerSizeX
+        let centerSizeY = settings.centerSizeY
+        let centerShiftX = settings.centerShiftX
+        let centerShiftY = settings.centerShiftY
+        let edgeRatioX = settings.edgeRatioX
+        let edgeRatioY = settings.edgeRatioY
 
         let edgeSizeX = targetEyeWidth - centerSizeX * targetEyeWidth
         let edgeSizeY = targetEyeHeight - centerSizeY * targetEyeHeight
@@ -85,9 +103,9 @@ struct FFR {
         let eyeHeightRatioAligned = optimizedEyeHeight / Float(optimizedEyeHeightAligned)
         
         return FoveationVars(
-            enabled: data.enable_foveation,
-            targetEyeWidth: data.view_width,
-            targetEyeHeight: data.view_height,
+            enabled: true,
+            targetEyeWidth: alvrEvent.view_width,
+            targetEyeHeight: alvrEvent.view_height,
             optimizedEyeWidth: optimizedEyeWidthAligned,
             optimizedEyeHeight: optimizedEyeHeightAligned,
             eyeWidthRatio: eyeWidthRatioAligned,
