@@ -30,6 +30,10 @@ class WorldTracker {
     var crownPressCount = 0
     var sentPoses = 0
     
+    // Hand tracking
+    var lastHandsUpdatedTs: TimeInterval = 0
+    var lastSentHandsTs: TimeInterval = 0
+    
     static let maxPrediction = 30 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
     static let deviceIdLeftHand = alvr_path_string_to_id("/user/hand/left")
@@ -74,6 +78,8 @@ class WorldTracker {
     ]
     static let leftHandOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(-1.0, 0.0, 0.0)) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, -1.0))
     static let rightHandOrientationCorrection = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_float3(0.0, 0.0, -1.0)) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+    static let leftForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+    static let rightForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -235,6 +241,7 @@ class WorldTracker {
         for await update in handTracking.anchorUpdates {
             switch update.event {
             case .added, .updated:
+                lastHandsUpdatedTs = update.timestamp
                 break
             case .removed:
                 break
@@ -296,10 +303,6 @@ class WorldTracker {
         let middleProximalPosition = middleProximalTransform.columns.3
         let position = (middleMetacarpalPosition + middleProximalPosition) / 2.0
         
-        //let middleMetacarpalOrient = simd_quaternion(middleMetacarpalTransform)
-        //let middleProximalOrient = simd_quaternion(middleProximalTransform)
-        //var orientation = simd_slerp(middleMetacarpalOrient, middleProximalOrient, 0.5)
-        
         var orientation = simd_quaternion(wristTransform)
         if hand.chirality == .right {
             orientation = orientation * WorldTracker.rightHandOrientationCorrection
@@ -329,15 +332,6 @@ class WorldTracker {
         let rootOrientation = simd_quatf(ix: rootAlvrPose.orientation.x, iy: rootAlvrPose.orientation.y, iz: rootAlvrPose.orientation.z, r: rootAlvrPose.orientation.w)
         let rootPosition = simd_float3(x: rootAlvrPose.position.0, y: rootAlvrPose.position.1, z: rootAlvrPose.position.2)
         let rootPose = AlvrPose(orientation: AlvrQuat(x: rootOrientation.vector.x, y: rootOrientation.vector.y, z: rootOrientation.vector.z, w: rootOrientation.vector.w), position: (rootPosition.x, rootPosition.y, rootPosition.z))
-        /*let rootTransform = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform
-        var rootOrientation = simd_quaternion(rootTransform)
-        if hand.chirality == .right {
-            rootOrientation = rootOrientation * WorldTracker.rightHandOrientationCorrection
-        }
-        else {
-            rootOrientation = rootOrientation * WorldTracker.leftHandOrientationCorrection
-        }
-        let rootPosition = rootTransform.columns.3*/
         for i in 0...25+2 {
             ret.append(rootPose)
         }
@@ -356,6 +350,16 @@ class WorldTracker {
             }
             else {
                 orientation = orientation * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(-1.0, 0.0, 0.0))
+            }
+            
+            // Make wrist/elbow trackers face outward
+            if steamVrIdx == 26 || steamVrIdx == 27 {
+                if hand.chirality == .right {
+                    orientation = orientation * WorldTracker.rightForearmOrientationCorrection
+                }
+                else {
+                    orientation = orientation * WorldTracker.leftForearmOrientationCorrection
+                }
             }
             let position = transform.columns.3
             let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
@@ -437,13 +441,13 @@ class WorldTracker {
         
         let handPoses = handTracking.latestAnchors
         if let leftHand = handPoses.leftHand {
-            if leftHand.isTracked {
+            if leftHand.isTracked /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 trackingMotions.append(handAnchorToAlvrDeviceMotion(leftHand))
                 skeletonLeft = handAnchorToSkeleton(leftHand)
             }
         }
         if let rightHand = handPoses.rightHand {
-            if rightHand.isTracked {
+            if rightHand.isTracked /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 trackingMotions.append(handAnchorToAlvrDeviceMotion(rightHand))
                 skeletonRight = handAnchorToSkeleton(rightHand)
             }
@@ -476,6 +480,7 @@ class WorldTracker {
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
 
         EventHandler.shared.lastRequestedTimestamp = targetTimestampNS
+        lastSentHandsTs = lastHandsUpdatedTs
         alvr_send_tracking(targetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
     }
     
