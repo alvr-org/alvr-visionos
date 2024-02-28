@@ -175,8 +175,24 @@ fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<f
     );
     
     float3 rgb_uncorrect = (ycbcrToRGBTransform * ycbcr).rgb;
+    
+    /*const float DIV12 = 1. / 12.92;
+    const float DIV1 = 1. / 1.055;
+    const float THRESHOLD = 0.04045;
+    const float3 GAMMA = float3(2.6);
+        
+    float3 condition = float3(rgb_uncorrect.r < THRESHOLD, rgb_uncorrect.g < THRESHOLD, rgb_uncorrect.b < THRESHOLD);
+    float3 lowValues = rgb_uncorrect * DIV12;
+    float3 highValues = pow((rgb_uncorrect + 0.055) * DIV1, GAMMA);
+    float3 color = condition * lowValues + (1.0 - condition) * highValues;*/
 
-    float3 color = pow((rgb_uncorrect + 0.055), 2.6);
+    const float3x3 linearToDisplayP3 = {
+        float3(1.2249, -0.0420, -0.0197),
+        float3(-0.2247, 1.0419, -0.0786),
+        float3(0.0, 0.0, 1.0979),
+    };
+    
+    float3 color = linearToDisplayP3 * pow(rgb_uncorrect, 2.4);
     
     return float4(color.rgb, 1.0);
 }

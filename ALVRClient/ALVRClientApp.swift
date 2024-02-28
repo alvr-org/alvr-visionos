@@ -21,7 +21,7 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
         
         configuration.layout = supportedLayouts.contains(.layered) ? .layered : .dedicated
         
-        configuration.colorFormat = .bgr10a2Unorm
+        configuration.colorFormat = .rgba16Float
     }
 }
 #endif
