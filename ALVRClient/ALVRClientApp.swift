@@ -30,7 +30,7 @@ struct MetalRendererApp: App {
     @State private var model = ViewModel()
     @Environment(\.scenePhase) private var scenePhase
     @State private var clientImmersionStyle: ImmersionStyle = .full
-    //@State private var clientHandVisibility: Visibility = .visible
+    @ObservedObject var globalSettings = GlobalSettings.shared
 
     var body: some Scene {
         //Entry point, this is the default window chosen in Info.plist from UIApplicationPreferredDefaultSceneSessionRole
@@ -74,7 +74,7 @@ struct MetalRendererApp: App {
             }
         }
         .immersionStyle(selection: $clientImmersionStyle, in: .full)
-        .upperLimbVisibility(GlobalSettings.shared.showHandsOverlaid ? .visible : .hidden)
+        .upperLimbVisibility(globalSettings.showHandsOverlaid ? .visible : .hidden)
     }
     
 }
