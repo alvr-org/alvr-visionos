@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BuildMachineOSBuild</key>
+	<string>23C64</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>ALVRClientCore</string>
+	<key>CFBundleIdentifier</key>
+	<string>alvr.ALVRClientCore</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>ALVRClientCore</string>
+	<key>CFBundlePackageType</key>
+	<string>FMWK</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>XRSimulator</string>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>DTCompiler</key>
+	<string>com.apple.compilers.llvm.clang.1_0</string>
+	<key>DTPlatformBuild</key>
+	<string>21N301</string>
+	<key>DTPlatformName</key>
+	<string>xrsimulator</string>
+	<key>DTPlatformVersion</key>
+	<string>1.0</string>
+	<key>DTSDKBuild</key>
+	<string>21N301</string>
+	<key>DTSDKName</key>
+	<string>xrsimulator1.0</string>
+	<key>DTXcode</key>
+	<string>1530</string>
+	<key>DTXcodeBuild</key>
+	<string>15E5178i</string>
+	<key>MinimumOSVersion</key>
+	<string>1.0</string>
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>7</integer>
+	</array>
+</dict>
+</plist>
