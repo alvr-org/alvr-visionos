@@ -361,7 +361,12 @@ class WorldTracker {
                     orientation = orientation * WorldTracker.leftForearmOrientationCorrection
                 }
             }
-            let position = transform.columns.3
+            var position = transform.columns.3
+            // Move wrist/elbow slightly outward so that they appear to be on the surface of the arm,
+            // instead of inside it.
+            if steamVrIdx == 26 || steamVrIdx == 27 {
+                position += transform.columns.1 * (0.025 * (hand.chirality == .right ? 1.0 : -1.0))
+            }
             let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
             
             ret[steamVrIdx] = pose
