@@ -20,6 +20,8 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
         let supportedLayouts = capabilities.supportedLayouts(options: options)
         
         configuration.layout = supportedLayouts.contains(.layered) ? .layered : .dedicated
+        
+        configuration.colorFormat = .bgr10a2Unorm
     }
 }
 #endif

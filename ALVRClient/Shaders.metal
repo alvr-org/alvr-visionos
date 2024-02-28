@@ -165,7 +165,6 @@ fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<f
                                    min_filter::linear);
     float4 ySample = in_tex_y.sample(colorSampler, sampleCoord);
     float4 uvSample = in_tex_uv.sample(colorSampler, sampleCoord);
-    // TODO(zhuowei): gamma is wrong here
     float4 ycbcr = float4(ySample.r, uvSample.rg, 1.0f);
     
     const float4x4 ycbcrToRGBTransform = float4x4(
@@ -176,16 +175,8 @@ fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<f
     );
     
     float3 rgb_uncorrect = (ycbcrToRGBTransform * ycbcr).rgb;
-    
-    const float DIV12 = 1. / 12.92;
-    const float DIV1 = 1. / 1.055;
-    const float THRESHOLD = 0.04045;
-    const float3 GAMMA = float3(2.4);
-        
-    float3 condition = float3(rgb_uncorrect.r < THRESHOLD, rgb_uncorrect.g < THRESHOLD, rgb_uncorrect.b < THRESHOLD);
-    float3 lowValues = rgb_uncorrect * DIV12;
-    float3 highValues = pow((rgb_uncorrect + 0.055) * DIV1, GAMMA);
-    float3 color = condition * lowValues + (1.0 - condition) * highValues;
+
+    float3 color = pow((rgb_uncorrect + 0.055), 2.6);
     
     return float4(color.rgb, 1.0);
 }
