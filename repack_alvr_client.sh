@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 BUILDDIR="ALVR/target/aarch64-apple-ios/distribution"
-HEADERPATH="ALVR/alvr_client_core.h"
+HEADERPATH="ALVR/build/alvr_client_core.h"
 rm -r alvrrepack ALVRClientCore.xcframework || true
 mkdir -p alvrrepack/ios alvrrepack/maccatalyst alvrrepack/xros alvrrepack/xrsimulator alvrrepack/headers
 cp "$BUILDDIR/libalvr_client_core.dylib" alvrrepack/ios
