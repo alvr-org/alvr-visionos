@@ -150,7 +150,7 @@ vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
     return out;
 }
 
-fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
+fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
 // https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
     
     float2 sampleCoord;
