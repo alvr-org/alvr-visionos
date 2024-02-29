@@ -8,6 +8,7 @@ import CompositorServices
 
 class WorldTracker {
     static let shared = WorldTracker()
+    var settings: GlobalSettings!
     
     let arSession: ARKitSession!
     let worldTracking: WorldTrackingProvider!
@@ -49,7 +50,7 @@ class WorldTracker {
         }
     }
     
-    func initializeAr() async  {
+    func initializeAr(settings: GlobalSettings) async  {
     
         // Reset playspace state
         self.worldTrackingAddedOriginAnchor = false
@@ -58,6 +59,7 @@ class WorldTracker {
         self.lastUpdatedTs = 0
         self.crownPressCount = 0
         self.sentPoses = 0
+        self.settings = settings
         
         do {
             try await arSession.run([worldTracking, sceneReconstruction, planeDetection])
@@ -129,7 +131,7 @@ class WorldTracker {
                     self.worldOriginAnchor = update.anchor
 
                     let anchorTransform = update.anchor.originFromAnchorTransform
-                    if GlobalSettings.shared.keepSteamVRCenter {
+                    if settings.keepSteamVRCenter {
                         self.worldTrackingSteamVRTransform = anchorTransform
                     }
                     
@@ -162,7 +164,7 @@ class WorldTracker {
                             }
                     
                             self.worldOriginAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
-                            if GlobalSettings.shared.keepSteamVRCenter {
+                            if settings.keepSteamVRCenter {
                                 self.worldTrackingSteamVRTransform = anchorTransform
                             }
                             
