@@ -193,7 +193,7 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
     };
 
     //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
-    color = linearToDisplayP3 * color;
+    //color = linearToDisplayP3 * color;
     
     return float4(color.rgb, 1.0);
 }
