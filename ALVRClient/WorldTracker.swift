@@ -11,6 +11,7 @@ class WorldTracker {
     
     let arSession: ARKitSession!
     let worldTracking: WorldTrackingProvider!
+    let handTracking: HandTrackingProvider!
     let sceneReconstruction: SceneReconstructionProvider!
     let planeDetection: PlaneDetectionProvider!
     
@@ -29,12 +30,61 @@ class WorldTracker {
     var crownPressCount = 0
     var sentPoses = 0
     
+    // Hand tracking
+    var lastHandsUpdatedTs: TimeInterval = 0
+    var lastSentHandsTs: TimeInterval = 0
+    
     static let maxPrediction = 30 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
+    static let deviceIdLeftHand = alvr_path_string_to_id("/user/hand/left")
+    static let deviceIdRightHand = alvr_path_string_to_id("/user/hand/right")
+    static let deviceIdLeftForearm = alvr_path_string_to_id("/user/body/left_knee") // TODO: add a real forearm point?
+    static let deviceIdRightForearm = alvr_path_string_to_id("/user/body/right_knee") // TODO: add a real forearm point?
+    static let deviceIdLeftElbow = alvr_path_string_to_id("/user/body/left_elbow")
+    static let deviceIdRightElbow = alvr_path_string_to_id("/user/body/right_elbow")
+    static let appleHandToSteamVRIndex = [
+        //eBone_Root
+        "wrist": 1,                         //eBone_Wrist
+        "thumbKnuckle": 2,                  //eBone_Thumb0
+        "thumbIntermediateBase": 3,         //eBone_Thumb1
+        "thumbIntermediateTip": 4,          //eBone_Thumb2
+        "thumbTip": 5,                      //eBone_Thumb3
+        "indexFingerMetacarpal": 6,         //eBone_IndexFinger0
+        "indexFingerKnuckle": 7,            //eBone_IndexFinger1
+        "indexFingerIntermediateBase": 8,   //eBone_IndexFinger2
+        "indexFingerIntermediateTip": 9,    //eBone_IndexFinger3
+        "indexFingerTip": 10,               //eBone_IndexFinger4
+        "middleFingerMetacarpal": 11,       //eBone_MiddleFinger0
+        "middleFingerKnuckle": 12,                //eBone_MiddleFinger1
+        "middleFingerIntermediateBase": 13,       //eBone_MiddleFinger2
+        "middleFingerIntermediateTip": 14,        //eBone_MiddleFinger3
+        "middleFingerTip": 15,                    //eBone_MiddleFinger4
+        "ringFingerMetacarpal": 16,         //eBone_RingFinger0
+        "ringFingerKnuckle": 17,                  //eBone_RingFinger1
+        "ringFingerIntermediateBase": 18,         //eBone_RingFinger2
+        "ringFingerIntermediateTip": 19,          //eBone_RingFinger3
+        "ringFingerTip": 20,                      //eBone_RingFinger4
+        "littleFingerMetacarpal": 21,       //eBone_PinkyFinger0
+        "littleFingerKnuckle": 22,                //eBone_PinkyFinger1
+        "littleFingerIntermediateBase": 23,       //eBone_PinkyFinger2
+        "littleFingerIntermediateTip": 24,        //eBone_PinkyFinger3
+        "littleFingerTip": 25,                    //eBone_PinkyFinger4
+        
+        // SteamVR's 26-30 are aux bones and are done by ALVR
+        
+        // Special case: we want to stash these
+        "forearmWrist": 26,
+        "forearmArm": 27,
+    ]
+    static let leftHandOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(-1.0, 0.0, 0.0)) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, -1.0))
+    static let rightHandOrientationCorrection = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_float3(0.0, 0.0, -1.0)) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+    static let leftForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+    static let rightForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
     
-    init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
+    init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
         self.worldTracking = worldTracking
+        self.handTracking = handTracking
         self.sceneReconstruction = sceneReconstruction
         self.planeDetection = planeDetection
         
@@ -46,6 +96,9 @@ class WorldTracker {
         }
         Task {
             await processWorldTrackingUpdates()
+        }
+        Task {
+            await processHandTrackingUpdates()
         }
     }
     
@@ -60,7 +113,7 @@ class WorldTracker {
         self.sentPoses = 0
         
         do {
-            try await arSession.run([worldTracking, sceneReconstruction, planeDetection])
+            try await arSession.run([worldTracking, handTracking, sceneReconstruction, planeDetection])
         } catch {
             fatalError("Failed to initialize ARSession")
         }
@@ -181,8 +234,18 @@ class WorldTracker {
             case .removed:
                 break
             }
-            
-            
+        }
+    }
+    
+    func processHandTrackingUpdates() async {
+        for await update in handTracking.anchorUpdates {
+            switch update.event {
+            case .added, .updated:
+                lastHandsUpdatedTs = update.timestamp
+                break
+            case .removed:
+                break
+            }
         }
     }
     
@@ -205,7 +268,112 @@ class WorldTracker {
     func unlockPlaneAnchors() {
          objc_sync_exit(planeLock)
     }
+    
+    // Wrist-only pose
+    func handAnchorToPoseFallback(_ hand: HandAnchor) -> AlvrPose {
+        let transform = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform
+        var orientation = simd_quaternion(transform)
+        if hand.chirality == .right {
+            orientation = orientation * WorldTracker.rightHandOrientationCorrection
+        }
+        else {
+            orientation = orientation * WorldTracker.leftHandOrientationCorrection
+        }
+        let position = transform.columns.3
+        let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+        return pose
+    }
+    
+    // Palm pose for controllers
+    func handAnchorToPose(_ hand: HandAnchor) -> AlvrPose {
+        // Fall back to wrist pose
+        guard let skeleton = hand.handSkeleton else {
+            return handAnchorToPoseFallback(hand)
+        }
+        
+        let middleMetacarpal = skeleton.joint(.middleFingerMetacarpal)
+        let middleProximal = skeleton.joint(.middleFingerKnuckle)
+        let wrist = skeleton.joint(.wrist)
+        let middleMetacarpalTransform = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform * middleMetacarpal.anchorFromJointTransform
+        let middleProximalTransform = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform * middleProximal.anchorFromJointTransform
+        let wristTransform = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform * wrist.anchorFromJointTransform
+        
+        // Use the OpenXR definition of the palm, middle point between middle metacarpal and proximal.
+        let middleMetacarpalPosition = middleMetacarpalTransform.columns.3
+        let middleProximalPosition = middleProximalTransform.columns.3
+        let position = (middleMetacarpalPosition + middleProximalPosition) / 2.0
+        
+        var orientation = simd_quaternion(wristTransform)
+        if hand.chirality == .right {
+            orientation = orientation * WorldTracker.rightHandOrientationCorrection
+        }
+        else {
+            orientation = orientation * WorldTracker.leftHandOrientationCorrection
+        }
+        
+        let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+        return pose
+    }
 
+    func handAnchorToAlvrDeviceMotion(_ hand: HandAnchor) -> AlvrDeviceMotion {
+        let device_id = hand.chirality == .left ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
+        
+        let pose = handAnchorToPose(hand)
+        return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+    }
+    
+    func handAnchorToSkeleton(_ hand: HandAnchor) -> [AlvrPose]? {
+        var ret: [AlvrPose] = []
+        
+        guard let skeleton = hand.handSkeleton else {
+            return nil
+        }
+        let rootAlvrPose = handAnchorToPose(hand)
+        let rootOrientation = simd_quatf(ix: rootAlvrPose.orientation.x, iy: rootAlvrPose.orientation.y, iz: rootAlvrPose.orientation.z, r: rootAlvrPose.orientation.w)
+        let rootPosition = simd_float3(x: rootAlvrPose.position.0, y: rootAlvrPose.position.1, z: rootAlvrPose.position.2)
+        let rootPose = AlvrPose(orientation: AlvrQuat(x: rootOrientation.vector.x, y: rootOrientation.vector.y, z: rootOrientation.vector.z, w: rootOrientation.vector.w), position: (rootPosition.x, rootPosition.y, rootPosition.z))
+        for i in 0...25+2 {
+            ret.append(rootPose)
+        }
+        
+        // Apple has two additional joints: forearmWrist and forearmArm
+        for joint in skeleton.allJoints {
+            let steamVrIdx = WorldTracker.appleHandToSteamVRIndex[joint.name.description, default:-1]
+            if steamVrIdx == -1 || steamVrIdx >= 28 {
+                continue
+            }
+            let transformRaw = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform * joint.anchorFromJointTransform
+            let transform = transformRaw
+            var orientation = simd_quaternion(transform) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+            if hand.chirality == .right {
+                orientation = orientation * simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_float3(0.0, 0.0, -1.0))
+            }
+            else {
+                orientation = orientation * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(-1.0, 0.0, 0.0))
+            }
+            
+            // Make wrist/elbow trackers face outward
+            if steamVrIdx == 26 || steamVrIdx == 27 {
+                if hand.chirality == .right {
+                    orientation = orientation * WorldTracker.rightForearmOrientationCorrection
+                }
+                else {
+                    orientation = orientation * WorldTracker.leftForearmOrientationCorrection
+                }
+            }
+            var position = transform.columns.3
+            // Move wrist/elbow slightly outward so that they appear to be on the surface of the arm,
+            // instead of inside it.
+            if steamVrIdx == 26 || steamVrIdx == 27 {
+                position += transform.columns.1 * (0.025 * (hand.chirality == .right ? 1.0 : -1.0))
+            }
+            let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+            
+            ret[steamVrIdx] = pose
+        }
+        
+        return ret
+    }
     
     // TODO: figure out how stable Apple's predictions are into the future
     
@@ -263,17 +431,62 @@ class WorldTracker {
         deviceAnchorsDictionary[targetTimestampNS] = deviceAnchor.originFromAnchorTransform
 
         // Don't move SteamVR center/bounds when the headset recenters
-        var transform = self.worldTrackingSteamVRTransform.inverse * deviceAnchor.originFromAnchorTransform
+        let transform = self.worldTrackingSteamVRTransform.inverse * deviceAnchor.originFromAnchorTransform
         
         let orientation = simd_quaternion(transform)
         let position = transform.columns.3
-        let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
-        var trackingMotion = AlvrDeviceMotion(device_id: WorldTracker.deviceIdHead, pose: pose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
-        let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
-        let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
-        //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
+        let headPose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+        let headTrackingMotion = AlvrDeviceMotion(device_id: WorldTracker.deviceIdHead, pose: headPose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+        var trackingMotions = [headTrackingMotion]
+        var skeletonLeft:[AlvrPose]? = nil
+        var skeletonRight:[AlvrPose]? = nil
+        
+        var skeletonLeftPtr:UnsafeMutablePointer<AlvrPose>? = nil
+        var skeletonRightPtr:UnsafeMutablePointer<AlvrPose>? = nil
+        
+        let handPoses = handTracking.latestAnchors
+        if let leftHand = handPoses.leftHand {
+            if leftHand.isTracked /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+                trackingMotions.append(handAnchorToAlvrDeviceMotion(leftHand))
+                skeletonLeft = handAnchorToSkeleton(leftHand)
+            }
+        }
+        if let rightHand = handPoses.rightHand {
+            if rightHand.isTracked /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+                trackingMotions.append(handAnchorToAlvrDeviceMotion(rightHand))
+                skeletonRight = handAnchorToSkeleton(rightHand)
+            }
+        }
+        if let skeletonLeft = skeletonLeft {
+            if skeletonLeft.count >= 28 {
+                skeletonLeftPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 26)
+                for i in 0...25 {
+                    skeletonLeftPtr![i] = skeletonLeft[i]
+                }
+                
+                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftForearm, pose: skeletonLeft[26], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftElbow, pose: skeletonLeft[27], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+            }
+        }
+        if let skeletonRight = skeletonRight {
+            if skeletonRight.count >= 28 {
+                skeletonRightPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 26)
+                for i in 0...25 {
+                    skeletonRightPtr![i] = skeletonRight[i]
+                }
+                
+                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdRightForearm, pose: skeletonRight[26], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdRightElbow, pose: skeletonRight[27], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+            }
+        }
+        
+        //let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
+        //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
+        //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
+
         EventHandler.shared.lastRequestedTimestamp = targetTimestampNS
-        alvr_send_tracking(targetTimestampNS, &trackingMotion, 1, nil, nil)
+        lastSentHandsTs = lastHandsUpdatedTs
+        alvr_send_tracking(targetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
     }
     
     func lookupDeviceAnchorFor(timestamp: UInt64) -> simd_float4x4? {
