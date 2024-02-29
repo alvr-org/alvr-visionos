@@ -150,7 +150,7 @@ vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
     return out;
 }
 
-fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
+fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
 // https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
     
     float2 sampleCoord;
@@ -165,7 +165,6 @@ fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<f
                                    min_filter::linear);
     float4 ySample = in_tex_y.sample(colorSampler, sampleCoord);
     float4 uvSample = in_tex_uv.sample(colorSampler, sampleCoord);
-    // TODO(zhuowei): gamma is wrong here
     float4 ycbcr = float4(ySample.r, uvSample.rg, 1.0f);
     
     const float4x4 ycbcrToRGBTransform = float4x4(
@@ -186,6 +185,15 @@ fragment float4 videoFrameFragmentShader(ColorInOut in [[stage_in]], texture2d<f
     float3 lowValues = rgb_uncorrect * DIV12;
     float3 highValues = pow((rgb_uncorrect + 0.055) * DIV1, GAMMA);
     float3 color = condition * lowValues + (1.0 - condition) * highValues;
+
+    const float3x3 linearToDisplayP3 = {
+        float3(1.2249, -0.0420, -0.0197),
+        float3(-0.2247, 1.0419, -0.0786),
+        float3(0.0, 0.0, 1.0979),
+    };
+
+    //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
+    //color = linearToDisplayP3 * color;
     
     return float4(color.rgb, 1.0);
 }

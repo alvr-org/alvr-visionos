@@ -9,6 +9,155 @@ let H264_NAL_TYPE_SPS = 7
 let HEVC_NAL_TYPE_VPS = 32
 
 struct VideoHandler {
+    // Useful for debugging.
+    static let coreVideoPixelFormatToStr: [OSType:String] = [
+        kCVPixelFormatType_128RGBAFloat: "128RGBAFloat",
+        kCVPixelFormatType_14Bayer_BGGR: "BGGR",
+        kCVPixelFormatType_14Bayer_GBRG: "GBRG",
+        kCVPixelFormatType_14Bayer_GRBG: "GRBG",
+        kCVPixelFormatType_14Bayer_RGGB: "RGGB",
+        kCVPixelFormatType_16BE555: "16BE555",
+        kCVPixelFormatType_16BE565: "16BE565",
+        kCVPixelFormatType_16Gray: "16Gray",
+        kCVPixelFormatType_16LE5551: "16LE5551",
+        kCVPixelFormatType_16LE555: "16LE555",
+        kCVPixelFormatType_16LE565: "16LE565",
+        kCVPixelFormatType_16VersatileBayer: "16VersatileBayer",
+        kCVPixelFormatType_1IndexedGray_WhiteIsZero: "WhiteIsZero",
+        kCVPixelFormatType_1Monochrome: "1Monochrome",
+        kCVPixelFormatType_24BGR: "24BGR",
+        kCVPixelFormatType_24RGB: "24RGB",
+        kCVPixelFormatType_2Indexed: "2Indexed",
+        kCVPixelFormatType_2IndexedGray_WhiteIsZero: "WhiteIsZero",
+        kCVPixelFormatType_30RGB: "30RGB",
+        kCVPixelFormatType_30RGBLEPackedWideGamut: "30RGBLEPackedWideGamut",
+        kCVPixelFormatType_32ABGR: "32ABGR",
+        kCVPixelFormatType_32ARGB: "32ARGB",
+        kCVPixelFormatType_32AlphaGray: "32AlphaGray",
+        kCVPixelFormatType_32BGRA: "32BGRA",
+        kCVPixelFormatType_32RGBA: "32RGBA",
+        kCVPixelFormatType_40ARGBLEWideGamut: "40ARGBLEWideGamut",
+        kCVPixelFormatType_40ARGBLEWideGamutPremultiplied: "40ARGBLEWideGamutPremultiplied",
+        kCVPixelFormatType_420YpCbCr10BiPlanarFullRange: "420YpCbCr10BiPlanarFullRange",
+        kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange: "420YpCbCr10BiPlanarVideoRange",
+        kCVPixelFormatType_420YpCbCr8BiPlanarFullRange: "420YpCbCr8BiPlanarFullRange",
+        kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange: "420YpCbCr8BiPlanarVideoRange",
+        kCVPixelFormatType_420YpCbCr8Planar: "420YpCbCr8Planar",
+        kCVPixelFormatType_420YpCbCr8PlanarFullRange: "420YpCbCr8PlanarFullRange",
+        kCVPixelFormatType_420YpCbCr8VideoRange_8A_TriPlanar: "TriPlanar",
+        kCVPixelFormatType_422YpCbCr10: "422YpCbCr10",
+        kCVPixelFormatType_422YpCbCr10BiPlanarFullRange: "422YpCbCr10BiPlanarFullRange",
+        kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange: "422YpCbCr10BiPlanarVideoRange",
+        kCVPixelFormatType_422YpCbCr16: "422YpCbCr16",
+        kCVPixelFormatType_422YpCbCr16BiPlanarVideoRange: "422YpCbCr16BiPlanarVideoRange",
+        kCVPixelFormatType_422YpCbCr8: "422YpCbCr8",
+        kCVPixelFormatType_422YpCbCr8BiPlanarFullRange: "422YpCbCr8BiPlanarFullRange",
+        kCVPixelFormatType_422YpCbCr8BiPlanarVideoRange: "422YpCbCr8BiPlanarVideoRange",
+        kCVPixelFormatType_422YpCbCr8FullRange: "422YpCbCr8FullRange",
+        kCVPixelFormatType_422YpCbCr8_yuvs: "yuvs",
+        kCVPixelFormatType_422YpCbCr_4A_8BiPlanar: "8BiPlanar",
+        kCVPixelFormatType_4444AYpCbCr16: "4444AYpCbCr16",
+        kCVPixelFormatType_4444AYpCbCr8: "4444AYpCbCr8",
+        kCVPixelFormatType_4444YpCbCrA8: "4444YpCbCrA8",
+        kCVPixelFormatType_4444YpCbCrA8R: "4444YpCbCrA8R",
+        kCVPixelFormatType_444YpCbCr10: "444YpCbCr10",
+        kCVPixelFormatType_444YpCbCr10BiPlanarFullRange: "444YpCbCr10BiPlanarFullRange",
+        kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange: "444YpCbCr10BiPlanarVideoRange",
+        kCVPixelFormatType_444YpCbCr16BiPlanarVideoRange: "444YpCbCr16BiPlanarVideoRange",
+        kCVPixelFormatType_444YpCbCr16VideoRange_16A_TriPlanar: "TriPlanar",
+        kCVPixelFormatType_444YpCbCr8: "444YpCbCr8",
+        kCVPixelFormatType_444YpCbCr8BiPlanarFullRange: "444YpCbCr8BiPlanarFullRange",
+        kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange: "444YpCbCr8BiPlanarVideoRange",
+        kCVPixelFormatType_48RGB: "48RGB",
+        kCVPixelFormatType_4Indexed: "4Indexed",
+        kCVPixelFormatType_4IndexedGray_WhiteIsZero: "WhiteIsZero",
+        kCVPixelFormatType_64ARGB: "64ARGB",
+        kCVPixelFormatType_64RGBAHalf: "64RGBAHalf",
+        kCVPixelFormatType_64RGBALE: "64RGBALE",
+        kCVPixelFormatType_64RGBA_DownscaledProResRAW: "DownscaledProResRAW",
+        kCVPixelFormatType_8Indexed: "8Indexed",
+        kCVPixelFormatType_8IndexedGray_WhiteIsZero: "WhiteIsZero",
+        kCVPixelFormatType_ARGB2101010LEPacked: "ARGB2101010LEPacked",
+        kCVPixelFormatType_DepthFloat16: "DepthFloat16",
+        kCVPixelFormatType_DepthFloat32: "DepthFloat32",
+        kCVPixelFormatType_DisparityFloat16: "DisparityFloat16",
+        kCVPixelFormatType_DisparityFloat32: "DisparityFloat32",
+        kCVPixelFormatType_Lossless_32BGRA: "32BGRA",
+        kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange: "420YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange: "420YpCbCr8BiPlanarFullRange",
+        kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange: "420YpCbCr8BiPlanarVideoRange",
+        kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarVideoRange: "422YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_Lossy_32BGRA: "32BGRA",
+        kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarVideoRange: "420YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange: "420YpCbCr8BiPlanarFullRange",
+        kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange: "420YpCbCr8BiPlanarVideoRange",
+        kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarVideoRange: "422YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_OneComponent10: "OneComponent10",
+        kCVPixelFormatType_OneComponent12: "OneComponent12",
+        kCVPixelFormatType_OneComponent16: "OneComponent16",
+        kCVPixelFormatType_OneComponent16Half: "OneComponent16Half",
+        kCVPixelFormatType_OneComponent32Float: "OneComponent32Float",
+        kCVPixelFormatType_OneComponent8: "OneComponent8",
+        kCVPixelFormatType_TwoComponent16: "TwoComponent16",
+        kCVPixelFormatType_TwoComponent16Half: "TwoComponent16Half",
+        kCVPixelFormatType_TwoComponent32Float: "TwoComponent32Float",
+        kCVPixelFormatType_TwoComponent8: "TwoComponent8",
+        
+        // Internal formats?
+        0x61766331: "NonDescriptH264",
+        0x68766331: "NonDescriptHVC1"
+    ]
+    
+    // Get bits per component for video format
+    static func getBpcForVideoFormat(_ videoFormat: CMFormatDescription) -> Int {
+        let bpcRaw = videoFormat.extensions["BitsPerComponent" as CFString]
+        return (bpcRaw != nil ? bpcRaw as! NSNumber : 8).intValue
+    }
+    
+    // Returns true if video format is full-range
+    static func getIsFullRangeForVideoFormat(_ videoFormat: CMFormatDescription) -> Bool {
+        let isFullVideoRaw = videoFormat.extensions["FullRangeVideo" as CFString]
+        return ((isFullVideoRaw != nil ? isFullVideoRaw as! NSNumber : 0).intValue != 0)
+    }
+    
+    // The Metal texture formats for each of the planes of a given CVPixelFormatType
+    static func getTextureTypesForFormat(_ format: OSType) -> [MTLPixelFormat]
+    {
+        switch(format) {
+            // 8-bit biplanar
+            case kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange,
+                 kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                 kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_422YpCbCr8BiPlanarVideoRange,
+                 kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange,
+                 kCVPixelFormatType_444YpCbCr8BiPlanarFullRange:
+                return [MTLPixelFormat.r8Unorm, MTLPixelFormat.rg8Unorm]
+
+            // 10-bit biplanar
+            case kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+                 kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
+                 kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange,
+                 kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange:
+                return [MTLPixelFormat.r16Unorm, MTLPixelFormat.rg16Unorm]
+
+            // Guess 8-bit biplanar otherwise
+            default:
+                let formatStr = coreVideoPixelFormatToStr[format, default: "unknown"]
+                print("Warning: Pixel format \(formatStr) (\(format)) is not currently accounted for! Returning 8-bit vals")
+                return [MTLPixelFormat.r8Unorm, MTLPixelFormat.rg8Unorm]
+        }
+    }
+
     static func pollNal() -> (Data, UInt64)? {
         let nalLength = alvr_poll_nal(nil, nil)
         if nalLength == 0 {
@@ -128,8 +277,21 @@ struct VideoHandler {
         }
         print(videoFormat!)
         
+        // We need our pixels unpacked for 10-bit so that the Metal textures actually work
+        var pixelFormat:OSType? = nil
+        let bpc = getBpcForVideoFormat(videoFormat!)
+        let isFullRange = getIsFullRangeForVideoFormat(videoFormat!)
+        
+        // TODO: figure out how to check for 422/444, CVImageBufferChromaLocationBottomField?
+        if bpc == 10 {
+            pixelFormat = isFullRange ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+        }
+        
         let videoDecoderSpecification:[NSString: AnyObject] = [kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder:kCFBooleanTrue]
-        let destinationImageBufferAttributes:[NSString: AnyObject] = [kCVPixelBufferMetalCompatibilityKey: true as NSNumber, kCVPixelBufferPoolMinimumBufferCountKey: 3 as NSNumber]
+        var destinationImageBufferAttributes:[NSString: AnyObject] = [kCVPixelBufferMetalCompatibilityKey: true as NSNumber, kCVPixelBufferPoolMinimumBufferCountKey: 3 as NSNumber]
+        if pixelFormat != nil {
+            destinationImageBufferAttributes[kCVPixelBufferPixelFormatTypeKey] = pixelFormat! as NSNumber
+        }
 
         var decompressionSession:VTDecompressionSession? = nil
         err = VTDecompressionSessionCreate(allocator: nil, formatDescription: videoFormat!, decoderSpecification: videoDecoderSpecification as CFDictionary, imageBufferAttributes: destinationImageBufferAttributes as CFDictionary, outputCallback: nil, decompressionSessionOut: &decompressionSession)
