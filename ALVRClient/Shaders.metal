@@ -176,23 +176,24 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
     
     float3 rgb_uncorrect = (ycbcrToRGBTransform * ycbcr).rgb;
     
-    /*const float DIV12 = 1. / 12.92;
+    const float DIV12 = 1. / 12.92;
     const float DIV1 = 1. / 1.055;
     const float THRESHOLD = 0.04045;
-    const float3 GAMMA = float3(2.6);
+    const float3 GAMMA = float3(2.4);
         
     float3 condition = float3(rgb_uncorrect.r < THRESHOLD, rgb_uncorrect.g < THRESHOLD, rgb_uncorrect.b < THRESHOLD);
     float3 lowValues = rgb_uncorrect * DIV12;
     float3 highValues = pow((rgb_uncorrect + 0.055) * DIV1, GAMMA);
-    float3 color = condition * lowValues + (1.0 - condition) * highValues;*/
+    float3 color = condition * lowValues + (1.0 - condition) * highValues;
 
     const float3x3 linearToDisplayP3 = {
         float3(1.2249, -0.0420, -0.0197),
         float3(-0.2247, 1.0419, -0.0786),
         float3(0.0, 0.0, 1.0979),
     };
-    
-    float3 color = linearToDisplayP3 * pow(rgb_uncorrect, 2.4);
+
+    //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
+    color = linearToDisplayP3 * color;
     
     return float4(color.rgb, 1.0);
 }
