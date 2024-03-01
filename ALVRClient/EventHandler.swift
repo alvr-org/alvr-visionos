@@ -33,6 +33,7 @@ class EventHandler: ObservableObject {
     var frameQueueLastTimestamp: UInt64 = 0
     var frameQueueLastImageBuffer: CVImageBuffer? = nil
     var lastQueuedFrame: QueuedFrame? = nil
+    var lastQueuedFramePose: simd_float4x4? = nil
     var lastRequestedTimestamp: UInt64 = 0
     var lastSubmittedTimestamp: UInt64 = 0
     var lastIpd: Float = -1

@@ -443,12 +443,29 @@ class Renderer {
         
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
-        let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
+        var framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
 
         var missingAnchor = false
         if renderingStreaming && queuedFrame != nil && framePreviouslyPredictedPose == nil {
             print("missing anchor!!", queuedFrame!.timestamp)
-            missingAnchor = true
+            
+            // Last minute reprojection??
+            if EventHandler.shared.lastQueuedFrame != nil {
+                print("falling back to last frame last-minute")
+                queuedFrame = EventHandler.shared.lastQueuedFrame
+                framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
+                if framePreviouslyPredictedPose == nil {
+                    framePreviouslyPredictedPose = EventHandler.shared.lastQueuedFramePose
+                }
+                
+                if framePreviouslyPredictedPose == nil {
+                    print("darn, no pose for that one either")
+                    missingAnchor = true
+                }
+            }
+            else {
+                missingAnchor = true
+            }
             
             // Try and avoid weird anchored past frames from sneaking in.
             if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
@@ -488,14 +505,17 @@ class Renderer {
             // Don't show frame if we haven't sent the view config and received frames
             // with that config applied.
             frameIsSuitableForDisplaying = false
+            print("IPD is bad, no frame")
         }
-        if !WorldTracker.shared.worldTrackingAddedOriginAnchor {
+        if !WorldTracker.shared.worldTrackingAddedOriginAnchor && EventHandler.shared.framesRendered < 300 {
             // Don't show frame if we haven't figured out our origin yet.
             frameIsSuitableForDisplaying = false
+            print("Origin is bad, no frame")
         }
         if missingAnchor {
             // We can't timewarp any more, so stop rendering
             frameIsSuitableForDisplaying = false
+            print("Missing anchor, no frame")
         }
         
         if renderingStreaming && frameIsSuitableForDisplaying {
@@ -513,6 +533,7 @@ class Renderer {
         frame.endSubmission()
         
         EventHandler.shared.lastQueuedFrame = queuedFrame
+        EventHandler.shared.lastQueuedFramePose = framePreviouslyPredictedPose
     }
     
     func planeToColor(plane: PlaneAnchor) -> simd_float4 {

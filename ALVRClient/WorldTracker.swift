@@ -103,6 +103,7 @@ class WorldTracker {
     }
     
     func resetPlayspace() {
+        print("Reset playspace")
         // Reset playspace state
         self.worldTrackingAddedOriginAnchor = false
         self.worldTrackingSteamVRTransform = matrix_identity_float4x4
@@ -188,8 +189,8 @@ class WorldTracker {
                     // This seems to happen when headset is removed, or on app close.
                     if !update.anchor.isTracked {
                         print("Headset removed?")
-                        EventHandler.shared.handleHeadsetRemoved()
-                        resetPlayspace()
+                        //EventHandler.shared.handleHeadsetRemoved()
+                        //resetPlayspace()
                         continue
                     }
 
@@ -414,6 +415,7 @@ class WorldTracker {
             // Prevent audio crackling issues
             if sentPoses > 30 {
                 EventHandler.shared.handleHeadsetRemoved()
+                resetPlayspace()
             }
             return
         }
