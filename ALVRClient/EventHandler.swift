@@ -34,7 +34,7 @@ class EventHandler: ObservableObject {
     var lastQueuedFrame: QueuedFrame? = nil
     var lastRequestedTimestamp: UInt64 = 0
     var lastSubmittedTimestamp: UInt64 = 0
-
+    var lastIpd: Float = -1
 
     var framesSinceLastIDR:Int = 0
     var framesSinceLastDecode:Int = 0
@@ -136,6 +136,7 @@ class EventHandler: ObservableObject {
                 alvr_request_idr()
                 framesSinceLastIDR = 0
                 framesSinceLastDecode = 0
+                lastIpd = -1
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
                 streamingActive = false
@@ -147,6 +148,7 @@ class EventHandler: ObservableObject {
                   framesRendered = 0
                   framesSinceLastIDR = 0
                   framesSinceLastDecode = 0
+                  lastIpd = -1
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
             case ALVR_EVENT_DECODER_CONFIG.rawValue:

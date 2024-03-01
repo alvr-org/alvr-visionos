@@ -78,7 +78,6 @@ class Renderer {
     var videoFramePipelineState_YpCbCrBiPlanar: MTLRenderPipelineState!
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
-    var lastIpd:Float = -1
     
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
@@ -416,9 +415,10 @@ class Renderer {
 
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
-            if abs(lastIpd - ipd) > 0.001 {
+            if abs(EventHandler.shared.lastIpd - ipd) > 0.001 {
                 print("Send view config")
-                lastIpd = ipd
+                EventHandler.shared.lastIpd = ipd
+                EventHandler.shared.framesRendered = 0
                 let leftAngles = atan(drawable.views[0].tangents)
                 let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
@@ -469,7 +469,13 @@ class Renderer {
             semaphore.signal()
         }
         
-        if renderingStreaming {
+        // List of reasons to not display a frame
+        var frameIsSuitableForDisplaying = true
+        if EventHandler.shared.lastIpd == -1 && EventHandler.shared.framesRendered > 10 {
+            frameIsSuitableForDisplaying = false
+        }
+        
+        if renderingStreaming && frameIsSuitableForDisplaying {
             renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
         }
         else {
