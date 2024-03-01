@@ -376,6 +376,7 @@ class Renderer {
                 // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
                 if EventHandler.shared.lastQueuedFrame != nil {
                     queuedFrame = EventHandler.shared.lastQueuedFrame
+                    EventHandler.shared.framesRendered -= 1
                     break
                 }
                 
@@ -387,6 +388,7 @@ class Renderer {
         
         if queuedFrame == nil && streamingActiveForFrame {
             streamingActiveForFrame = false
+            EventHandler.shared.framesRendered -= 1
         }
         
         guard let frame = layerRenderer.queryNextFrame() else { return }
@@ -442,6 +444,11 @@ class Renderer {
 
         if renderingStreaming && queuedFrame != nil && framePreviouslyPredictedPose == nil {
             print("missing anchor!!", queuedFrame!.timestamp)
+            
+            // Try and avoid weird anchored past frames from sneaking in.
+            if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
+                EventHandler.shared.framesRendered = 0
+            }
         }
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
@@ -471,7 +478,13 @@ class Renderer {
         
         // List of reasons to not display a frame
         var frameIsSuitableForDisplaying = true
-        if EventHandler.shared.lastIpd == -1 && EventHandler.shared.framesRendered > 10 {
+        if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
+            // Don't show frame if we haven't sent the view config and received frames
+            // with that config applied.
+            frameIsSuitableForDisplaying = false
+        }
+        if !WorldTracker.shared.worldTrackingAddedOriginAnchor {
+            // Don't show frame if we haven't figured out our origin yet.
             frameIsSuitableForDisplaying = false
         }
         
@@ -483,9 +496,7 @@ class Renderer {
         }
         
         drawable.encodePresent(commandBuffer: commandBuffer)
-        
         commandBuffer.commit()
-        
         frame.endSubmission()
         
         EventHandler.shared.lastQueuedFrame = queuedFrame
@@ -811,6 +822,7 @@ class Renderer {
     
     func renderLoop() {
         layerRenderer.waitUntilRunning()
+        EventHandler.shared.handleHeadsetRemovedOrReentry()
         while EventHandler.shared.renderStarted {
             if layerRenderer.state == .invalidated {
                 print("Layer is invalidated")
@@ -818,6 +830,7 @@ class Renderer {
                 break
             } else if layerRenderer.state == .paused {
                 layerRenderer.waitUntilRunning()
+                EventHandler.shared.handleHeadsetRemovedOrReentry()
                 continue
             } else {
                 autoreleasepool {

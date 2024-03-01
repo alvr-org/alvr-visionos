@@ -102,8 +102,7 @@ class WorldTracker {
         }
     }
     
-    func initializeAr() async  {
-    
+    func resetPlayspace() {
         // Reset playspace state
         self.worldTrackingAddedOriginAnchor = false
         self.worldTrackingSteamVRTransform = matrix_identity_float4x4
@@ -111,6 +110,10 @@ class WorldTracker {
         self.lastUpdatedTs = 0
         self.crownPressCount = 0
         self.sentPoses = 0
+    }
+    
+    func initializeAr() async  {
+        resetPlayspace()
         
         do {
             try await arSession.run([worldTracking, handTracking, sceneReconstruction, planeDetection])
@@ -175,6 +178,7 @@ class WorldTracker {
                         }
                     
                         worldOriginAnchor = update.anchor
+                        self.worldTrackingAddedOriginAnchor = true
                     }
                 }
                 
@@ -215,6 +219,7 @@ class WorldTracker {
                             }
                     
                             self.worldOriginAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
+                            self.worldTrackingAddedOriginAnchor = true
                             if GlobalSettings.shared.keepSteamVRCenter {
                                 self.worldTrackingSteamVRTransform = anchorTransform
                             }

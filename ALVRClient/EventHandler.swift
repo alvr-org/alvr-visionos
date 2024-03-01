@@ -92,11 +92,22 @@ class EventHandler: ObservableObject {
         framesSinceLastIDR = 0
         framesSinceLastDecode = 0
         lastIpd = -1
+        lastQueuedFrame = nil
         updateConnectionState(.disconnected)
                   
         stop()
         initializeAlvr()
         start()
+    }
+    
+    func handleHeadsetRemovedOrReentry() {
+        lastIpd = -1
+        framesRendered = 0
+        framesSinceLastIDR = 0
+        framesSinceLastDecode = 0
+        lastRequestedTimestamp = 0
+        lastSubmittedTimestamp = 0
+        lastQueuedFrame = nil
     }
 
     func fixAudioForDirectStereo() {

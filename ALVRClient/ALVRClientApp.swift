@@ -61,8 +61,10 @@ struct MetalRendererApp: App {
                 break
             case .active:
                 // Scene active, make sure everything is started if it isn't
+                WorldTracker.shared.resetPlayspace()
                 EventHandler.shared.initializeAlvr()
                 EventHandler.shared.start()
+                EventHandler.shared.handleHeadsetRemovedOrReentry()
                 break
             @unknown default:
                 break
