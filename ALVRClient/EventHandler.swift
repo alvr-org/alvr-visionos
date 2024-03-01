@@ -72,14 +72,31 @@ class EventHandler: ObservableObject {
     }
     
     func stop() {
-        if renderStarted {
+        inputRunning = false
+        if alvrInitialized {
             print("Stopping")
-            inputRunning = false
             renderStarted = false
             alvr_destroy()
             alvrInitialized = false
         }
         updateConnectionState(.disconnected)
+    }
+    
+    func hardReset() {
+        streamingActive = false
+        vtDecompressionSession = nil
+        videoFormat = nil
+        lastRequestedTimestamp = 0
+        lastSubmittedTimestamp = 0
+        framesRendered = 0
+        framesSinceLastIDR = 0
+        framesSinceLastDecode = 0
+        lastIpd = -1
+        updateConnectionState(.disconnected)
+                  
+        stop()
+        initializeAlvr()
+        start()
     }
 
     func fixAudioForDirectStereo() {
@@ -139,16 +156,8 @@ class EventHandler: ObservableObject {
                 lastIpd = -1
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
-                streamingActive = false
-                EventHandler.shared.updateConnectionState(.disconnected)
-                vtDecompressionSession = nil
-                  videoFormat = nil
-                  lastRequestedTimestamp = 0
-                  lastSubmittedTimestamp = 0
-                  framesRendered = 0
-                  framesSinceLastIDR = 0
-                  framesSinceLastDecode = 0
-                  lastIpd = -1
+                hardReset()
+                return
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
             case ALVR_EVENT_DECODER_CONFIG.rawValue:
