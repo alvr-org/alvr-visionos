@@ -184,6 +184,14 @@ class WorldTracker {
                 
                 if update.anchor.id == worldOriginAnchor.id {
                     self.worldOriginAnchor = update.anchor
+                    
+                    // This seems to happen when headset is removed, or on app close.
+                    if !update.anchor.isTracked {
+                        print("Headset removed?")
+                        EventHandler.shared.handleHeadsetRemoved()
+                        resetPlayspace()
+                        continue
+                    }
 
                     let anchorTransform = update.anchor.originFromAnchorTransform
                     if GlobalSettings.shared.keepSteamVRCenter {
@@ -403,6 +411,10 @@ class WorldTracker {
 
         // Well, I'm out of ideas.
         guard let deviceAnchor = deviceAnchor else {
+            // Prevent audio crackling issues
+            if sentPoses > 30 {
+                EventHandler.shared.handleHeadsetRemoved()
+            }
             return
         }
         

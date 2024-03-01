@@ -54,17 +54,29 @@ struct MetalRendererApp: App {
             case .background:
                 if !model.isShowingClient {
                     //Lobby closed manually: disconnect ALVR
-                    EventHandler.shared.stop()
+                    //EventHandler.shared.stop()
+                    if EventHandler.shared.alvrInitialized {
+                        alvr_pause()
+                    }
+                }
+                if !EventHandler.shared.streamingActive {
+                    EventHandler.shared.handleHeadsetRemoved()
                 }
             case .inactive:
                 // Scene inactive, currently no action for this
                 break
             case .active:
                 // Scene active, make sure everything is started if it isn't
-                WorldTracker.shared.resetPlayspace()
-                EventHandler.shared.initializeAlvr()
-                EventHandler.shared.start()
-                EventHandler.shared.handleHeadsetRemovedOrReentry()
+                if !model.isShowingClient {
+                    WorldTracker.shared.resetPlayspace()
+                    EventHandler.shared.initializeAlvr()
+                    EventHandler.shared.start()
+                    EventHandler.shared.handleHeadsetRemovedOrReentry()
+                }
+                if EventHandler.shared.alvrInitialized {
+                    alvr_resume()
+                }
+                EventHandler.shared.handleHeadsetEntered()
                 break
             @unknown default:
                 break

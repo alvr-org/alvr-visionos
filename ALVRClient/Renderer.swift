@@ -381,14 +381,17 @@ class Renderer {
                 }
                 
                 if CACurrentMediaTime() - startPollTime > 0.002 {
+                    EventHandler.shared.framesRendered -= 1
                     break
                 }
             }
         }
+        else {
+            EventHandler.shared.framesRendered -= 1
+        }
         
         if queuedFrame == nil && streamingActiveForFrame {
             streamingActiveForFrame = false
-            EventHandler.shared.framesRendered -= 1
         }
         
         guard let frame = layerRenderer.queryNextFrame() else { return }
@@ -442,8 +445,10 @@ class Renderer {
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
 
+        var missingAnchor = false
         if renderingStreaming && queuedFrame != nil && framePreviouslyPredictedPose == nil {
             print("missing anchor!!", queuedFrame!.timestamp)
+            missingAnchor = true
             
             // Try and avoid weird anchored past frames from sneaking in.
             if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
@@ -478,6 +483,7 @@ class Renderer {
         
         // List of reasons to not display a frame
         var frameIsSuitableForDisplaying = true
+        //print(EventHandler.shared.lastIpd, WorldTracker.shared.worldTrackingAddedOriginAnchor, EventHandler.shared.framesRendered)
         if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
             // Don't show frame if we haven't sent the view config and received frames
             // with that config applied.
@@ -487,11 +493,18 @@ class Renderer {
             // Don't show frame if we haven't figured out our origin yet.
             frameIsSuitableForDisplaying = false
         }
+        if missingAnchor {
+            // We can't timewarp any more, so stop rendering
+            frameIsSuitableForDisplaying = false
+        }
         
         if renderingStreaming && frameIsSuitableForDisplaying {
+            //print("render")
             renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
         }
         else {
+            // TODO: draw a cool loading logo
+            // TODO: maybe also show the room in wireframe or something cool here
             renderNothing(drawable: drawable, commandBuffer: commandBuffer)
         }
         
@@ -823,14 +836,25 @@ class Renderer {
     func renderLoop() {
         layerRenderer.waitUntilRunning()
         EventHandler.shared.handleHeadsetRemovedOrReentry()
+        var timeSinceLastLoop = CACurrentMediaTime()
         while EventHandler.shared.renderStarted {
             if layerRenderer.state == .invalidated {
                 print("Layer is invalidated")
-                EventHandler.shared.stop()
+                //EventHandler.shared.stop()
+                EventHandler.shared.handleHeadsetRemovedOrReentry()
+                EventHandler.shared.handleHeadsetRemoved()
+                WorldTracker.shared.resetPlayspace()
+                alvr_pause()
+
+                // visionOS sometimes sends these invalidated things really fkn late...
+                // But generally, we want to exit fully when the user exits.
+                if CACurrentMediaTime() - timeSinceLastLoop < 1.0 {
+                    exit(0)
+                }
                 break
             } else if layerRenderer.state == .paused {
                 layerRenderer.waitUntilRunning()
-                EventHandler.shared.handleHeadsetRemovedOrReentry()
+                //EventHandler.shared.handleHeadsetRemovedOrReentry()
                 continue
             } else {
                 autoreleasepool {
