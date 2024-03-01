@@ -472,6 +472,9 @@ class Renderer {
         if renderingStreaming {
             renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
         }
+        else {
+            renderNothing(drawable: drawable, commandBuffer: commandBuffer)
+        }
         
         drawable.encodePresent(commandBuffer: commandBuffer)
         
@@ -590,6 +593,53 @@ class Renderer {
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.popDebugGroup()
+        renderEncoder.endEncoding()
+    }
+    
+    func renderNothing(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer) {
+        let renderPassDescriptor = MTLRenderPassDescriptor()
+        renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
+        renderPassDescriptor.colorAttachments[0].loadAction = .load
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
+        renderPassDescriptor.depthAttachment.loadAction = .clear
+        renderPassDescriptor.depthAttachment.storeAction = .store
+        renderPassDescriptor.depthAttachment.clearDepth = 0.0
+        renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
+        if layerRenderer.configuration.layout == .layered {
+            renderPassDescriptor.renderTargetArrayLength = drawable.views.count
+        }
+        
+        /// Final pass rendering code here
+        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            fatalError("Failed to create render encoder")
+        }
+        
+        renderEncoder.label = "Rendering Nothing"
+        
+        renderEncoder.pushDebugGroup("Draw Nothing")
+        renderEncoder.setCullMode(.back)
+        renderEncoder.setFrontFacing(.counterClockwise)
+        renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
+        renderEncoder.setDepthStencilState(depthStateGreater)
+        
+        renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
+        renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
+        
+        let viewports = drawable.views.map { $0.textureMap.viewport }
+        
+        renderEncoder.setViewports(viewports)
+        
+        if drawable.views.count > 1 {
+            var viewMappings = (0..<drawable.views.count).map {
+                MTLVertexAmplificationViewMapping(viewportArrayIndexOffset: UInt32($0),
+                                                  renderTargetArrayIndexOffset: UInt32($0))
+            }
+            renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
+        }
+        
+        
         renderEncoder.endEncoding()
     }
     
