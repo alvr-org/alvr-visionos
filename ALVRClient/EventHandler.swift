@@ -50,6 +50,7 @@ class EventHandler: ObservableObject {
     var timeLastAlvrEvent: Double = 0.0
     var timeLastFrameGot: Double = 0.0
     var timeLastFrameSent: Double = 0.0
+    var numberOfEventThreadRestarts: Int = 0
     
     init() {}
     
@@ -180,8 +181,19 @@ class EventHandler: ObservableObject {
     func eventsWatchdog() {
         while true {
             if eventHeartbeat == lastEventHeartbeat {
-                print("Event thread is MIA, exiting")
-                exit(0)
+                if renderStarted || numberOfEventThreadRestarts > 10 {
+                    print("Event thread is MIA, exiting")
+                    exit(0)
+                }
+                else {
+                    print("Event thread is MIA, restarting event thread")
+                    eventsThread = Thread {
+                        self.handleAlvrEvents()
+                    }
+                    eventsThread?.name = "Events Thread"
+                    eventsThread?.start()
+                    numberOfEventThreadRestarts += 1
+                }
             }
             lastEventHeartbeat = eventHeartbeat
             for _ in 0...5000 {
