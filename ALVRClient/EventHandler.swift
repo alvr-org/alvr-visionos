@@ -420,7 +420,7 @@ class EventHandler: ObservableObject {
                 let value = keyValuePair[1].trimmingCharacters(in: .whitespaces)
                 
                 if key == "hostname" {
-                    updateHostname(value)
+                    updateHostname(value + ".alvr") // Hack: runtime needs to fix this D:
                 } else if key == "IP" {
                     updateIP(value)
                 }
