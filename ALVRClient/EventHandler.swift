@@ -110,24 +110,7 @@ class EventHandler: ObservableObject {
         updateConnectionState(.disconnected)
     }
     
-    func hardReset() {
-        streamingActive = false
-        vtDecompressionSession = nil
-        videoFormat = nil
-        lastRequestedTimestamp = 0
-        lastSubmittedTimestamp = 0
-        framesRendered = 0
-        framesSinceLastIDR = 0
-        framesSinceLastDecode = 0
-        lastIpd = -1
-        lastQueuedFrame = nil
-        updateConnectionState(.disconnected)
-                  
-        stop()
-        initializeAlvr()
-        start()
-    }
-    
+    // Currently unused
     func handleHeadsetRemovedOrReentry() {
         lastIpd = -1
         framesRendered = 0
@@ -340,28 +323,22 @@ class EventHandler: ObservableObject {
                 hudMessageBuffer.deallocate()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started \(alvrEvent.STREAMING_STARTED)")
-                streamEvent = alvrEvent
-                streamingActive = true
-                alvr_request_idr()
-                framesSinceLastIDR = 0
-                framesSinceLastDecode = 0
-                lastIpd = -1
+                if !streamingActive {
+                    streamEvent = alvrEvent
+                    streamingActive = true
+                    alvr_request_idr()
+                    framesSinceLastIDR = 0
+                    framesSinceLastDecode = 0
+                    lastIpd = -1
+                }
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
-                streamingActive = false
-                //hardReset()
-                
-                stop()
-                /*alvrInitialized = false
-                alvr_destroy()
-                initializeAlvr()*/
-                
-                //alvr_pause()
-                //alvr_resume()
-                //alvr_request_idr()
-                
-                timeLastAlvrEvent = CACurrentMediaTime()
-                timeLastFrameSent = CACurrentMediaTime()
+                if streamingActive {
+                    streamingActive = false
+                    stop()
+                    timeLastAlvrEvent = CACurrentMediaTime()
+                    timeLastFrameSent = CACurrentMediaTime()
+                }
             case ALVR_EVENT_HAPTICS.rawValue:
                 print("haptics: \(alvrEvent.HAPTICS)")
             case ALVR_EVENT_DECODER_CONFIG.rawValue:
@@ -378,7 +355,7 @@ class EventHandler: ObservableObject {
                        fatalError("create decoder: failed to poll nal?!")
                        break
                    }
-                   NSLog("%@", nal as NSData)
+                   //NSLog("%@", nal as NSData)
                    let val = (nal[4] & 0x7E) >> 1
                    if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
                        // here we go!
