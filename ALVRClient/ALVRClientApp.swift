@@ -46,7 +46,7 @@ struct MetalRendererApp: App {
             }
             .task {
                 do {
-                    try await gStore.load()
+                    try gStore.load()
                 } catch {
                     fatalError(error.localizedDescription)
                 }

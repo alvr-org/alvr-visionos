@@ -32,17 +32,13 @@ class GlobalSettingsStore: ObservableObject {
         .appendingPathComponent("globalsettings.data")
     }
     
-    func load() async throws {
-        let task = Task<GlobalSettings, Error> {
-            let fileURL = try Self.fileURL()
-            guard let data = try? Data(contentsOf: fileURL) else {
-                return GlobalSettings(keepSteamVRCenter: false, showHandsOverlaid: false)
-            }
-            let globalSettings = try JSONDecoder().decode(GlobalSettings.self, from: data)
-            return globalSettings
+    func load() throws {
+        let fileURL = try Self.fileURL()
+        guard let data = try? Data(contentsOf: fileURL) else {
+            return self.settings = GlobalSettings(keepSteamVRCenter: false, showHandsOverlaid: false)
         }
-        let settings = try await task.value
-        self.settings = settings
+        let globalSettings = try JSONDecoder().decode(GlobalSettings.self, from: data)
+        self.settings = globalSettings
     }
     
     func save(settings: GlobalSettings) async throws {

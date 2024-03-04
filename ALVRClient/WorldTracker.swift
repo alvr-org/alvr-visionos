@@ -62,7 +62,11 @@ class WorldTracker {
         self.settings = settings
         
         do {
+            #if targetEnvironment(simulator)
+            try await arSession.run([worldTracking])
+            #else
             try await arSession.run([worldTracking, sceneReconstruction, planeDetection])
+            #endif
         } catch {
             fatalError("Failed to initialize ARSession")
         }
