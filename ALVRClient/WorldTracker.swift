@@ -102,8 +102,8 @@ class WorldTracker {
         }
     }
     
-    func initializeAr() async  {
-    
+    func resetPlayspace() {
+        print("Reset playspace")
         // Reset playspace state
         self.worldTrackingAddedOriginAnchor = false
         self.worldTrackingSteamVRTransform = matrix_identity_float4x4
@@ -111,6 +111,10 @@ class WorldTracker {
         self.lastUpdatedTs = 0
         self.crownPressCount = 0
         self.sentPoses = 0
+    }
+    
+    func initializeAr() async  {
+        resetPlayspace()
         
         do {
             try await arSession.run([worldTracking, handTracking, sceneReconstruction, planeDetection])
@@ -175,11 +179,20 @@ class WorldTracker {
                         }
                     
                         worldOriginAnchor = update.anchor
+                        self.worldTrackingAddedOriginAnchor = true
                     }
                 }
                 
                 if update.anchor.id == worldOriginAnchor.id {
                     self.worldOriginAnchor = update.anchor
+                    
+                    // This seems to happen when headset is removed, or on app close.
+                    if !update.anchor.isTracked {
+                        print("Headset removed?")
+                        //EventHandler.shared.handleHeadsetRemoved()
+                        //resetPlayspace()
+                        continue
+                    }
 
                     let anchorTransform = update.anchor.originFromAnchorTransform
                     if GlobalSettings.shared.keepSteamVRCenter {
@@ -215,6 +228,7 @@ class WorldTracker {
                             }
                     
                             self.worldOriginAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
+                            self.worldTrackingAddedOriginAnchor = true
                             if GlobalSettings.shared.keepSteamVRCenter {
                                 self.worldTrackingSteamVRTransform = anchorTransform
                             }
@@ -398,6 +412,11 @@ class WorldTracker {
 
         // Well, I'm out of ideas.
         guard let deviceAnchor = deviceAnchor else {
+            // Prevent audio crackling issues
+            if sentPoses > 30 {
+                EventHandler.shared.handleHeadsetRemoved()
+                resetPlayspace()
+            }
             return
         }
         

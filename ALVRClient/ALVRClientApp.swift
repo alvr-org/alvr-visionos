@@ -52,17 +52,34 @@ struct MetalRendererApp: App {
         .onChange(of: scenePhase) {
             switch scenePhase {
             case .background:
-                if !model.isShowingClient {
+                // TODO: revisit if we decide to let app run in background (ie, keep it open + reconnect when headset is donned)
+                /*if !model.isShowingClient {
                     //Lobby closed manually: disconnect ALVR
-                    EventHandler.shared.stop()
+                    //EventHandler.shared.stop()
+                    if EventHandler.shared.alvrInitialized {
+                        alvr_pause()
+                    }
                 }
+                if !EventHandler.shared.streamingActive {
+                    EventHandler.shared.handleHeadsetRemoved()
+                }*/
+                break
             case .inactive:
                 // Scene inactive, currently no action for this
                 break
             case .active:
                 // Scene active, make sure everything is started if it isn't
-                EventHandler.shared.initializeAlvr()
-                EventHandler.shared.start()
+                // TODO: revisit if we decide to let app run in background (ie, keep it open + reconnect when headset is donned)
+                /*if !model.isShowingClient {
+                    WorldTracker.shared.resetPlayspace()
+                    EventHandler.shared.initializeAlvr()
+                    EventHandler.shared.start()
+                    EventHandler.shared.handleHeadsetRemovedOrReentry()
+                }
+                if EventHandler.shared.alvrInitialized {
+                    alvr_resume()
+                }*/
+                EventHandler.shared.handleHeadsetEntered()
                 break
             @unknown default:
                 break
