@@ -75,7 +75,7 @@ class Renderer {
     // TODO(zhuowei): make this a real deque
     var metalTextureCache: CVMetalTextureCache!
     let mtlVertexDescriptor: MTLVertexDescriptor
-    var videoFramePipelineState: MTLRenderPipelineState!
+    var videoFramePipelineState_YpCbCrBiPlanar: MTLRenderPipelineState!
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
     var lastIpd:Float = -1
@@ -137,8 +137,6 @@ class Renderer {
         }
 
         EventHandler.shared.renderStarted = true
-
-
     }
     
     func startRenderLoop() {
@@ -147,11 +145,12 @@ class Renderer {
                 fatalError("streaming started: failed to retrieve alvr settings")
             }
             let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
-            videoFramePipelineState = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
+            videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
                                 device: device,
                                 layerRenderer: layerRenderer,
                                 mtlVertexDescriptor: mtlVertexDescriptor,
-                                foveationVars: foveationVars
+                                foveationVars: foveationVars,
+                                variantName: "YpCbCrBiPlanar"
             )
             videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
                                 device: device,
@@ -247,7 +246,8 @@ class Renderer {
     class func buildRenderPipelineForVideoFrameWithDevice(device: MTLDevice,
                                                           layerRenderer: LayerRenderer,
                                                           mtlVertexDescriptor: MTLVertexDescriptor,
-                                                          foveationVars: FoveationVars) throws -> MTLRenderPipelineState {
+                                                          foveationVars: FoveationVars,
+                                                          variantName: String) throws -> MTLRenderPipelineState {
         /// Build a render state pipeline object
 
         let library = device.makeDefaultLibrary()
@@ -255,10 +255,10 @@ class Renderer {
         let vertexFunction = library?.makeFunction(name: "videoFrameVertexShader")
          
         let fragmentConstants = FFR.makeFunctionConstants(foveationVars)
-        let fragmentFunction = try library?.makeFunction(name: "videoFrameFragmentShader", constantValues: fragmentConstants)
+        let fragmentFunction = try library?.makeFunction(name: "videoFrameFragmentShader_" + variantName, constantValues: fragmentConstants)
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
-        pipelineDescriptor.label = "VideoFrameRenderPipeline"
+        pipelineDescriptor.label = "VideoFrameRenderPipeline_" + variantName
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
@@ -690,7 +690,7 @@ class Renderer {
         
         renderEncoder.setFrontFacing(.counterClockwise)
         
-        renderEncoder.setRenderPipelineState(videoFramePipelineState)
+        renderEncoder.setRenderPipelineState(videoFramePipelineState_YpCbCrBiPlanar)
         
         renderEncoder.setDepthStencilState(depthStateAlways)
         
@@ -719,6 +719,7 @@ class Renderer {
         //TODO: prevailing wisdom on stackoverflow says that the CVMetalTextureRef has to be held until
         // rendering is complete, or the MtlTexture will be invalid?
         
+        let textureTypes = VideoHandler.getTextureTypesForFormat(CVPixelBufferGetPixelFormatType(pixelBuffer))
         for i in 0...1 {
             var textureOut:CVMetalTexture! = nil
             var err:OSStatus = 0
@@ -726,11 +727,11 @@ class Renderer {
             let height = CVPixelBufferGetHeight(pixelBuffer)
             if i == 0 {
                 err = CVMetalTextureCacheCreateTextureFromImage(
-                    nil, metalTextureCache, pixelBuffer, nil, .r8Unorm,
+                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
                     width, height, 0, &textureOut);
             } else {
                 err = CVMetalTextureCacheCreateTextureFromImage(
-                    nil, metalTextureCache, pixelBuffer, nil, .rg8Unorm,
+                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
                     width/2, height/2, 1, &textureOut);
             }
             if err != 0 {
