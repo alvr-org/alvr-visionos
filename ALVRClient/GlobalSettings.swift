@@ -41,12 +41,9 @@ class GlobalSettingsStore: ObservableObject {
         self.settings = globalSettings
     }
     
-    func save(settings: GlobalSettings) async throws {
-        let task = Task {
-            let data = try JSONEncoder().encode(settings)
-            let outfile = try Self.fileURL()
-            try data.write(to: outfile)
-        }
-        _ = try await task.value
+    func save(settings: GlobalSettings) throws {
+        let data = try JSONEncoder().encode(settings)
+        let outfile = try Self.fileURL()
+        try data.write(to: outfile)
     }
 }

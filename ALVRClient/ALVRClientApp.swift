@@ -40,7 +40,7 @@ struct MetalRendererApp: App {
             Entry(settings: $gStore.settings) {
                 Task {
                     do {
-                        try await gStore.save(settings: gStore.settings)
+                        try gStore.save(settings: gStore.settings)
                     } catch {
                         fatalError(error.localizedDescription)
                     }
