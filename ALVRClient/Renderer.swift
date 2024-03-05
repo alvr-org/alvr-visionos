@@ -78,7 +78,6 @@ class Renderer {
     var videoFramePipelineState_YpCbCrBiPlanar: MTLRenderPipelineState!
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
-    var lastIpd:Float = -1
     
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
@@ -377,13 +376,18 @@ class Renderer {
                 // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
                 if EventHandler.shared.lastQueuedFrame != nil {
                     queuedFrame = EventHandler.shared.lastQueuedFrame
+                    EventHandler.shared.framesRendered -= 1
                     break
                 }
                 
                 if CACurrentMediaTime() - startPollTime > 0.002 {
+                    EventHandler.shared.framesRendered -= 1
                     break
                 }
             }
+        }
+        else {
+            EventHandler.shared.framesRendered -= 1
         }
         
         if queuedFrame == nil && streamingActiveForFrame {
@@ -416,9 +420,10 @@ class Renderer {
 
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
-            if abs(lastIpd - ipd) > 0.001 {
+            if abs(EventHandler.shared.lastIpd - ipd) > 0.001 {
                 print("Send view config")
-                lastIpd = ipd
+                EventHandler.shared.lastIpd = ipd
+                EventHandler.shared.framesRendered = 0
                 let leftAngles = atan(drawable.views[0].tangents)
                 let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
@@ -438,10 +443,34 @@ class Renderer {
         
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
-        let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
+        var framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
 
+        var missingAnchor = false
         if renderingStreaming && queuedFrame != nil && framePreviouslyPredictedPose == nil {
             print("missing anchor!!", queuedFrame!.timestamp)
+            
+            // Last minute reprojection??
+            if EventHandler.shared.lastQueuedFrame != nil {
+                print("falling back to last frame last-minute")
+                queuedFrame = EventHandler.shared.lastQueuedFrame
+                framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
+                if framePreviouslyPredictedPose == nil {
+                    framePreviouslyPredictedPose = EventHandler.shared.lastQueuedFramePose
+                }
+                
+                if framePreviouslyPredictedPose == nil {
+                    print("darn, no pose for that one either")
+                    missingAnchor = true
+                }
+            }
+            else {
+                missingAnchor = true
+            }
+            
+            // Try and avoid weird anchored past frames from sneaking in.
+            if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
+                EventHandler.shared.framesRendered = 0
+            }
         }
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
@@ -469,17 +498,42 @@ class Renderer {
             semaphore.signal()
         }
         
-        if renderingStreaming {
+        // List of reasons to not display a frame
+        var frameIsSuitableForDisplaying = true
+        //print(EventHandler.shared.lastIpd, WorldTracker.shared.worldTrackingAddedOriginAnchor, EventHandler.shared.framesRendered)
+        if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
+            // Don't show frame if we haven't sent the view config and received frames
+            // with that config applied.
+            frameIsSuitableForDisplaying = false
+            print("IPD is bad, no frame")
+        }
+        if !WorldTracker.shared.worldTrackingAddedOriginAnchor && EventHandler.shared.framesRendered < 300 {
+            // Don't show frame if we haven't figured out our origin yet.
+            frameIsSuitableForDisplaying = false
+            print("Origin is bad, no frame")
+        }
+        if missingAnchor {
+            // We can't timewarp any more, so stop rendering
+            frameIsSuitableForDisplaying = false
+            print("Missing anchor, no frame")
+        }
+        
+        if renderingStreaming && frameIsSuitableForDisplaying {
+            //print("render")
             renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
+        }
+        else {
+            // TODO: draw a cool loading logo
+            // TODO: maybe also show the room in wireframe or something cool here
+            renderNothing(drawable: drawable, commandBuffer: commandBuffer)
         }
         
         drawable.encodePresent(commandBuffer: commandBuffer)
-        
         commandBuffer.commit()
-        
         frame.endSubmission()
         
         EventHandler.shared.lastQueuedFrame = queuedFrame
+        EventHandler.shared.lastQueuedFramePose = framePreviouslyPredictedPose
     }
     
     func planeToColor(plane: PlaneAnchor) -> simd_float4 {
@@ -590,6 +644,53 @@ class Renderer {
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.popDebugGroup()
+        renderEncoder.endEncoding()
+    }
+    
+    func renderNothing(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer) {
+        let renderPassDescriptor = MTLRenderPassDescriptor()
+        renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
+        renderPassDescriptor.colorAttachments[0].loadAction = .load
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
+        renderPassDescriptor.depthAttachment.loadAction = .clear
+        renderPassDescriptor.depthAttachment.storeAction = .store
+        renderPassDescriptor.depthAttachment.clearDepth = 0.0
+        renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
+        if layerRenderer.configuration.layout == .layered {
+            renderPassDescriptor.renderTargetArrayLength = drawable.views.count
+        }
+        
+        /// Final pass rendering code here
+        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            fatalError("Failed to create render encoder")
+        }
+        
+        renderEncoder.label = "Rendering Nothing"
+        
+        renderEncoder.pushDebugGroup("Draw Nothing")
+        renderEncoder.setCullMode(.back)
+        renderEncoder.setFrontFacing(.counterClockwise)
+        renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
+        renderEncoder.setDepthStencilState(depthStateGreater)
+        
+        renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
+        renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
+        
+        let viewports = drawable.views.map { $0.textureMap.viewport }
+        
+        renderEncoder.setViewports(viewports)
+        
+        if drawable.views.count > 1 {
+            var viewMappings = (0..<drawable.views.count).map {
+                MTLVertexAmplificationViewMapping(viewportArrayIndexOffset: UInt32($0),
+                                                  renderTargetArrayIndexOffset: UInt32($0))
+            }
+            renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
+        }
+        
+        
         renderEncoder.endEncoding()
     }
     
@@ -755,13 +856,26 @@ class Renderer {
     
     func renderLoop() {
         layerRenderer.waitUntilRunning()
+        EventHandler.shared.handleHeadsetRemovedOrReentry()
+        var timeSinceLastLoop = CACurrentMediaTime()
         while EventHandler.shared.renderStarted {
             if layerRenderer.state == .invalidated {
                 print("Layer is invalidated")
-                EventHandler.shared.stop()
+                //EventHandler.shared.stop()
+                EventHandler.shared.handleHeadsetRemovedOrReentry()
+                EventHandler.shared.handleHeadsetRemoved()
+                WorldTracker.shared.resetPlayspace()
+                alvr_pause()
+
+                // visionOS sometimes sends these invalidated things really fkn late...
+                // But generally, we want to exit fully when the user exits.
+                if CACurrentMediaTime() - timeSinceLastLoop < 1.0 {
+                    exit(0)
+                }
                 break
             } else if layerRenderer.state == .paused {
                 layerRenderer.waitUntilRunning()
+                //EventHandler.shared.handleHeadsetRemovedOrReentry()
                 continue
             } else {
                 autoreleasepool {
