@@ -8,6 +8,7 @@ import CompositorServices
 
 class WorldTracker {
     static let shared = WorldTracker()
+    var settings: GlobalSettings!
     
     let arSession: ARKitSession!
     let worldTracking: WorldTrackingProvider!
@@ -113,11 +114,16 @@ class WorldTracker {
         self.sentPoses = 0
     }
     
-    func initializeAr() async  {
+    func initializeAr(settings: GlobalSettings) async  {
+        self.settings = settings
         resetPlayspace()
         
         do {
+            #if targetEnvironment(simulator)
+            try await arSession.run([worldTracking])
+            #else
             try await arSession.run([worldTracking, handTracking, sceneReconstruction, planeDetection])
+            #endif
         } catch {
             fatalError("Failed to initialize ARSession")
         }
@@ -195,7 +201,7 @@ class WorldTracker {
                     }
 
                     let anchorTransform = update.anchor.originFromAnchorTransform
-                    if GlobalSettings.shared.keepSteamVRCenter {
+                    if settings.keepSteamVRCenter {
                         self.worldTrackingSteamVRTransform = anchorTransform
                     }
                     
@@ -229,7 +235,7 @@ class WorldTracker {
                     
                             self.worldOriginAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
                             self.worldTrackingAddedOriginAnchor = true
-                            if GlobalSettings.shared.keepSteamVRCenter {
+                            if settings.keepSteamVRCenter {
                                 self.worldTrackingSteamVRTransform = anchorTransform
                             }
                             

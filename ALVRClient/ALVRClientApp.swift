@@ -32,20 +32,33 @@ struct MetalRendererApp: App {
     @State private var model = ViewModel()
     @Environment(\.scenePhase) private var scenePhase
     @State private var clientImmersionStyle: ImmersionStyle = .full
-    @ObservedObject var globalSettings = GlobalSettings.shared
+    @StateObject private var gStore = GlobalSettingsStore()
 
     var body: some Scene {
         //Entry point, this is the default window chosen in Info.plist from UIApplicationPreferredDefaultSceneSessionRole
         WindowGroup(id: "Entry") {
-            Entry()
-                .environment(model)
-                .environmentObject(EventHandler.shared)
-                .task {
-                    model.isShowingClient = false
-                    EventHandler.shared.initializeAlvr()
-                    await WorldTracker.shared.initializeAr()
-                    EventHandler.shared.start()
+            Entry(settings: $gStore.settings) {
+                Task {
+                    do {
+                        try gStore.save(settings: gStore.settings)
+                    } catch {
+                        fatalError(error.localizedDescription)
+                    }
                 }
+            }
+            .task {
+                do {
+                    try gStore.load()
+                } catch {
+                    fatalError(error.localizedDescription)
+                }
+                model.isShowingClient = false
+                EventHandler.shared.initializeAlvr()
+                await WorldTracker.shared.initializeAr(settings: gStore.settings)
+                EventHandler.shared.start()
+            }
+            .environment(model)
+            .environmentObject(EventHandler.shared)
         }
         .defaultSize(width: 650, height: 600)
         .windowStyle(.plain)
@@ -93,7 +106,7 @@ struct MetalRendererApp: App {
             }
         }
         .immersionStyle(selection: $clientImmersionStyle, in: .full)
-        .upperLimbVisibility(globalSettings.showHandsOverlaid ? .visible : .hidden)
+        .upperLimbVisibility(gStore.settings.showHandsOverlaid ? .visible : .hidden)
     }
     
 }

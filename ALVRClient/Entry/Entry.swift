@@ -5,13 +5,11 @@ The Entry content for a volume.
 
 import SwiftUI
 
-/// The cube content for a volume.
 struct Entry: View {
-    @Environment(ViewModel.self) private var model
     @ObservedObject var eventHandler = EventHandler.shared
-    @ObservedObject var globalSettings = GlobalSettings.shared
-    @State private var dontKeepSteamVRCenter = false
-    @State private var showHandsOverlaid = false
+    @Binding var settings: GlobalSettings
+    @Environment(\.scenePhase) private var scenePhase
+    let saveAction: ()->Void
 
     var body: some View {
         VStack {
@@ -22,21 +20,15 @@ struct Entry: View {
             Text("Options:")
                 .font(.system(size: 20, weight: .bold))
             VStack {
-                Toggle(isOn: $showHandsOverlaid) {
+                Toggle(isOn: $settings.showHandsOverlaid) {
                     Text("Show hands overlaid")
                 }
                 .toggleStyle(.switch)
-                .onChange(of: showHandsOverlaid) {
-                    globalSettings.showHandsOverlaid = showHandsOverlaid
-                }
                 
-                Toggle(isOn: $dontKeepSteamVRCenter) {
+                Toggle(isOn: $settings.keepSteamVRCenter) {
                     Text("Crown Button long-press also recenters SteamVR")
                 }
                 .toggleStyle(.switch)
-                .onChange(of: dontKeepSteamVRCenter) {
-                    globalSettings.keepSteamVRCenter = !dontKeepSteamVRCenter
-                }
             }
             .frame(width: 450)
             .padding()
@@ -61,12 +53,27 @@ struct Entry: View {
         }
         .frame(minWidth: 650, minHeight: 500)
         .glassBackgroundEffect()
+        .onChange(of: scenePhase) {
+            switch scenePhase {
+            case .background:
+                saveAction()
+                break
+            case .inactive:
+                saveAction()
+                break
+            case .active:
+                break
+            @unknown default:
+                break
+            }
+        }
         
-        EntryControls()
+        EntryControls(saveAction: saveAction)
     }
 }
 
-#Preview {
-    Entry()
-        .environment(ViewModel())
+struct Entry_Previews: PreviewProvider {
+    static var previews: some View {
+        Entry(settings: .constant(GlobalSettings.sampleData), saveAction: {})
+    }
 }

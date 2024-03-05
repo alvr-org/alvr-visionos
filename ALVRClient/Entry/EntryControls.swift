@@ -12,6 +12,7 @@ struct EntryControls: View {
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.dismissWindow) private var dismissWindow
     @ObservedObject var eventHandler = EventHandler.shared
+    let saveAction: ()->Void
 
     var body: some View {
         @Bindable var model = model
@@ -38,6 +39,7 @@ struct EntryControls: View {
         .onChange(of: model.isShowingClient) { _, isShowing in
             Task {
                 if isShowing {
+                    saveAction()
                     print("Opening Immersive Space")
                     await openImmersiveSpace(id: "Client")
                     dismissWindow(id: "Entry")
@@ -50,6 +52,6 @@ struct EntryControls: View {
 
 
 #Preview {
-    EntryControls()
+    EntryControls(saveAction: {})
         .environment(ViewModel())
 }
