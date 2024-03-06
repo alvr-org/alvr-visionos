@@ -26,7 +26,7 @@ struct Entry: View {
                 .toggleStyle(.switch)
                 
                 Toggle(isOn: $settings.keepSteamVRCenter) {
-                    Text("Crown Button long-press also recenters SteamVR")
+                    Text("Crown Button long-press ignored by SteamVR")
                 }
                 .toggleStyle(.switch)
             }
@@ -56,9 +56,11 @@ struct Entry: View {
         .onChange(of: scenePhase) {
             switch scenePhase {
             case .background:
+                print(settings.keepSteamVRCenter)
                 saveAction()
                 break
             case .inactive:
+                print(settings.keepSteamVRCenter)
                 saveAction()
                 break
             case .active:

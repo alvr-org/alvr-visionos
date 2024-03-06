@@ -22,7 +22,7 @@ extension GlobalSettings {
 
 @MainActor
 class GlobalSettingsStore: ObservableObject {
-    @Published var settings: GlobalSettings = GlobalSettings(keepSteamVRCenter: false, showHandsOverlaid: false)
+    @Published var settings: GlobalSettings = GlobalSettings(keepSteamVRCenter: true, showHandsOverlaid: false)
     
     private static func fileURL() throws -> URL {
         try FileManager.default.url(for: .documentDirectory,
