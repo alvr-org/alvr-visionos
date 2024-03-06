@@ -823,15 +823,6 @@ class WorldTracker {
             }
         }
         
-        
-        /*var eyeTransform = matrix_identity_float4x4
-        eyeTransform.columns.3 = [hackTestEyeTrackingPos.x, hackTestEyeTrackingPos.y, hackTestEyeTrackingPos.z, 1.0]
-        eyeTransform = self.worldTrackingSteamVRTransform.inverse * eyeTransform
-        let eyePos = eyeTransform.columns.3
-        
-        trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftFoot, pose: AlvrPose(orientation: AlvrQuat(x: 0.0, y: 0.0, z: 0.0, w: 1.0), position: (eyePos.x, eyePos.y, eyePos.z)), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
-        */
-        
         //let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
