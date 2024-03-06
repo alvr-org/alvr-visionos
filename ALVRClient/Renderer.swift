@@ -10,6 +10,7 @@ import Spatial
 import ARKit
 import VideoToolbox
 import ObjectiveC
+import GameController
 
 // The 256 byte aligned size of our uniform structure
 let alignedUniformsSize = (MemoryLayout<UniformsArray>.size + 0xFF) & -0x100
@@ -855,7 +856,40 @@ class Renderer {
     }
     
     func renderLoop() {
+    
         layerRenderer.waitUntilRunning()
+        layerRenderer.onSpatialEvent = { eventCollection in
+            for event in eventCollection {
+                if event.kind == .indirectPinch {
+                    print(event)
+                    //print (event.selectionRay?.origin, event.selectionRay?.direction)
+                    if event.selectionRay != nil {
+                    
+                        // Eye gaze
+                        WorldTracker.shared.hackTestEyeTrackingPos = simd_float3(Float(event.selectionRay!.origin.x + event.selectionRay!.direction.x), Float(event.selectionRay!.origin.y + event.selectionRay!.direction.y), Float(event.selectionRay!.origin.z + event.selectionRay!.direction.z))
+                        
+                        // Eye pose
+                        //WorldTracker.shared.hackTestEyeTrackingPos = simd_float3(Float(event.selectionRay!.origin.x), Float(event.selectionRay!.origin.y), Float(event.selectionRay!.origin.z))
+                        
+                        // idk
+                        //WorldTracker.shared.hackTestEyeTrackingPos = simd_float3(Float(event.location3D.x), Float(event.location3D.y), Float(event.location3D.z))
+                        
+                        // idk
+                        //WorldTracker.shared.hackTestEyeTrackingPos = simd_float3(Float(event.inputDevicePose!.pose3D.position.x + event.inputDevicePose!.pose3D.rotation.axis.x), Float(event.inputDevicePose!.pose3D.position.y + event.inputDevicePose!.pose3D.rotation.axis.y), Float(event.inputDevicePose!.pose3D.position.z + event.inputDevicePose!.pose3D.rotation.axis.z))
+                        
+                        // Pinch connection location
+                        //WorldTracker.shared.hackTestEyeTrackingPos = simd_float3(Float(event.inputDevicePose!.pose3D.position.x), Float(event.inputDevicePose!.pose3D.position.y), Float(event.inputDevicePose!.pose3D.position.z))
+                        
+                        // Pinch rotation?
+                        //WorldTracker.shared.hackTestEyeTrackingPos = simd_float3(Float(event.inputDevicePose!.pose3D.rotation.axis.x), Float(event.inputDevicePose!.pose3D.rotation.axis.y), Float(event.inputDevicePose!.pose3D.rotation.axis.z))
+                    }
+                }
+                else {
+                    print("event!", event)
+                }
+            }
+        }
+            
         EventHandler.shared.handleHeadsetRemovedOrReentry()
         var timeSinceLastLoop = CACurrentMediaTime()
         while EventHandler.shared.renderStarted {

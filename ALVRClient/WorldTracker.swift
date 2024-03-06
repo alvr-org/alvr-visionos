@@ -5,6 +5,7 @@
 import Foundation
 import ARKit
 import CompositorServices
+import GameController
 
 class WorldTracker {
     static let shared = WorldTracker()
@@ -31,6 +32,9 @@ class WorldTracker {
     var crownPressCount = 0
     var sentPoses = 0
     
+    var hackTestEyeTrackingPos: simd_float3 = [0,0,0]
+    var hackTestEyeTrackingQuat: simd_float4 = [0,0,0,1]
+    
     // Hand tracking
     var lastHandsUpdatedTs: TimeInterval = 0
     var lastSentHandsTs: TimeInterval = 0
@@ -43,6 +47,38 @@ class WorldTracker {
     static let deviceIdRightForearm = alvr_path_string_to_id("/user/body/right_knee") // TODO: add a real forearm point?
     static let deviceIdLeftElbow = alvr_path_string_to_id("/user/body/left_elbow")
     static let deviceIdRightElbow = alvr_path_string_to_id("/user/body/right_elbow")
+    static let deviceIdLeftFoot = alvr_path_string_to_id("/user/body/left_foot")
+    
+    static let leftButtonA = alvr_path_string_to_id("/user/hand/left/input/a/click")
+    static let leftButtonB = alvr_path_string_to_id("/user/hand/left/input/b/click")
+    static let leftButtonX = alvr_path_string_to_id("/user/hand/left/input/x/click")
+    static let leftButtonY = alvr_path_string_to_id("/user/hand/left/input/y/click")
+    static let leftTriggerClick = alvr_path_string_to_id("/user/hand/left/input/trigger/click")
+    static let leftTriggerValue = alvr_path_string_to_id("/user/hand/left/input/trigger/value")
+    static let leftThumbstickX = alvr_path_string_to_id("/user/hand/left/input/thumbstick/x")
+    static let leftThumbstickY = alvr_path_string_to_id("/user/hand/left/input/thumbstick/y")
+    static let leftThumbstickClick = alvr_path_string_to_id("/user/hand/left/input/thumbstick/click")
+    static let leftSystemClick = alvr_path_string_to_id("/user/hand/left/input/system/click")
+    static let leftMenuClick = alvr_path_string_to_id("/user/hand/left/input/menu/click")
+    static let leftSqueezeClick = alvr_path_string_to_id("/user/hand/left/input/squeeze/click")
+    static let leftSqueezeValue = alvr_path_string_to_id("/user/hand/left/input/squeeze/value")
+    static let leftSqueezeForce = alvr_path_string_to_id("/user/hand/left/input/squeeze/force")
+    
+    static let rightButtonA = alvr_path_string_to_id("/user/hand/right/input/a/click")
+    static let rightButtonB = alvr_path_string_to_id("/user/hand/right/input/b/click")
+    static let rightButtonX = alvr_path_string_to_id("/user/hand/right/input/x/click")
+    static let rightButtonY = alvr_path_string_to_id("/user/hand/right/input/y/click")
+    static let rightTriggerClick = alvr_path_string_to_id("/user/hand/right/input/trigger/click")
+    static let rightTriggerValue = alvr_path_string_to_id("/user/hand/right/input/trigger/value")
+    static let rightThumbstickX = alvr_path_string_to_id("/user/hand/right/input/thumbstick/x")
+    static let rightThumbstickY = alvr_path_string_to_id("/user/hand/right/input/thumbstick/y")
+    static let rightThumbstickClick = alvr_path_string_to_id("/user/hand/right/input/thumbstick/click")
+    static let rightSystemClick = alvr_path_string_to_id("/user/hand/right/input/system/click")
+    static let rightMenuClick = alvr_path_string_to_id("/user/hand/right/input/menu/click")
+    static let rightSqueezeClick = alvr_path_string_to_id("/user/hand/right/input/squeeze/click")
+    static let rightSqueezeValue = alvr_path_string_to_id("/user/hand/right/input/squeeze/value")
+    static let rightSqueezeForce = alvr_path_string_to_id("/user/hand/right/input/squeeze/force")
+    
     static let appleHandToSteamVRIndex = [
         //eBone_Root
         "wrist": 1,                         //eBone_Wrist
@@ -395,6 +431,161 @@ class WorldTracker {
         return ret
     }
     
+    func sendGamepadInputs() {
+        func boolVal(_ val: Bool) -> AlvrButtonValue {
+            return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_BINARY, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field0(binary: val)))
+        }
+        
+        func scalarVal(_ val: Float) -> AlvrButtonValue {
+            return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_SCALAR, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field1(scalar: val)))
+        }
+        
+        // TODO: keyboards? trackpads?
+        /*
+        if let keyboard = GCKeyboard.coalesced?.keyboardInput {
+              // bind to any key-up/-down
+              keyboard.keyChangedHandler = {
+                (keyboard, key, keyCode, pressed) in
+                // compare buttons to GCKeyCode
+                print(keyboard, key, keyCode, pressed)
+              }
+            }
+         */
+    
+        //print(GCController.controllers())
+        for controller in GCController.controllers() {
+            let isLeft = (controller.vendorName == "Joy-Con (L)")
+            //print(controller.vendorName, controller.physicalInputProfile.elements, controller.physicalInputProfile.allButtons)
+            if let gp = controller.extendedGamepad {
+                gp.buttonA.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.rightButtonA, boolVal(pressed))
+                }
+                gp.buttonB.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.rightButtonB, boolVal(pressed))
+                }
+                gp.buttonX.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.rightButtonX, boolVal(pressed))
+                }
+                gp.buttonY.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.rightButtonY, boolVal(pressed))
+                }
+                
+                // Kinda weird here, we're emulating Quest controllers bc we don't have a real input profile.
+                gp.dpad.right.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.leftButtonY, boolVal(pressed))
+                }
+                gp.dpad.down.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.leftButtonX, boolVal(pressed))
+                }
+                gp.dpad.up.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.leftButtonY, boolVal(pressed))
+                }
+                gp.dpad.left.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.leftButtonX, boolVal(pressed))
+                }
+                
+                // ZL/ZR -> Trigger
+                gp.leftTrigger.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(pressed))
+                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(value))
+                }
+                
+                gp.rightTrigger.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(pressed))
+                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(value))
+                }
+                
+                // L/R -> Squeeze
+                gp.leftShoulder.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(pressed))
+                    alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(value))
+                    alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal(value))
+                }
+                gp.rightShoulder.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(pressed))
+                    alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(value))
+                    alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal(value))
+                }
+                
+                // Thumbsticks
+                gp.leftThumbstick.valueChangedHandler = { (button, xValue, yValue) in
+                    alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(xValue))
+                    alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(yValue))
+                }
+                gp.leftThumbstickButton?.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.leftThumbstickClick, boolVal(pressed))
+                }
+                gp.rightThumbstick.valueChangedHandler = { (button, xValue, yValue) in
+                    alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(xValue))
+                    alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(yValue))
+                }
+                gp.rightThumbstickButton?.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(pressed))
+                }
+                
+                // System buttons of various varieties (whichever one actually hits)
+                gp.buttonHome?.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.rightSystemClick, boolVal(pressed))
+                    alvr_send_button(WorldTracker.rightMenuClick, boolVal(pressed))
+                }
+                gp.buttonOptions?.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.leftSystemClick, boolVal(pressed))
+                    alvr_send_button(WorldTracker.leftMenuClick, boolVal(pressed))
+                }
+                gp.buttonMenu.pressedChangedHandler = { (button, value, pressed) in
+                    alvr_send_button(WorldTracker.rightSystemClick, boolVal(pressed))
+                    alvr_send_button(WorldTracker.rightMenuClick, boolVal(pressed))
+                }
+            }
+            else {
+                // At some point we might want to use this (for separate motion), but at the moment we cannot, because it is incomplete
+                
+                let b = controller.physicalInputProfile.buttons
+                let a = controller.physicalInputProfile.axes
+                if !isLeft {
+                    alvr_send_button(WorldTracker.rightButtonA, boolVal(b["Button A"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.rightButtonB, boolVal(b["Button B"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.rightButtonX, boolVal(b["Button X"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.rightButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.rightSystemClick, boolVal(b["Button Options"]?.isPressed ?? false))
+                    //alvr_send_button(WorldTracker.leftButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
+                }
+                else {
+                    /*alvr_send_button(WorldTracker.rightButtonA, boolVal(b["Direction Pad Right"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.rightButtonB, boolVal(b["Direction Pad Down"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.rightButtonX, boolVal(b["Direction Pad Up"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.rightButtonY, boolVal(b["Direction Pad Left"]?.isPressed ?? false))*/
+                    
+                    alvr_send_button(WorldTracker.leftButtonA, boolVal(b["Button A"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.leftButtonB, boolVal(b["Button B"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.leftButtonX, boolVal(b["Button X"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.leftButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.leftSystemClick, boolVal(b["Button Options"]?.isPressed ?? false))
+                    
+                    // Button Menu
+                }
+                
+                /*controller.physicalInputProfile.valueDidChangeHandler = { (gamepad, element) in
+                    //print(controller.extendedGamepad?.leftThumbstick.xAxis)
+                    print(gamepad, element)
+                }*/
+            }
+            
+            /*controller.extendedGamepad?.valueChangedHandler = { (gamepad, element) in
+                //print(controller.extendedGamepad?.leftThumbstick.xAxis)
+                print(gamepad, element)
+            }*/
+            
+            
+            /*controller.motion?.valueChangedHandler = { (motion: GCMotion)->() in
+              print(motion.acceleration, motion.rotationRate)
+            }
+            controller.motion?.sensorsActive = true
+            //print()
+            print(controller.motion)*/
+        }
+    }
+    
     // TODO: figure out how stable Apple's predictions are into the future
     
     func sendTracking(targetTimestamp: Double) {
@@ -505,9 +696,20 @@ class WorldTracker {
             }
         }
         
+        
+        /*var eyeTransform = matrix_identity_float4x4
+        eyeTransform.columns.3 = [hackTestEyeTrackingPos.x, hackTestEyeTrackingPos.y, hackTestEyeTrackingPos.z, 1.0]
+        eyeTransform = self.worldTrackingSteamVRTransform.inverse * eyeTransform
+        let eyePos = eyeTransform.columns.3
+        
+        trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftFoot, pose: AlvrPose(orientation: AlvrQuat(x: 0.0, y: 0.0, z: 0.0, w: 1.0), position: (eyePos.x, eyePos.y, eyePos.z)), linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+        */
+        
         //let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
+        
+        sendGamepadInputs()
 
         EventHandler.shared.lastRequestedTimestamp = targetTimestampNS
         lastSentHandsTs = lastHandsUpdatedTs
