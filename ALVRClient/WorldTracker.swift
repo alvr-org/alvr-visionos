@@ -32,9 +32,6 @@ class WorldTracker {
     var crownPressCount = 0
     var sentPoses = 0
     
-    var hackTestEyeTrackingPos: simd_float3 = [0,0,0]
-    var hackTestEyeTrackingQuat: simd_float4 = [0,0,0,1]
-    
     // Hand tracking
     var lastHandsUpdatedTs: TimeInterval = 0
     var lastSentHandsTs: TimeInterval = 0
@@ -48,7 +45,9 @@ class WorldTracker {
     static let deviceIdLeftElbow = alvr_path_string_to_id("/user/body/left_elbow")
     static let deviceIdRightElbow = alvr_path_string_to_id("/user/body/right_elbow")
     static let deviceIdLeftFoot = alvr_path_string_to_id("/user/body/left_foot")
+    static let deviceIdRightFoot = alvr_path_string_to_id("/user/body/right_foot")
     
+    // Left hand inputs
     static let leftButtonA = alvr_path_string_to_id("/user/hand/left/input/a/click")
     static let leftButtonB = alvr_path_string_to_id("/user/hand/left/input/b/click")
     static let leftButtonX = alvr_path_string_to_id("/user/hand/left/input/x/click")
@@ -64,6 +63,7 @@ class WorldTracker {
     static let leftSqueezeValue = alvr_path_string_to_id("/user/hand/left/input/squeeze/value")
     static let leftSqueezeForce = alvr_path_string_to_id("/user/hand/left/input/squeeze/force")
     
+    // Right hand inputs
     static let rightButtonA = alvr_path_string_to_id("/user/hand/right/input/a/click")
     static let rightButtonB = alvr_path_string_to_id("/user/hand/right/input/b/click")
     static let rightButtonX = alvr_path_string_to_id("/user/hand/right/input/x/click")
@@ -548,41 +548,22 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.rightButtonX, boolVal(b["Button X"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.rightButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.rightSystemClick, boolVal(b["Button Options"]?.isPressed ?? false))
-                    //alvr_send_button(WorldTracker.leftButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
                 }
                 else {
-                    /*alvr_send_button(WorldTracker.rightButtonA, boolVal(b["Direction Pad Right"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonB, boolVal(b["Direction Pad Down"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonX, boolVal(b["Direction Pad Up"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonY, boolVal(b["Direction Pad Left"]?.isPressed ?? false))*/
-                    
                     alvr_send_button(WorldTracker.leftButtonA, boolVal(b["Button A"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.leftButtonB, boolVal(b["Button B"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.leftButtonX, boolVal(b["Button X"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.leftButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.leftSystemClick, boolVal(b["Button Options"]?.isPressed ?? false))
                     
-                    // Button Menu
                 }
-                
-                /*controller.physicalInputProfile.valueDidChangeHandler = { (gamepad, element) in
-                    //print(controller.extendedGamepad?.leftThumbstick.xAxis)
-                    print(gamepad, element)
-                }*/
             }
             
-            /*controller.extendedGamepad?.valueChangedHandler = { (gamepad, element) in
-                //print(controller.extendedGamepad?.leftThumbstick.xAxis)
-                print(gamepad, element)
-            }*/
-            
-            
+            // TODO motion fusion
             /*controller.motion?.valueChangedHandler = { (motion: GCMotion)->() in
               print(motion.acceleration, motion.rotationRate)
             }
-            controller.motion?.sensorsActive = true
-            //print()
-            print(controller.motion)*/
+            controller.motion?.sensorsActive = true*/
         }
     }
     
