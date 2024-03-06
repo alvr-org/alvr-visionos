@@ -10,7 +10,6 @@ import Spatial
 import ARKit
 import VideoToolbox
 import ObjectiveC
-import GameController
 
 // The 256 byte aligned size of our uniform structure
 let alignedUniformsSize = (MemoryLayout<UniformsArray>.size + 0xFF) & -0x100
