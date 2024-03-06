@@ -6,6 +6,7 @@ import Foundation
 import ARKit
 import CompositorServices
 import GameController
+import CoreHaptics
 
 class WorldTracker {
     static let shared = WorldTracker()
@@ -35,6 +36,19 @@ class WorldTracker {
     // Hand tracking
     var lastHandsUpdatedTs: TimeInterval = 0
     var lastSentHandsTs: TimeInterval = 0
+    
+    // Controller haptics
+    var leftHapticsStart: TimeInterval = 0
+    var leftHapticsEnd: TimeInterval = 0
+    var leftHapticsFreq: Float = 0.0
+    var leftHapticsAmplitude: Float = 0.0
+    var leftEngine: CHHapticEngine? = nil
+    
+    var rightHapticsStart: TimeInterval = 0
+    var rightHapticsEnd: TimeInterval = 0
+    var rightHapticsFreq: Float = 0.0
+    var rightHapticsAmplitude: Float = 0.0
+    var rightEngine: CHHapticEngine? = nil
     
     static let maxPrediction = 30 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
@@ -455,8 +469,10 @@ class WorldTracker {
         //print(GCController.controllers())
         for controller in GCController.controllers() {
             let isLeft = (controller.vendorName == "Joy-Con (L)")
+            var isBoth = false
             //print(controller.vendorName, controller.physicalInputProfile.elements, controller.physicalInputProfile.allButtons)
             if let gp = controller.extendedGamepad {
+                isBoth = true
                 gp.buttonA.pressedChangedHandler = { (button, value, pressed) in
                     alvr_send_button(WorldTracker.rightButtonA, boolVal(pressed))
                 }
@@ -556,6 +572,136 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.leftButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.leftSystemClick, boolVal(b["Button Options"]?.isPressed ?? false))
                     
+                }
+            }
+            
+            // TODO: Frequency
+            if let haptics = controller.haptics {
+            
+                if (isLeft || isBoth) {
+                    if leftEngine == nil {
+                        leftEngine = haptics.createEngine(withLocality: GCHapticsLocality.leftHandle)
+                        
+                        if leftEngine == nil {
+                            for locality in haptics.supportedLocalities {
+                                if (locality.rawValue as String).contains("(L)") {
+                                    leftEngine = haptics.createEngine(withLocality: locality)
+                                }
+                            }
+                        }
+                        
+                        if leftEngine == nil {
+                            leftEngine = haptics.createEngine(withLocality: GCHapticsLocality.all)
+                        }
+                        
+                        if leftEngine != nil {
+                            do {
+                                try leftEngine!.start()
+                            } catch {
+                                print("Error starting left engine: \(error)")
+                            }
+                        }
+                    }
+    
+                    if let engine = leftEngine {
+                        print("haptic!")
+                        var duration = leftHapticsEnd - leftHapticsStart
+                        var amplitude = leftHapticsAmplitude
+                        if duration < 0 {
+                            print("Skip haptic, negative duration?", duration)
+                            amplitude = 0.0
+                            duration = 0.032
+                        }
+                        if leftHapticsEnd < CACurrentMediaTime() {
+                            amplitude = 0.0
+                            duration = 0.032
+                            print("Skip haptic, already over")
+                        }
+                        if duration > 0.5 {
+                            duration = 0.5
+                        }
+                        if duration < 0.032 {
+                            duration = 0.032
+                        }
+                        do {
+                            let hapticPattern = try CHHapticPattern(events: [
+                                CHHapticEvent(eventType: .hapticContinuous, parameters: [
+                                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0),
+                                    CHHapticEventParameter(parameterID: .hapticIntensity, value: amplitude)
+                                ], relativeTime: 0, duration: duration)
+                            ], parameters: [])
+                        
+                            try engine.makePlayer(with: hapticPattern).start(atTime: engine.currentTime)
+                        } catch {
+                            print("Error playing pattern: \(error)")
+                            
+                            leftEngine!.stop()
+                            leftEngine = nil
+                        }
+                    }
+                }
+                
+                if (!isLeft || isBoth) {
+                    if rightEngine == nil {
+                        rightEngine = haptics.createEngine(withLocality: GCHapticsLocality.rightHandle)
+                        
+                        if rightEngine == nil {
+                            for locality in haptics.supportedLocalities {
+                                if (locality.rawValue as String).contains("(r)") {
+                                    rightEngine = haptics.createEngine(withLocality: locality)
+                                }
+                            }
+                        }
+                        
+                        if rightEngine == nil {
+                            rightEngine = haptics.createEngine(withLocality: GCHapticsLocality.all)
+                        }
+                        
+                        if rightEngine != nil {
+                            do {
+                                try rightEngine!.start()
+                            } catch {
+                                print("Error starting right engine: \(error)")
+                            }
+                        }
+                    }
+    
+                    if let engine = rightEngine {
+                        print("haptic!")
+                        var duration = rightHapticsEnd - rightHapticsStart
+                        var amplitude = rightHapticsAmplitude
+                        if duration < 0 {
+                            print("Skip haptic, negative duration?", duration)
+                            amplitude = 0.0
+                            duration = 0.032
+                        }
+                        if rightHapticsEnd < CACurrentMediaTime() {
+                            amplitude = 0.0
+                            duration = 0.032
+                            print("Skip haptic, already over")
+                        }
+                        if duration > 0.5 {
+                            duration = 0.5
+                        }
+                        if duration < 0.032 {
+                            duration = 0.032
+                        }
+                        do {
+                            let hapticPattern = try CHHapticPattern(events: [
+                                CHHapticEvent(eventType: .hapticContinuous, parameters: [
+                                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0),
+                                    CHHapticEventParameter(parameterID: .hapticIntensity, value: amplitude)
+                                ], relativeTime: 0, duration: duration)
+                            ], parameters: [])
+                        
+                            try engine.makePlayer(with: hapticPattern).start(atTime: engine.currentTime)
+                        } catch {
+                            print("Error playing pattern: \(error)")
+                            
+                            rightEngine!.stop()
+                            rightEngine = nil
+                        }
+                    }
                 }
             }
             

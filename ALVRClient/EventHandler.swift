@@ -340,7 +340,26 @@ class EventHandler: ObservableObject {
                     timeLastFrameSent = CACurrentMediaTime()
                 }
             case ALVR_EVENT_HAPTICS.rawValue:
-                print("haptics: \(alvrEvent.HAPTICS)")
+                //print("haptics: \(alvrEvent.HAPTICS)")
+                let haptics = alvrEvent.HAPTICS
+                var duration = Double(haptics.duration_s)
+                
+                // Hack: Controllers can't do 10ms vibrations.
+                if duration < 0.032 {
+                    duration = 0.032
+                }
+                if haptics.device_id == WorldTracker.deviceIdLeftHand {
+                    WorldTracker.shared.leftHapticsStart = CACurrentMediaTime()
+                    WorldTracker.shared.leftHapticsEnd = CACurrentMediaTime() + duration
+                    WorldTracker.shared.leftHapticsFreq = haptics.frequency
+                    WorldTracker.shared.leftHapticsAmplitude = haptics.amplitude
+                }
+                else {
+                    WorldTracker.shared.rightHapticsStart = CACurrentMediaTime()
+                    WorldTracker.shared.rightHapticsEnd = CACurrentMediaTime() + duration
+                    WorldTracker.shared.rightHapticsFreq = haptics.frequency
+                    WorldTracker.shared.rightHapticsAmplitude = haptics.amplitude
+                }
             case ALVR_EVENT_DECODER_CONFIG.rawValue:
                 streamingActive = true
                 print("create decoder \(alvrEvent.DECODER_CONFIG)")
