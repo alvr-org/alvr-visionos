@@ -381,6 +381,14 @@ class WorldTracker {
                     orientation = orientation * WorldTracker.leftForearmOrientationCorrection
                 }
             }
+
+            // HACK: Apple's elbows currently have the same orientation as their wrists, which VRChat's IK really doesn't like.
+            // Ideally, the elbows would be some lerp based on the wrists, where the mapping goes from the wrist rotation 0-270deg
+            // to the elbow mapping 0-90deg.
+            if steamVrIdx == 27 {
+                orientation = simd_quatf(ix: 0.0, iy: 0.0, iz: 0.0, r: 1.0)
+            }
+
             var position = transform.columns.3
             // Move wrist/elbow slightly outward so that they appear to be on the surface of the arm,
             // instead of inside it.
