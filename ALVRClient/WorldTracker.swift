@@ -480,7 +480,9 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.rightButtonB, boolVal(pressed))
                 }
                 gp.buttonX.pressedChangedHandler = { (button, value, pressed) in
-                    alvr_send_button(WorldTracker.rightButtonX, boolVal(pressed))
+                    alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(pressed))
+                    alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(value))
+                    alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal(value))
                 }
                 gp.buttonY.pressedChangedHandler = { (button, value, pressed) in
                     alvr_send_button(WorldTracker.rightButtonY, boolVal(pressed))
@@ -494,7 +496,9 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.leftButtonX, boolVal(pressed))
                 }
                 gp.dpad.up.pressedChangedHandler = { (button, value, pressed) in
-                    alvr_send_button(WorldTracker.leftButtonY, boolVal(pressed))
+                    alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(pressed))
+                    alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(value))
+                    alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal(value))
                 }
                 gp.dpad.left.pressedChangedHandler = { (button, value, pressed) in
                     alvr_send_button(WorldTracker.leftButtonX, boolVal(pressed))
