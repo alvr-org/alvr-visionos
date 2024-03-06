@@ -208,7 +208,7 @@ class WorldTracker {
                     // Crown-press shenanigans
                     if update.event == .updated {
                         let sinceLast = update.timestamp - lastUpdatedTs
-                        if sinceLast < 3.0 && sinceLast > 0.5 {
+                        if sinceLast < 1.5 && sinceLast > 0.5 {
                             crownPressCount += 1
                         }
                         else {
