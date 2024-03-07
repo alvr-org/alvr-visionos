@@ -365,11 +365,19 @@ class WorldTracker {
             let transformRaw = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform * joint.anchorFromJointTransform
             let transform = transformRaw
             var orientation = simd_quaternion(transform) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+            
             if hand.chirality == .right {
                 orientation = orientation * simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_float3(0.0, 0.0, -1.0))
             }
             else {
                 orientation = orientation * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(-1.0, 0.0, 0.0))
+            }
+            
+            // HACK: Apple's elbows currently have the same orientation as their wrists, which VRChat's IK really doesn't like.
+            // Ideally, the elbows would be some lerp based on the wrists, where the mapping goes from the wrist rotation 0-270deg
+            // to the elbow mapping 0-90deg.
+            if steamVrIdx == 27 {
+                orientation = simd_quatf(ix: 0.0, iy: 0.0, iz: 0.0, r: 1.0)
             }
             
             // Make wrist/elbow trackers face outward
@@ -380,13 +388,6 @@ class WorldTracker {
                 else {
                     orientation = orientation * WorldTracker.leftForearmOrientationCorrection
                 }
-            }
-
-            // HACK: Apple's elbows currently have the same orientation as their wrists, which VRChat's IK really doesn't like.
-            // Ideally, the elbows would be some lerp based on the wrists, where the mapping goes from the wrist rotation 0-270deg
-            // to the elbow mapping 0-90deg.
-            if steamVrIdx == 27 {
-                orientation = simd_quatf(ix: 0.0, iy: 0.0, iz: 0.0, r: 1.0)
             }
 
             var position = transform.columns.3
