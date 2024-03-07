@@ -2,25 +2,28 @@
 set -e
 BUILDDIR="ALVR/target/aarch64-apple-ios/distribution"
 HEADERPATH="ALVR/build/alvr_client_core.h"
+target_framework="ALVRClientCore.framework"
+target_lib="ALVRClientCore.framework/ALVRClientCore"
 rm -r alvrrepack ALVRClientCore.xcframework || true
-mkdir -p alvrrepack/ios alvrrepack/maccatalyst alvrrepack/xros alvrrepack/xrsimulator alvrrepack/headers
-cp "$BUILDDIR/libalvr_client_core.dylib" alvrrepack/ios
-cp "$HEADERPATH" alvrrepack/headers
+for plat in ios maccatalyst xros xrsimulator
+do
+	mkdir -p alvrrepack/$plat/$target_framework/Headers
+	cp tools/framework_template/$plat/Info.plist alvrrepack/$plat/$target_framework
+	cp "$HEADERPATH" alvrrepack/$plat/$target_framework/Headers
+done
+cp "$BUILDDIR/libalvr_client_core.dylib" alvrrepack/ios/$target_lib
 
-install_name_tool -id "@rpath/libalvr_client_core.dylib" alvrrepack/ios/libalvr_client_core.dylib
+install_name_tool -id "@rpath/$target_lib" alvrrepack/ios/$target_lib
 
-xcrun vtool -arch arm64 -set-build-version maccatalyst 17.0 17.0 -replace -output alvrrepack/maccatalyst/libalvr_client_core.dylib alvrrepack/ios/libalvr_client_core.dylib
-xcrun vtool -arch arm64 -set-build-version xros 1.0 1.0 -replace -output alvrrepack/xros/libalvr_client_core.dylib alvrrepack/ios/libalvr_client_core.dylib
-xcrun vtool -arch arm64 -set-build-version xrossim 1.0 1.0 -replace -output alvrrepack/xrsimulator/libalvr_client_core.dylib alvrrepack/ios/libalvr_client_core.dylib
+xcrun vtool -arch arm64 -set-build-version maccatalyst 17.0 17.0 -replace -output alvrrepack/maccatalyst/$target_lib alvrrepack/ios/$target_lib
+xcrun vtool -arch arm64 -set-build-version xros 1.0 1.0 -replace -output alvrrepack/xros/$target_lib alvrrepack/ios/$target_lib
+xcrun vtool -arch arm64 -set-build-version xrossim 1.0 1.0 -replace -output alvrrepack/xrsimulator/$target_lib alvrrepack/ios/$target_lib
+
 
 xcodebuild -create-xcframework \
-	-library alvrrepack/ios/libalvr_client_core.dylib \
-	-headers alvrrepack/headers \
-	-library alvrrepack/maccatalyst/libalvr_client_core.dylib \
-	-headers alvrrepack/headers \
-	-library alvrrepack/xros/libalvr_client_core.dylib \
-	-headers alvrrepack/headers \
-	-library alvrrepack/xrsimulator/libalvr_client_core.dylib \
-	-headers alvrrepack/headers \
+	-framework alvrrepack/ios/$target_framework \
+	-framework alvrrepack/maccatalyst/$target_framework \
+	-framework alvrrepack/xros/$target_framework \
+	-framework alvrrepack/xrsimulator/$target_framework \
 	-output ALVRClientCore.xcframework
 
