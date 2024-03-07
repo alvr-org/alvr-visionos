@@ -1,7 +1,6 @@
 //
 //  Renderer.swift
 //
-#if os(visionOS)
 import CompositorServices
 import Metal
 import MetalKit
@@ -885,4 +884,3 @@ class Renderer {
         }
     }
 }
-#endif
