@@ -96,6 +96,7 @@ class EventHandler: ObservableObject {
             alvrInitialized = false
         }*/
         
+        print("EventHandler.Stop")
         streamingActive = false
         vtDecompressionSession = nil
         videoFormat = nil
@@ -112,6 +113,7 @@ class EventHandler: ObservableObject {
     
     // Currently unused
     func handleHeadsetRemovedOrReentry() {
+        print("EventHandler.handleHeadsetRemovedOrReentry")
         lastIpd = -1
         framesRendered = 0
         framesSinceLastIDR = 0
@@ -180,8 +182,8 @@ class EventHandler: ObservableObject {
                 }
             }
             lastEventHeartbeat = eventHeartbeat
-            for _ in 0...5000 {
-                usleep(1000)
+            for _ in 0...5 {
+                usleep(1000*1000)
             }
         }
     }
@@ -284,11 +286,17 @@ class EventHandler: ObservableObject {
                 handlePeriodicUpdatedValues()
             }
             
-            if (timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (currentTime - timeLastAlvrEvent >= 5.0 || currentTime - timeLastFrameGot >= 5.0))
-               || (renderStarted && timeLastFrameSent != 0 && (currentTime - timeLastFrameSent >= 5.0)) {
+            let diffSinceLastEvent = currentTime - timeLastAlvrEvent
+            let diffSinceLastNal = currentTime - timeLastFrameGot
+            let diffSinceLastDecode = currentTime - timeLastFrameSent
+            if (timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 5.0 || diffSinceLastNal >= 5.0))
+               || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 5.0)) {
                 EventHandler.shared.updateConnectionState(.disconnected)
                 
                 print("Kick ALVR...")
+                print("diffSinceLastEvent:", diffSinceLastEvent)
+                print("diffSinceLastNal:", diffSinceLastNal)
+                print("diffSinceLastDecode:", diffSinceLastDecode)
                 stop()
                 alvrInitialized = false
                 alvr_destroy()
@@ -299,9 +307,9 @@ class EventHandler: ObservableObject {
                 timeLastFrameSent = CACurrentMediaTime()
             }
             
-            if alvrInitialized && (currentTime - timeLastFrameGot >= 5.0) {
+            if alvrInitialized && (diffSinceLastNal >= 5.0) {
                 print("Request IDR")
-                alvr_request_idr()
+                //alvr_request_idr()
                 timeLastFrameGot = CACurrentMediaTime()
             }
 

@@ -427,10 +427,10 @@ class WorldTracker {
 
         // Well, I'm out of ideas.
         guard let deviceAnchor = deviceAnchor else {
+            print("Failed to get device anchor for future prediction!!")
             // Prevent audio crackling issues
             if sentPoses > 30 {
                 EventHandler.shared.handleHeadsetRemoved()
-                resetPlayspace()
             }
             return
         }
