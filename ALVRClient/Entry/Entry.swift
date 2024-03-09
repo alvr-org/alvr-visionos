@@ -79,7 +79,7 @@ struct Entry: View {
             }
         }
         
-        EntryControls(saveAction: saveAction)
+        EntryControls(settings: $settings, saveAction: saveAction)
     }
 }
 
