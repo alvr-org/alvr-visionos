@@ -29,6 +29,15 @@ struct Entry: View {
                     Text("Crown Button long-press ignored by SteamVR")
                 }
                 .toggleStyle(.switch)
+                
+                Toggle(isOn: $settings.setDisplayTo96Hz) {
+                    Text("Optimize refresh rate for 24P film*")
+                    Text("*May cause skipping when displaying 30P content, or while passthrough is active")
+                    .font(.system(size: 10))
+                }
+                .toggleStyle(.switch)
+                
+                
             }
             .frame(width: 450)
             .padding()

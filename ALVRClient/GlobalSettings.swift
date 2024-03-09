@@ -6,23 +6,29 @@ import Foundation
 import SwiftUI
 
 struct GlobalSettings: Codable {
-    var keepSteamVRCenter: Bool
-    var showHandsOverlaid: Bool
+    var keepSteamVRCenter: Bool = true
+    var showHandsOverlaid: Bool = false
+    var setDisplayTo96Hz: Bool = false
     
-    init(keepSteamVRCenter: Bool, showHandsOverlaid: Bool) {
-        self.keepSteamVRCenter = keepSteamVRCenter
-        self.showHandsOverlaid = showHandsOverlaid
+    init() {}
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        self.keepSteamVRCenter = try container.decodeIfPresent(Bool.self, forKey: .keepSteamVRCenter) ?? self.keepSteamVRCenter
+        self.showHandsOverlaid = try container.decodeIfPresent(Bool.self, forKey: .showHandsOverlaid) ?? self.showHandsOverlaid
+        self.setDisplayTo96Hz = try container.decodeIfPresent(Bool.self, forKey: .setDisplayTo96Hz) ?? self.setDisplayTo96Hz
     }
 }
 
 extension GlobalSettings {
     static let sampleData: GlobalSettings =
-    GlobalSettings(keepSteamVRCenter: true, showHandsOverlaid: true)
+    GlobalSettings()
 }
 
 @MainActor
 class GlobalSettingsStore: ObservableObject {
-    @Published var settings: GlobalSettings = GlobalSettings(keepSteamVRCenter: true, showHandsOverlaid: false)
+    @Published var settings: GlobalSettings = GlobalSettings()
     
     private static func fileURL() throws -> URL {
         try FileManager.default.url(for: .documentDirectory,
@@ -35,7 +41,7 @@ class GlobalSettingsStore: ObservableObject {
     func load() throws {
         let fileURL = try Self.fileURL()
         guard let data = try? Data(contentsOf: fileURL) else {
-            return self.settings = GlobalSettings(keepSteamVRCenter: false, showHandsOverlaid: false)
+            return self.settings = GlobalSettings()
         }
         let globalSettings = try JSONDecoder().decode(GlobalSettings.self, from: data)
         self.settings = globalSettings

@@ -185,7 +185,7 @@ struct VideoHandler {
             .first
     }
     
-    static func createVideoDecoder(initialNals: Data, codec: Int) -> (VTDecompressionSession, CMFormatDescription) {
+    static func createVideoDecoder(initialNals: Data, codec: Int, setDisplayTo96Hz: Bool) -> (VTDecompressionSession, CMFormatDescription) {
         let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
         var videoFormat:CMFormatDescription? = nil
         var err:OSStatus = 0
@@ -310,10 +310,13 @@ struct VideoHandler {
             fatalError("format?!")
         }
         
-        DispatchQueue.main.async {
-            if let window = currentKeyWindow() {
-                let avDisplayManager = window.avDisplayManager
-                avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: 96.0, formatDescription: videoFormat!)
+        // Optimize display for 24P film viewing
+        if setDisplayTo96Hz {
+            DispatchQueue.main.async {
+                if let window = currentKeyWindow() {
+                    let avDisplayManager = window.avDisplayManager
+                    avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: 96.0, formatDescription: videoFormat!)
+                }
             }
         }
         
