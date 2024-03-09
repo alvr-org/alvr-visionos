@@ -39,6 +39,7 @@ struct MetalRendererApp: App {
                     } catch {
                         fatalError(error.localizedDescription)
                     }
+                    WorldTracker.shared.settings = gStore.settings // Hack: actually sync settings. We should probably rethink this.
                 }
             }
             .task {
