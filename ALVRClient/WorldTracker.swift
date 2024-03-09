@@ -405,8 +405,9 @@ class WorldTracker {
     }
     
     // TODO: figure out how stable Apple's predictions are into the future
-    
-    func sendTracking(targetTimestamp: Double) {
+    // targetTimestamp: The timestamp of the pose we will send to ALVR--capped by how far we can predict forward.
+    // realTargetTimestamp: The timestamp we tell ALVR, which always includes the full round-trip prediction.
+    func sendTracking(targetTimestamp: Double, realTargetTimestamp: Double) {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
@@ -427,10 +428,10 @@ class WorldTracker {
 
         // Well, I'm out of ideas.
         guard let deviceAnchor = deviceAnchor else {
+            print("Failed to get device anchor for future prediction!!")
             // Prevent audio crackling issues
             if sentPoses > 30 {
                 EventHandler.shared.handleHeadsetRemoved()
-                resetPlayspace()
             }
             return
         }
@@ -456,13 +457,14 @@ class WorldTracker {
         sentPoses += 1
         
         let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
+        let realTargetTimestampNS = UInt64(realTargetTimestamp * Double(NSEC_PER_SEC))
         
-        deviceAnchorsQueue.append(targetTimestampNS)
+        deviceAnchorsQueue.append(realTargetTimestampNS)
         if deviceAnchorsQueue.count > 1000 {
             let val = deviceAnchorsQueue.removeFirst()
             deviceAnchorsDictionary.removeValue(forKey: val)
         }
-        deviceAnchorsDictionary[targetTimestampNS] = deviceAnchor.originFromAnchorTransform
+        deviceAnchorsDictionary[realTargetTimestampNS] = deviceAnchor.originFromAnchorTransform
 
         // Don't move SteamVR center/bounds when the headset recenters
         let transform = self.worldTrackingSteamVRTransform.inverse * deviceAnchor.originFromAnchorTransform
@@ -518,9 +520,9 @@ class WorldTracker {
         //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
 
-        EventHandler.shared.lastRequestedTimestamp = targetTimestampNS
+        EventHandler.shared.lastRequestedTimestamp = realTargetTimestampNS
         lastSentHandsTs = lastHandsUpdatedTs
-        alvr_send_tracking(targetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+        alvr_send_tracking(realTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
     }
     
     func lookupDeviceAnchorFor(timestamp: UInt64) -> simd_float4x4? {

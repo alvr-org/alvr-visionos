@@ -78,6 +78,9 @@ class Renderer {
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
     
+    // Was curious if it improved; it's still juddery.
+    var useApplesReprojection = false
+    
     init(_ layerRenderer: LayerRenderer) {
         self.layerRenderer = layerRenderer
         self.device = layerRenderer.device
@@ -359,6 +362,7 @@ class Renderer {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
         var streamingActiveForFrame = EventHandler.shared.streamingActive
+        var isReprojected = false
         
         var queuedFrame:QueuedFrame? = nil
         if streamingActiveForFrame {
@@ -374,8 +378,10 @@ class Renderer {
                 
                 // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
                 if EventHandler.shared.lastQueuedFrame != nil {
+                    //print("Using last frame...")
                     queuedFrame = EventHandler.shared.lastQueuedFrame
                     EventHandler.shared.framesRendered -= 1
+                    isReprojected = true
                     break
                 }
                 
@@ -460,10 +466,12 @@ class Renderer {
                 if framePreviouslyPredictedPose == nil {
                     print("darn, no pose for that one either")
                     missingAnchor = true
+                    isReprojected = true
                 }
             }
             else {
                 missingAnchor = true
+                isReprojected = true
             }
             
             // Try and avoid weird anchored past frames from sneaking in.
@@ -475,7 +483,8 @@ class Renderer {
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
             let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestamp)
+            let realTargetTimestamp = vsyncTime + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestamp, realTargetTimestamp: realTargetTimestamp)
         }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
@@ -520,6 +529,10 @@ class Renderer {
         if renderingStreaming && frameIsSuitableForDisplaying {
             //print("render")
             renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
+            
+            if isReprojected && useApplesReprojection {
+                LayerRenderer.Clock().wait(until: drawable.frameTiming.renderingDeadline)
+            }
         }
         else {
             // TODO: draw a cool loading logo
