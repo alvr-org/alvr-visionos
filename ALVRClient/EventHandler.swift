@@ -60,7 +60,7 @@ class EventHandler: ObservableObject {
         if !alvrInitialized {
             print("Initialize ALVR")
             alvrInitialized = true
-            let refreshRates:[Float] = [100, 90]
+            let refreshRates:[Float] = [100, 96, 90]
             alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(1920*2), UInt32(1824*2), refreshRates, Int32(refreshRates.count), /*supports_foveated_encoding=*/true, /*external_decoder=*/ true)
             alvr_resume()
         }
