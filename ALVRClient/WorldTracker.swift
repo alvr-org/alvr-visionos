@@ -34,6 +34,8 @@ class WorldTracker {
     // Hand tracking
     var lastHandsUpdatedTs: TimeInterval = 0
     var lastSentHandsTs: TimeInterval = 0
+    var lastLeftHandPose: AlvrPose = AlvrPose()
+    var lastRightHandPose: AlvrPose = AlvrPose()
     
     static let maxPrediction = 30 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
@@ -130,7 +132,7 @@ class WorldTracker {
     }
     
     func processReconstructionUpdates() async {
-        for await update in sceneReconstruction.anchorUpdates {
+        for await _ in sceneReconstruction.anchorUpdates {
             //let meshAnchor = update.anchor
             //print(meshAnchor.id, meshAnchor.originFromAnchorTransform)
         }
@@ -337,9 +339,19 @@ class WorldTracker {
 
     func handAnchorToAlvrDeviceMotion(_ hand: HandAnchor) -> AlvrDeviceMotion {
         let device_id = hand.chirality == .left ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
+        let lastPose: AlvrPose = hand.chirality == .left ? lastLeftHandPose : lastRightHandPose
+        let pose: AlvrPose = handAnchorToPose(hand)
+        let dp = (pose.position.0 - lastPose.position.0, pose.position.1 - lastPose.position.1, pose.position.2 - lastPose.position.2)
+        let dt = Float(lastHandsUpdatedTs - lastSentHandsTs)
         
-        let pose = handAnchorToPose(hand)
-        return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+        if hand.chirality == .left {
+            lastLeftHandPose = pose
+        }
+        else {
+            lastRightHandPose = pose
+        }
+        
+        return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (dp.0 / dt, dp.1 / dt, dp.2 / dt), angular_velocity: (0, 0, 0))
     }
     
     func handAnchorToSkeleton(_ hand: HandAnchor) -> [AlvrPose]? {
@@ -352,7 +364,7 @@ class WorldTracker {
         let rootOrientation = simd_quatf(ix: rootAlvrPose.orientation.x, iy: rootAlvrPose.orientation.y, iz: rootAlvrPose.orientation.z, r: rootAlvrPose.orientation.w)
         let rootPosition = simd_float3(x: rootAlvrPose.position.0, y: rootAlvrPose.position.1, z: rootAlvrPose.position.2)
         let rootPose = AlvrPose(orientation: AlvrQuat(x: rootOrientation.vector.x, y: rootOrientation.vector.y, z: rootOrientation.vector.z, w: rootOrientation.vector.w), position: (rootPosition.x, rootPosition.y, rootPosition.z))
-        for i in 0...25+2 {
+        for _ in 0...25+2 {
             ret.append(rootPose)
         }
         
@@ -412,7 +424,7 @@ class WorldTracker {
         var deviceAnchor:DeviceAnchor? = nil
         
         // Predict as far into the future as Apple will allow us.
-        for i in 0...20 {
+        for _ in 0...20 {
             deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestampWalkedBack)
             if deviceAnchor != nil {
                 break
@@ -456,7 +468,7 @@ class WorldTracker {
         }
         sentPoses += 1
         
-        let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
+        //let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
         let realTargetTimestampNS = UInt64(realTargetTimestamp * Double(NSEC_PER_SEC))
         
         deviceAnchorsQueue.append(realTargetTimestampNS)
