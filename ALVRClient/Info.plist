@@ -2,12 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIApplicationExitsOnSuspend</key>
-	<true/>
 	<key>NSHandsTrackingUsageDescription</key>
 	<string>ALVR would like to send hand positions and skeletons to SteamVR.</string>
 	<key>NSWorldSensingUsageDescription</key>
 	<string>ALVR would like to scan your surroundings for obstacles and playspace boundaries.</string>
+	<key>UIApplicationExitsOnSuspend</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>

@@ -34,6 +34,8 @@ class WorldTracker {
     // Hand tracking
     var lastHandsUpdatedTs: TimeInterval = 0
     var lastSentHandsTs: TimeInterval = 0
+    var lastLeftHandPose: AlvrPose = AlvrPose()
+    var lastRightHandPose: AlvrPose = AlvrPose()
     
     static let maxPrediction = 30 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
@@ -337,9 +339,19 @@ class WorldTracker {
 
     func handAnchorToAlvrDeviceMotion(_ hand: HandAnchor) -> AlvrDeviceMotion {
         let device_id = hand.chirality == .left ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
+        let lastPose: AlvrPose = hand.chirality == .left ? lastLeftHandPose : lastRightHandPose
+        let pose: AlvrPose = handAnchorToPose(hand)
+        let dp = (pose.position.0 - lastPose.position.0, pose.position.1 - lastPose.position.1, pose.position.2 - lastPose.position.2)
+        let dt = Float(lastHandsUpdatedTs - lastSentHandsTs)
         
-        let pose = handAnchorToPose(hand)
-        return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+        if hand.chirality == .left {
+            lastLeftHandPose = pose
+        }
+        else {
+            lastRightHandPose = pose
+        }
+        
+        return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (dp.0 / dt, dp.1 / dt, dp.2 / dt), angular_velocity: (0, 0, 0))
     }
     
     func handAnchorToSkeleton(_ hand: HandAnchor) -> [AlvrPose]? {
