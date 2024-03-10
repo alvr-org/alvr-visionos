@@ -869,7 +869,7 @@ class Renderer {
     func renderLoop() {
         layerRenderer.waitUntilRunning()
         EventHandler.shared.handleHeadsetRemovedOrReentry()
-        var timeSinceLastLoop = CACurrentMediaTime()
+        let timeSinceLastLoop = CACurrentMediaTime()
         while EventHandler.shared.renderStarted {
             if layerRenderer.state == .invalidated {
                 print("Layer is invalidated")

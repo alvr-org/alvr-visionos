@@ -359,12 +359,12 @@ class EventHandler: ObservableObject {
                     continue
                 }
                 while alvrInitialized {
-                   guard let (nal, timestamp) = VideoHandler.pollNal() else {
+                   guard let (nal, _) = VideoHandler.pollNal() else {
                        fatalError("create decoder: failed to poll nal?!")
                        break
                    }
                    //NSLog("%@", nal as NSData)
-                   let val = (nal[4] & 0x7E) >> 1
+                   //let val = (nal[4] & 0x7E) >> 1
                    if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
                        // here we go!
                        (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS)

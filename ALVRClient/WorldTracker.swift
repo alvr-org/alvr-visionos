@@ -132,7 +132,7 @@ class WorldTracker {
     }
     
     func processReconstructionUpdates() async {
-        for await update in sceneReconstruction.anchorUpdates {
+        for await _ in sceneReconstruction.anchorUpdates {
             //let meshAnchor = update.anchor
             //print(meshAnchor.id, meshAnchor.originFromAnchorTransform)
         }
@@ -364,7 +364,7 @@ class WorldTracker {
         let rootOrientation = simd_quatf(ix: rootAlvrPose.orientation.x, iy: rootAlvrPose.orientation.y, iz: rootAlvrPose.orientation.z, r: rootAlvrPose.orientation.w)
         let rootPosition = simd_float3(x: rootAlvrPose.position.0, y: rootAlvrPose.position.1, z: rootAlvrPose.position.2)
         let rootPose = AlvrPose(orientation: AlvrQuat(x: rootOrientation.vector.x, y: rootOrientation.vector.y, z: rootOrientation.vector.z, w: rootOrientation.vector.w), position: (rootPosition.x, rootPosition.y, rootPosition.z))
-        for i in 0...25+2 {
+        for _ in 0...25+2 {
             ret.append(rootPose)
         }
         
@@ -424,7 +424,7 @@ class WorldTracker {
         var deviceAnchor:DeviceAnchor? = nil
         
         // Predict as far into the future as Apple will allow us.
-        for i in 0...20 {
+        for _ in 0...20 {
             deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestampWalkedBack)
             if deviceAnchor != nil {
                 break
@@ -468,7 +468,7 @@ class WorldTracker {
         }
         sentPoses += 1
         
-        let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
+        //let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
         let realTargetTimestampNS = UInt64(realTargetTimestamp * Double(NSEC_PER_SEC))
         
         deviceAnchorsQueue.append(realTargetTimestampNS)
