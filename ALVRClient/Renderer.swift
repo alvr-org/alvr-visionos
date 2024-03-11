@@ -867,7 +867,9 @@ class Renderer {
     }
     
     func renderLoop() {
+    
         layerRenderer.waitUntilRunning()
+        
         EventHandler.shared.handleHeadsetRemovedOrReentry()
         let timeSinceLastLoop = CACurrentMediaTime()
         while EventHandler.shared.renderStarted {
