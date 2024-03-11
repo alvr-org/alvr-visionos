@@ -60,7 +60,7 @@ class EventHandler: ObservableObject {
         if !alvrInitialized {
             print("Initialize ALVR")
             alvrInitialized = true
-            let refreshRates:[Float] = [100, 90]
+            let refreshRates:[Float] = [100, 96, 90]
             alvr_initialize(/*java_vm=*/nil, /*context=*/nil, UInt32(1920*2), UInt32(1824*2), refreshRates, Int32(refreshRates.count), /*supports_foveated_encoding=*/true, /*external_decoder=*/ true)
             alvr_resume()
         }
@@ -367,11 +367,11 @@ class EventHandler: ObservableObject {
                    //let val = (nal[4] & 0x7E) >> 1
                    if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
                        // here we go!
-                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS)
+                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS, setDisplayTo96Hz: WorldTracker.shared.settings.setDisplayTo96Hz)
                        break
                    } else if (nal[3] == 0x01 && (nal[4] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) || (nal[2] == 0x01 && (nal[3] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) {
                         // The NAL unit type is 32 (VPS)
-                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: HEVC_NAL_TYPE_VPS)
+                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: HEVC_NAL_TYPE_VPS, setDisplayTo96Hz: WorldTracker.shared.settings.setDisplayTo96Hz)
                        break
                    }
                 }

@@ -4,6 +4,7 @@
 
 import Foundation
 import VideoToolbox
+import AVKit
 
 let H264_NAL_TYPE_SPS = 7
 let HEVC_NAL_TYPE_VPS = 32
@@ -174,7 +175,17 @@ struct VideoHandler {
         while let _ = VideoHandler.pollNal() {}
     }
     
-    static func createVideoDecoder(initialNals: Data, codec: Int) -> (VTDecompressionSession, CMFormatDescription) {
+    static func currentKeyWindow() -> UIWindow? {
+        UIApplication.shared.connectedScenes
+            .filter({ $0.activationState == .foregroundActive })
+            .map({ $0 as? UIWindowScene })
+            .compactMap({ $0 })
+            .first?.windows
+            .filter({ $0.isKeyWindow })
+            .first
+    }
+    
+    static func createVideoDecoder(initialNals: Data, codec: Int, setDisplayTo96Hz: Bool) -> (VTDecompressionSession, CMFormatDescription) {
         let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
         var videoFormat:CMFormatDescription? = nil
         var err:OSStatus = 0
@@ -297,6 +308,16 @@ struct VideoHandler {
         err = VTDecompressionSessionCreate(allocator: nil, formatDescription: videoFormat!, decoderSpecification: videoDecoderSpecification as CFDictionary, imageBufferAttributes: destinationImageBufferAttributes as CFDictionary, outputCallback: nil, decompressionSessionOut: &decompressionSession)
         if err != 0 {
             fatalError("format?!")
+        }
+        
+        // Optimize display for 24P film viewing
+        if setDisplayTo96Hz {
+            DispatchQueue.main.async {
+                if let window = currentKeyWindow() {
+                    let avDisplayManager = window.avDisplayManager
+                    avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: 96.0, formatDescription: videoFormat!)
+                }
+            }
         }
         
         return (decompressionSession!, videoFormat!)

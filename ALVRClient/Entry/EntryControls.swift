@@ -12,6 +12,7 @@ struct EntryControls: View {
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.dismissWindow) private var dismissWindow
     @ObservedObject var eventHandler = EventHandler.shared
+    @Binding var settings: GlobalSettings
     let saveAction: ()->Void
 
     var body: some View {
@@ -41,7 +42,12 @@ struct EntryControls: View {
                 if isShowing {
                     saveAction()
                     print("Opening Immersive Space")
-                    await openImmersiveSpace(id: "Client")
+                    if settings.showHandsOverlaid {
+                        await openImmersiveSpace(id: "ClientWithHands")
+                    }
+                    else {
+                        await openImmersiveSpace(id: "ClientNoHands")
+                    }
                     dismissWindow(id: "Entry")
                 } 
             }
@@ -52,6 +58,6 @@ struct EntryControls: View {
 
 
 #Preview {
-    EntryControls(saveAction: {})
+    EntryControls(settings: .constant(GlobalSettings.sampleData), saveAction: {})
         .environment(ViewModel())
 }

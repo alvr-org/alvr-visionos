@@ -39,6 +39,7 @@ struct MetalRendererApp: App {
                     } catch {
                         fatalError(error.localizedDescription)
                     }
+                    WorldTracker.shared.settings = gStore.settings // Hack: actually sync settings. We should probably rethink this.
                 }
             }
             .task {
@@ -94,14 +95,25 @@ struct MetalRendererApp: App {
             }
         }
         
-        ImmersiveSpace(id: "Client") {
+        // This is dumb but I think it might genuinely be the correct solution.
+        // But also, somehow it doesn't work, so I'm out of ideas here.
+        ImmersiveSpace(id: "ClientWithHands") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
                 let renderer = Renderer(layerRenderer)
                 renderer.startRenderLoop()
             }
         }
         .immersionStyle(selection: $clientImmersionStyle, in: .full)
-        .upperLimbVisibility(gStore.settings.showHandsOverlaid ? .visible : .hidden)
+        .upperLimbVisibility(.visible)
+        
+        ImmersiveSpace(id: "ClientNoHands") {
+            CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
+                let renderer = Renderer(layerRenderer)
+                renderer.startRenderLoop()
+            }
+        }
+        .immersionStyle(selection: $clientImmersionStyle, in: .full)
+        .upperLimbVisibility(.hidden)
     }
     
 }
