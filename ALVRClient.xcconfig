@@ -9,6 +9,6 @@
 // https://help.apple.com/xcode/#/dev745c5c974
 
 DEVELOPMENT_TEAM = 3D7RY439N
-PRODUCT_BUNDLE_IDENTIFIER = com.worthdoingbadly.ALVRClient
+PRODUCT_BUNDLE_IDENTIFIER = client.alvr
 
 #include? "Override.xcconfig"
