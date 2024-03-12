@@ -361,6 +361,8 @@ class Renderer {
             self.uniforms[0].uniforms.1 = uniforms(forViewIndex: 1)
         }
     }
+    
+    var lastViewTransform = simd_float4(0.0, 0.0, 0.0, 0.0)
 
     func renderFrame() {
         /// Per frame updates hare
@@ -431,8 +433,13 @@ class Renderer {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
             if abs(EventHandler.shared.lastIpd - ipd) > 0.001 {
                 print("Send view config")
+                if EventHandler.shared.lastIpd != -1 {
+                    print("IPD changed!", EventHandler.shared.lastIpd, "->", ipd)
+                }
+                else {
+                    EventHandler.shared.framesRendered = 0
+                }
                 EventHandler.shared.lastIpd = ipd
-                EventHandler.shared.framesRendered = 0
                 let leftAngles = atan(drawable.views[0].tangents)
                 let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
