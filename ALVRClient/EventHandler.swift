@@ -181,6 +181,15 @@ class EventHandler: ObservableObject {
                     numberOfEventThreadRestarts += 1
                 }
             }
+            
+            DispatchQueue.main.async {
+                let state = UIApplication.shared.applicationState
+                if state == .background {
+                    print("App in background, exiting")
+                    exit(0)
+                }
+            }
+            
             lastEventHeartbeat = eventHeartbeat
             for _ in 0...5 {
                 usleep(1000*1000)
@@ -284,6 +293,14 @@ class EventHandler: ObservableObject {
             let currentTime = CACurrentMediaTime()
             if currentTime - timeLastSentPeriodicUpdatedValues >= 5.0 {
                 handlePeriodicUpdatedValues()
+            }
+            
+            DispatchQueue.main.async {
+                let state = UIApplication.shared.applicationState
+                if state == .background {
+                    print("App in background, exiting")
+                    exit(0)
+                }
             }
             
             let diffSinceLastEvent = currentTime - timeLastAlvrEvent
