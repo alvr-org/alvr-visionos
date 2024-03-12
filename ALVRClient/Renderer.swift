@@ -361,8 +361,6 @@ class Renderer {
             self.uniforms[0].uniforms.1 = uniforms(forViewIndex: 1)
         }
     }
-    
-    var lastViewTransform = simd_float4(0.0, 0.0, 0.0, 0.0)
 
     func renderFrame() {
         /// Per frame updates hare
