@@ -340,8 +340,12 @@ class Renderer {
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
             let view = drawable.views[viewIndex]
             
+            var framePoseNoTranslation = framePose
+            var simdDeviceAnchorNoTranslation = simdDeviceAnchor
+            framePoseNoTranslation.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
+            simdDeviceAnchorNoTranslation.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
             let viewMatrix = (simdDeviceAnchor * view.transform).inverse
-            let viewMatrixFrame = (framePose.inverse * simdDeviceAnchor).inverse
+            let viewMatrixFrame = (framePoseNoTranslation.inverse * simdDeviceAnchorNoTranslation).inverse
             let projection = ProjectiveTransform3D(leftTangent: Double(view.tangents[0]),
                                                    rightTangent: Double(view.tangents[1]),
                                                    topTangent: Double(view.tangents[2]),
