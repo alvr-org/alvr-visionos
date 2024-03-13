@@ -136,6 +136,7 @@ class EventHandler: ObservableObject {
         do {
             try audioSession.setActive(true)
             try audioSession.setCategory(.playAndRecord, options: [.mixWithOthers, .allowBluetoothA2DP, .allowAirPlay])
+            try audioSession.setMode(.voiceChat)
             try audioSession.setPreferredOutputNumberOfChannels(2)
             try audioSession.setIntendedSpatialExperience(.bypassed)
         } catch {
