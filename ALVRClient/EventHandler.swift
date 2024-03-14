@@ -136,6 +136,7 @@ class EventHandler: ObservableObject {
         do {
             try audioSession.setActive(true)
             try audioSession.setCategory(.playAndRecord, options: [.mixWithOthers, .allowBluetoothA2DP, .allowAirPlay])
+            try audioSession.setMode(.voiceChat)
             try audioSession.setPreferredOutputNumberOfChannels(2)
             try audioSession.setIntendedSpatialExperience(.bypassed)
         } catch {
@@ -228,8 +229,6 @@ class EventHandler: ObservableObject {
 
             if let vtDecompressionSession = vtDecompressionSession {
                 VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
-
-                    alvr_report_frame_decoded(timestamp)
                     guard let imageBuffer = imageBuffer else {
                         return
                     }
@@ -241,6 +240,8 @@ class EventHandler: ObservableObject {
                     framesSinceLastDecode = 0
                     if frameQueueLastTimestamp != timestamp
                     {
+                        alvr_report_frame_decoded(timestamp)
+
                         // TODO: For some reason, really low frame rates seem to decode the wrong image for a split second?
                         // But for whatever reason this is fine at high FPS.
                         // From what I've read online, the only way to know if an H264 frame has actually completed is if

@@ -340,8 +340,12 @@ class Renderer {
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
             let view = drawable.views[viewIndex]
             
+            var framePoseNoTranslation = framePose
+            var simdDeviceAnchorNoTranslation = simdDeviceAnchor
+            framePoseNoTranslation.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
+            simdDeviceAnchorNoTranslation.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
             let viewMatrix = (simdDeviceAnchor * view.transform).inverse
-            let viewMatrixFrame = (framePose.inverse * simdDeviceAnchor).inverse
+            let viewMatrixFrame = (framePoseNoTranslation.inverse * simdDeviceAnchorNoTranslation).inverse
             let projection = ProjectiveTransform3D(leftTangent: Double(view.tangents[0]),
                                                    rightTangent: Double(view.tangents[1]),
                                                    topTangent: Double(view.tangents[2]),
@@ -427,8 +431,13 @@ class Renderer {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
             if abs(EventHandler.shared.lastIpd - ipd) > 0.001 {
                 print("Send view config")
+                if EventHandler.shared.lastIpd != -1 {
+                    print("IPD changed!", EventHandler.shared.lastIpd, "->", ipd)
+                }
+                else {
+                    EventHandler.shared.framesRendered = 0
+                }
                 EventHandler.shared.lastIpd = ipd
-                EventHandler.shared.framesRendered = 0
                 let leftAngles = atan(drawable.views[0].tangents)
                 let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
