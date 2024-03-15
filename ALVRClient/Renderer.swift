@@ -13,6 +13,7 @@ import ObjectiveC
 // The 256 byte aligned size of our uniform structure
 let alignedUniformsSize = (MemoryLayout<UniformsArray>.size + 0xFF) & -0x100
 let alignedPlaneUniformSize = (MemoryLayout<PlaneUniform>.size + 0xFF) & -0x100
+let alignedEncodingUniformSize = (MemoryLayout<EncodingUniform>.size + 0xFF) & -0x100
 
 let maxBuffersInFlight = 3
 let maxPlanesDrawn = 512
@@ -65,6 +66,11 @@ class Renderer {
     var planeUniformBufferOffset = 0
     var planeUniformBufferIndex = 0
     var planeUniforms: UnsafeMutablePointer<PlaneUniform>
+    
+    var dynamicEncodingUniformBuffer: MTLBuffer
+    var encodingUniformBufferOffset = 0
+    var encodingUniformBufferIndex = 0
+    var encodingUniforms: UnsafeMutablePointer<EncodingUniform>
 
     var rotation: Float = 0
 
@@ -97,6 +103,12 @@ class Renderer {
                                                            options:[MTLResourceOptions.storageModeShared])!
         self.dynamicPlaneUniformBuffer.label = "PlaneUniformBuffer"
         planeUniforms = UnsafeMutableRawPointer(dynamicPlaneUniformBuffer.contents()).bindMemory(to:PlaneUniform.self, capacity:1)
+        
+        let encodingUniformBufferSize = alignedEncodingUniformSize * maxBuffersInFlight
+        self.dynamicEncodingUniformBuffer = self.device.makeBuffer(length:encodingUniformBufferSize,
+                                                           options:[MTLResourceOptions.storageModeShared])!
+        self.dynamicEncodingUniformBuffer.label = "EncodingUniformBuffer"
+        encodingUniforms = UnsafeMutableRawPointer(dynamicEncodingUniformBuffer.contents()).bindMemory(to:EncodingUniform.self, capacity:1)
 
         mtlVertexDescriptor = Renderer.buildMetalVertexDescriptor()
 
@@ -320,10 +332,12 @@ class Renderer {
         /// Update the state of our uniform buffers before rendering
 
         uniformBufferIndex = (uniformBufferIndex + 1) % maxBuffersInFlight
-
         uniformBufferOffset = alignedUniformsSize * uniformBufferIndex
-
         uniforms = UnsafeMutableRawPointer(dynamicUniformBuffer.contents() + uniformBufferOffset).bindMemory(to:UniformsArray.self, capacity:1)
+        
+        encodingUniformBufferIndex = (encodingUniformBufferIndex + 1) % maxBuffersInFlight
+        encodingUniformBufferOffset = alignedEncodingUniformSize * encodingUniformBufferIndex
+        encodingUniforms = UnsafeMutableRawPointer(dynamicEncodingUniformBuffer.contents() + encodingUniformBufferOffset).bindMemory(to:EncodingUniform.self, capacity:1)
     }
     
     private func selectNextPlaneUniformBuffer() {
@@ -613,6 +627,7 @@ class Renderer {
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
+        renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue) // unused
         
         let viewports = drawable.views.map { $0.textureMap.viewport }
         
@@ -698,6 +713,7 @@ class Renderer {
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
+        renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue) // unused
         
         let viewports = drawable.views.map { $0.textureMap.viewport }
         
@@ -744,6 +760,7 @@ class Renderer {
         renderEncoder.setViewports(viewports)
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
+        renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue) // unused
         
         if drawable.views.count > 1 {
             var viewMappings = (0..<drawable.views.count).map {
@@ -818,6 +835,9 @@ class Renderer {
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
+        
+        self.encodingUniforms[0].yuvTransform = VideoHandler.getYUVTransformForVideoFormat(EventHandler.shared.videoFormat!)
+        renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue)
         
         let viewports = drawable.views.map { $0.textureMap.viewport }
         

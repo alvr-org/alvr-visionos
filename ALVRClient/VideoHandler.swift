@@ -158,6 +158,111 @@ struct VideoHandler {
                 return [MTLPixelFormat.r8Unorm, MTLPixelFormat.rg8Unorm]
         }
     }
+    
+    static func getYUVTransformForVideoFormat(_ videoFormat: CMFormatDescription) -> simd_float4x4 {
+        let fmtYCbCrMatrixRaw = videoFormat.extensions["CVImageBufferYCbCrMatrix" as CFString]
+        let fmtYCbCrMatrix = (fmtYCbCrMatrixRaw != nil ? fmtYCbCrMatrixRaw as! CFString : "unknown" as CFString)
+
+        // Bless this page for ending my stint of plugging in random values
+        // from other projects:
+        // https://kdashg.github.io/misc/colors/from-coeffs.html
+        let ycbcrJPEGToRGB = simd_float4x4([
+            simd_float4(+1.0000, +1.0000, +1.0000, +0.0000), // Y
+            simd_float4(+0.0000, -0.3441, +1.7720, +0.0000), // Cb
+            simd_float4(+1.4020, -0.7141, +0.0000, +0.0000), // Cr
+            simd_float4(-0.7010, +0.5291, -0.8860, +1.0000)]  // offsets
+        );
+
+        // BT.601 Full range (8-bit)
+        let bt601ToRGBFull8bit = simd_float4x4([
+            simd_float4(+1.0000000, +1.0000000, +1.0000000, +0.0000), // Y
+            simd_float4(+0.0000000, -0.3454912, +1.7789764, +0.0000), // Cb
+            simd_float4(+1.4075197, -0.7169478, -0.0000000, +0.0000), // Cr
+            simd_float4(-0.7065197, +0.5333027, -0.8929764, +1.0000)]
+        );
+
+        // BT.2020 Full range (8-bit)
+        let bt2020ToRGBFull8bit = simd_float4x4([
+            simd_float4(+1.0000000, +1.0000000, +1.0000000, +0.0000), // Y
+            simd_float4(-0.0000000, -0.1652010, +1.8888071, +0.0000), // Cb
+            simd_float4(+1.4804055, -0.5736025, +0.0000000, +0.0000), // Cr
+            simd_float4(-0.7431055, +0.3708504, -0.9481071, +1.0000)]
+        );
+ 
+        // BT.709 Full range (8-bit)
+        let bt709ToRGBFull8bit = simd_float4x4([
+            simd_float4(+1.0000000, +1.0000000, +1.0000000, +0.0000), // Y
+            simd_float4(+0.0000000, -0.1880618, +1.8629055, +0.0000), // Cb
+            simd_float4(+1.5810000, -0.4699673, +0.0000000, +0.0000), // Cr
+            simd_float4(-0.7936000, +0.3303048, -0.9351055, +1.0000)]
+        );
+
+        // BT.601 Full range (10-bit)
+        let bt601ToRGBFull10bit = simd_float4x4([
+            simd_float4(+1.0000000, +1.0000000, +1.0000000, +0.0000), // Y
+            simd_float4(+0.0000000, -0.3444730, +1.7737339, +0.0000), // Cb
+            simd_float4(+1.4033718, -0.7148350, +0.0000000, +0.0000), // Cr
+            simd_float4(-0.7023718, +0.5301718, -0.8877339, +1.0000)]
+        );
+
+        // BT.2020 Full range (10-bit)
+        let bt2020ToRGBFull10bit = simd_float4x4([
+            simd_float4(+1.0000000, +1.0000000, +1.0000000, +0.0000), // Y
+            simd_float4(-0.0000000, -0.1647141, +1.8832409, +0.0000), // Cb
+            simd_float4(+1.4760429, -0.5719122, +0.0000000, +0.0000), // Cr
+            simd_float4(-0.7387429, +0.3686732, -0.9425409, +1.0000)]
+        );
+
+        // BT.709 Full range (10-bit)
+        let bt709ToRGBFull10bit = simd_float4x4([
+            simd_float4(+1.0000000, +1.0000000, +1.0000000, +0.0000), // Y
+            simd_float4(+0.0000000, -0.1875076, +1.8574157, +0.0000), // Cb
+            simd_float4(+1.5763409, -0.4685823, +0.0000000, +0.0000), // Cr
+            simd_float4(-0.7889409, +0.3283656, -0.9296157, +1.0000)]
+        );
+
+        // BT.2020 Limited range
+        /*let bt2020ToRGBLimited = simd_float4x4([
+            simd_float4(+1.1632, +1.1632, +1.1632, +0.0000), // Y
+            simd_float4(+0.0002, -0.1870, +2.1421, +0.0000), // Cb
+            simd_float4(+1.6794, -0.6497, +0.0008, +0.0000), // Cr
+            simd_float4(-0.91607960784, +0.34703254902, -1.14866392157, +1.0000)]  // offsets
+        );*/
+
+        // BT.709 Limited range
+        /*let bt709ToRGBLimited = simd_float4x4([
+            simd_float4(+1.1644, +1.1644, +1.1644, +0.0000), // Y
+            simd_float4(+0.0001, -0.2133, +2.1125, +0.0000), // Cb
+            simd_float4(+1.7969, -0.5342, -0.0002, +0.0000), // Cr
+            simd_float4(-0.97506392156, 0.30212823529, -1.1333145098, +1.0000)]  // offsets
+        );*/
+
+        let bpc = getBpcForVideoFormat(videoFormat)
+        if bpc == 10 {
+            switch(fmtYCbCrMatrix) {
+                case kCVImageBufferYCbCrMatrix_ITU_R_601_4:
+                    return bt601ToRGBFull10bit;
+                case kCVImageBufferYCbCrMatrix_ITU_R_709_2:
+                    return bt709ToRGBFull10bit;
+                case kCVImageBufferYCbCrMatrix_ITU_R_2020:
+                    return bt2020ToRGBFull10bit;
+                default:
+                    return ycbcrJPEGToRGB;
+            }
+        }
+        else {
+            switch(fmtYCbCrMatrix) {
+                case kCVImageBufferYCbCrMatrix_ITU_R_601_4:
+                    return bt601ToRGBFull8bit;
+                case kCVImageBufferYCbCrMatrix_ITU_R_709_2:
+                    return bt709ToRGBFull8bit;
+                case kCVImageBufferYCbCrMatrix_ITU_R_2020:
+                    return bt2020ToRGBFull8bit;
+                default:
+                    return ycbcrJPEGToRGB;
+            }
+        }
+    }
 
     static func pollNal() -> (Data, UInt64)? {
         let nalLength = alvr_poll_nal(nil, nil)

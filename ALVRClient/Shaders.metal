@@ -150,7 +150,7 @@ vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
     return out;
 }
 
-fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
+fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
 // https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
     
     float2 sampleCoord;
@@ -167,14 +167,7 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
     float4 uvSample = in_tex_uv.sample(colorSampler, sampleCoord);
     float4 ycbcr = float4(ySample.r, uvSample.rg, 1.0f);
     
-    const float4x4 ycbcrToRGBTransform = float4x4(
-        float4(+1.0000f, +1.0000f, +1.0000f, +0.0000f),
-        float4(+0.0000f, -0.3441f, +1.7720f, +0.0000f),
-        float4(+1.4020f, -0.7141f, +0.0000f, +0.0000f),
-        float4(-0.7010f, +0.5291f, -0.8860f, +1.0000f)
-    );
-    
-    float3 rgb_uncorrect = (ycbcrToRGBTransform * ycbcr).rgb;
+    float3 rgb_uncorrect = (encodingUniform.yuvTransform * ycbcr).rgb;
     
     const float DIV12 = 1. / 12.92;
     const float DIV1 = 1. / 1.055;
@@ -194,7 +187,7 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
 
     //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
     //color = linearToDisplayP3 * color;
-    
+
     return float4(color.rgb, 1.0);
 }
 
