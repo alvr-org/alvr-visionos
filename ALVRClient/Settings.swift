@@ -40,12 +40,22 @@ struct SettingsCodables {
             }
         }
     }
+    
+    struct EncoderConfig: Codable {
+        var encodingGamma: Float = 1.0
+
+        enum CodingKeys: String, CodingKey {
+            case encodingGamma = "encoding_gamma"
+        }
+    }
 
     struct VideoConfig: Codable {
         let foveatedEncoding: Switch<FoveationSettings>
+        let encoderConfig: EncoderConfig
 
         enum CodingKeys: String, CodingKey {
             case foveatedEncoding = "foveated_encoding"
+            case encoderConfig = "encoder_config"
         }
     }
 
@@ -68,6 +78,7 @@ struct Settings {
 
         _ = getJson(buffer.baseAddress)
         let data = Data(bytesNoCopy: buffer.baseAddress!, count: Int(len) - 1, deallocator: .none)
+        print(String(data: data, encoding: .utf8)!)
 
         return try! JSONDecoder().decode(T.self, from: data)
     }

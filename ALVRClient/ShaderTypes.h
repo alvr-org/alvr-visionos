@@ -60,6 +60,7 @@ typedef struct
 typedef struct
 {
     matrix_float4x4 yuvTransform;
+    float encodingGamma;
 } EncodingUniform;
 
 #endif /* ShaderTypes_h */

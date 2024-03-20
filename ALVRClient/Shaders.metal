@@ -150,6 +150,25 @@ vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
     return out;
 }
 
+float3 NonlinearToLinearRGB(float3 color) {
+    const float DIV12 = 1. / 12.92;
+    const float DIV1 = 1. / 1.055;
+    const float THRESHOLD = 0.04045;
+    const float3 GAMMA = float3(2.4);
+        
+    float3 condition = float3(color.r < THRESHOLD, color.g < THRESHOLD, color.b < THRESHOLD);
+    float3 lowValues = color * DIV12;
+    float3 highValues = pow((color + 0.055) * DIV1, GAMMA);
+    return condition * lowValues + (1.0 - condition) * highValues;
+}
+
+float3 EncodingNonlinearToLinearRGB(float3 color, float gamma) {
+    float3 condition = float3(color.r < 0.0, color.g < 0.0, color.b < 0.0);
+    float3 lowValues = color;
+    float3 highValues = pow(color, gamma);
+    return (condition * lowValues) + ((1.0 - condition) * highValues);
+}
+
 fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
 // https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
     
@@ -169,15 +188,11 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
     
     float3 rgb_uncorrect = (encodingUniform.yuvTransform * ycbcr).rgb;
     
-    const float DIV12 = 1. / 12.92;
-    const float DIV1 = 1. / 1.055;
-    const float THRESHOLD = 0.04045;
-    const float3 GAMMA = float3(2.4);
-        
-    float3 condition = float3(rgb_uncorrect.r < THRESHOLD, rgb_uncorrect.g < THRESHOLD, rgb_uncorrect.b < THRESHOLD);
-    float3 lowValues = rgb_uncorrect * DIV12;
-    float3 highValues = pow((rgb_uncorrect + 0.055) * DIV1, GAMMA);
-    float3 color = condition * lowValues + (1.0 - condition) * highValues;
+    float3 color = NonlinearToLinearRGB(rgb_uncorrect);
+    color = EncodingNonlinearToLinearRGB(color, encodingUniform.encodingGamma);
+    
+    // Brighten the scene to examine blocking artifacts/smearing
+    //color = pow(color, 1.0 / 2.4);
 
     const float3x3 linearToDisplayP3 = {
         float3(1.2249, -0.0420, -0.0197),
