@@ -78,7 +78,6 @@ struct Settings {
 
         _ = getJson(buffer.baseAddress)
         let data = Data(bytesNoCopy: buffer.baseAddress!, count: Int(len) - 1, deallocator: .none)
-        print(String(data: data, encoding: .utf8)!)
 
         return try! JSONDecoder().decode(T.self, from: data)
     }
