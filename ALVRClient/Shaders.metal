@@ -163,10 +163,11 @@ float3 NonlinearToLinearRGB(float3 color) {
 }
 
 float3 EncodingNonlinearToLinearRGB(float3 color, float gamma) {
-    float3 condition = float3(color.r < 0.0, color.g < 0.0, color.b < 0.0);
-    float3 lowValues = color;
-    float3 highValues = pow(color, gamma);
-    return (condition * lowValues) + ((1.0 - condition) * highValues);
+    float3 ret;
+    ret.r = color.r < 0.0 ? color.r : pow(color.r, gamma);
+    ret.g = color.g < 0.0 ? color.g : pow(color.g, gamma);
+    ret.b = color.b < 0.0 ? color.b : pow(color.b, gamma);
+    return ret;
 }
 
 fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
