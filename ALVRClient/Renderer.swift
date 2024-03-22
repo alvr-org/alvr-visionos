@@ -90,6 +90,11 @@ class Renderer {
     var useApplesReprojection = false
     
     var upscalers: [MetalUpscaler] = []
+    var yuv2rgb_converted: YUV2RGBConverter?
+    
+    var documentsDirectory: URL?
+    
+    var tick: Int = 0
 
     init(_ layerRenderer: LayerRenderer, global_settings: GlobalSettings!) {
         self.global_settings = global_settings
@@ -156,6 +161,24 @@ class Renderer {
 
         EventHandler.shared.renderStarted = true
         
+        initDebugLogFolder()
+    }
+    
+    func initDebugLogFolder() {
+        let fileManager = FileManager.default
+        self.documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+        let newFolderURL = self.documentsDirectory!.appendingPathComponent("upscaling_logging")
+        if !fileManager.fileExists(atPath: newFolderURL.path) {
+            do {
+                try fileManager.createDirectory(at: newFolderURL, withIntermediateDirectories: true, attributes: nil)
+                print("Folder created")
+            } catch {
+                print("Error creating folder: \(error.localizedDescription)")
+            }
+        } else {
+            print("Folder already exists")
+        }
+        
     }
     
     func startRenderLoop() {
@@ -182,6 +205,7 @@ class Renderer {
                     print("Unable to setup MetaFX upscaler, are you in simulator?")
                     upscalers.removeAll()
                 }
+                yuv2rgb_converted = YUV2RGBConverter(device: self.device)
             }
             videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
                                 device: device,
@@ -844,6 +868,7 @@ class Renderer {
         guard let queuedFrame = queuedFrame else {
             return
         }
+        var rawTextures: [MTLTexture] = []
         var metalTextures: [MTLTexture] = []
         let pixelBuffer = queuedFrame.imageBuffer
         let textureTypes = VideoHandler.getTextureTypesForFormat(CVPixelBufferGetPixelFormatType(pixelBuffer))
@@ -868,6 +893,7 @@ class Renderer {
             guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage")
             }
+            rawTextures.append(metalTexture)
             if (upscalers.count > i) {
                 metalTextures.append(upscalers[i].addUpscaleCommand(inputTexture: metalTexture, commandBuffer: commandBuffer))
             }
@@ -926,6 +952,24 @@ class Renderer {
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
         
+        if (self.tick % 100 == 0 && self.upscalers.count > 0)
+        {
+            let rawTexture = yuv2rgb_converted?.convert(device: self.device, metalY: rawTextures[0], metalUV: rawTextures[1])
+            let metalTexture = yuv2rgb_converted?.convert(device: self.device, metalY: metalTextures[0], metalUV: metalTextures[1])
+
+            let raw_image = GPUTextureToImage(texture: rawTexture!, device: self.device)!
+            let upscaled_img = GPUTextureToImage(texture: metalTexture!, device: self.device)
+            
+            if ((documentsDirectory) != nil)
+            {
+                let file_raw = documentsDirectory?.appendingPathComponent("upscaling_logging/raw_\(self.tick).png")
+                saveCGImageToFile(image: raw_image, url: file_raw!)
+                
+                let file_upscaled = documentsDirectory?.appendingPathComponent("upscaling_logging/upscaled_\(self.tick).png")
+                saveCGImageToFile(image: upscaled_img!, url: file_upscaled!)
+            }
+        }
+        self.tick += 1
         //renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
         //renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
     }

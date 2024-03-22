@@ -194,3 +194,47 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
     return float4(0.0, 0.0, 0.0, 1.0);
 }
+
+struct VertexIn {
+    float4 position [[attribute(0)]];
+    float2 texCoord [[attribute(1)]];
+};
+
+// Vertex output structure
+struct VertexOut {
+    float4 position [[position]];
+    float2 texCoord;
+};
+
+// Vertex shader
+vertex VertexOut basicVertexShader(constant VertexIn *vertexArray [[buffer(0)]],
+                                   uint vertexID [[vertex_id]]) {
+    VertexOut out;
+    out.position = vertexArray[vertexID].position;
+    out.texCoord = vertexArray[vertexID].texCoord;
+    return out;
+}
+
+kernel void yuvToRgbComputeKernel(
+    texture2d<float, access::sample> yTexture [[ texture(0) ]],
+    texture2d<float, access::sample> uvTexture [[ texture(1) ]],
+    texture2d<float, access::write> rgbTexture [[ texture(2) ]],
+    uint2 gid [[ thread_position_in_grid ]])
+{
+    // Ensure we do not access out of bounds
+    if (gid.x >= rgbTexture.get_width() || gid.y >= rgbTexture.get_height()) {
+        return;
+    }
+
+    float y = yTexture.read(gid).r;
+    float2 uv = uvTexture.read(gid / 2).rg - float2(0.5, 0.5);
+
+    // Simple YUV to RGB conversion
+    float3 rgb;
+    rgb.r = y + 1.402 * uv.y;
+    rgb.g = y - 0.344136 * uv.x - 0.714136 * uv.y;
+    rgb.b = y + 1.772 * uv.x;
+    
+    // Write the RGB color to the output texture
+    rgbTexture.write(float4(rgb, 1.0), gid);
+}

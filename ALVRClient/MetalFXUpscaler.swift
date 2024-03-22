@@ -1,7 +1,7 @@
 //
 //  MetalFXUpscaler.swift
 //
-//  Created by xuhao3e8 on 2024/3/16.
+//  Created by @xuhao1 on 2024/3/16.
 //
 
 import Metal
