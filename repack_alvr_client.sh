@@ -4,7 +4,7 @@ BUILDDIR="ALVR/target/aarch64-apple-ios/distribution"
 HEADERPATH="ALVR/build/alvr_client_core.h"
 target_framework="ALVRClientCore.framework"
 target_lib="ALVRClientCore.framework/ALVRClientCore"
-rm -r alvrrepack ALVRClientCore.xcframework || true
+rm -rf alvrrepack ALVRClientCore.xcframework || true
 for plat in ios maccatalyst xros xrsimulator
 do
 	mkdir -p alvrrepack/$plat/$target_framework/Headers

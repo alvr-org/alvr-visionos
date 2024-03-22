@@ -62,7 +62,7 @@ class EventHandler: ObservableObject {
             alvrInitialized = true
             let refreshRates:[Float] = [100, 96, 90]
             let capabilities = AlvrClientCapabilities(default_view_width: UInt32(1920*2), default_view_height: UInt32(1824*2), external_decoder: true, refresh_rates: refreshRates, refresh_rates_count: Int32(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: false)
-            alvr_initialize(/*java_vm=*/nil, /*context=*/nil, /*capabilities=*/capabilities)
+            alvr_initialize(/*capabilities=*/capabilities)
             alvr_resume()
         }
     }
