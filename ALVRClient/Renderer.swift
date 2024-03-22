@@ -83,6 +83,7 @@ class Renderer {
     var videoFramePipelineState_YpCbCrBiPlanar: MTLRenderPipelineState!
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
+    var encodingGamma: Float = 1.0
     
     // Was curious if it improved; it's still juddery.
     var useApplesReprojection = false
@@ -171,6 +172,7 @@ class Renderer {
                                 mtlVertexDescriptor: mtlVertexDescriptor,
                                 foveationVars: foveationVars
             )
+            encodingGamma = settings.video.encoderConfig.encodingGamma
             let renderThread = Thread {
                 self.renderLoop()
             }
@@ -837,6 +839,7 @@ class Renderer {
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
         
         self.encodingUniforms[0].yuvTransform = VideoHandler.getYUVTransformForVideoFormat(EventHandler.shared.videoFormat!)
+        self.encodingUniforms[0].encodingGamma = encodingGamma
         renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue)
         
         let viewports = drawable.views.map { $0.textureMap.viewport }

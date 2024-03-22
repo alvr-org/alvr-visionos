@@ -40,12 +40,22 @@ struct SettingsCodables {
             }
         }
     }
+    
+    struct EncoderConfig: Codable {
+        var encodingGamma: Float = 1.0
+
+        enum CodingKeys: String, CodingKey {
+            case encodingGamma = "encoding_gamma"
+        }
+    }
 
     struct VideoConfig: Codable {
         let foveatedEncoding: Switch<FoveationSettings>
+        let encoderConfig: EncoderConfig
 
         enum CodingKeys: String, CodingKey {
             case foveatedEncoding = "foveated_encoding"
+            case encoderConfig = "encoder_config"
         }
     }
 
