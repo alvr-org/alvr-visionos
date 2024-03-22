@@ -36,6 +36,12 @@ struct Entry: View {
                     .font(.system(size: 10))
                 }
                 .toggleStyle(.switch)
+
+                Text("MetalFX Upscaling \(settings.upscalingFactor)")
+                    .font(.system(size: 20, weight: .bold))
+                
+                Slider(value: $settings.upscalingFactor, in: 1.0 ... 2.5, step: 0.1) {
+                }
                 
                 
             }

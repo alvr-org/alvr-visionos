@@ -99,7 +99,7 @@ struct MetalRendererApp: App {
         // But also, somehow it doesn't work, so I'm out of ideas here.
         ImmersiveSpace(id: "ClientWithHands") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
-                let renderer = Renderer(layerRenderer)
+                let renderer = Renderer(layerRenderer, global_settings: gStore.settings)
                 renderer.startRenderLoop()
             }
         }
@@ -108,7 +108,7 @@ struct MetalRendererApp: App {
         
         ImmersiveSpace(id: "ClientNoHands") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
-                let renderer = Renderer(layerRenderer)
+                let renderer = Renderer(layerRenderer, global_settings: gStore.settings)
                 renderer.startRenderLoop()
             }
         }

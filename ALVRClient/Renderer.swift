@@ -47,6 +47,8 @@ let fullscreenQuadVertices:[Float] = [-panel_depth, -panel_depth, -panel_depth,
 
 class Renderer {
 
+    var global_settings: GlobalSettings!
+    
     public let device: MTLDevice
     let commandQueue: MTLCommandQueue
     
@@ -87,7 +89,10 @@ class Renderer {
     // Was curious if it improved; it's still juddery.
     var useApplesReprojection = false
     
-    init(_ layerRenderer: LayerRenderer) {
+    var upscalers: [MetalUpscaler] = []
+
+    init(_ layerRenderer: LayerRenderer, global_settings: GlobalSettings!) {
+        self.global_settings = global_settings
         self.layerRenderer = layerRenderer
         self.device = layerRenderer.device
         self.commandQueue = self.device.makeCommandQueue()!
@@ -150,6 +155,7 @@ class Renderer {
         }
 
         EventHandler.shared.renderStarted = true
+        
     }
     
     func startRenderLoop() {
@@ -158,6 +164,25 @@ class Renderer {
                 fatalError("streaming started: failed to retrieve alvr settings")
             }
             let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
+            if (global_settings.upscalingFactor == 1.0)
+            {
+                print("upscalingFactor set to 1.0 metalFx will be disable")
+            }
+            else
+            {
+                print("Will setup MetalFX upscaler")
+                for i in 0...1 {
+                    let upscaler = MetalUpscaler(device: self.device, scaling: global_settings.upscalingFactor)
+                    if upscaler != nil {
+                        upscalers.append(upscaler!)
+                    }
+                }
+                if (upscalers.count != 2)
+                {
+                    print("Unable to setup MetaFX upscaler, are you in simulator?")
+                    upscalers.removeAll()
+                }
+            }
             videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
                                 device: device,
                                 layerRenderer: layerRenderer,
@@ -536,7 +561,7 @@ class Renderer {
             // Don't show frame if we haven't sent the view config and received frames
             // with that config applied.
             frameIsSuitableForDisplaying = false
-            print("IPD is bad, no frame")
+//            print("IPD is bad, no frame")
         }
         if !WorldTracker.shared.worldTrackingAddedOriginAnchor && EventHandler.shared.framesRendered < 300 {
             // Don't show frame if we haven't figured out our origin yet.
@@ -816,6 +841,41 @@ class Renderer {
             renderPassDescriptor.renderTargetArrayLength = drawable.views.count
         }
         
+        guard let queuedFrame = queuedFrame else {
+            return
+        }
+        var metalTextures: [MTLTexture] = []
+        let pixelBuffer = queuedFrame.imageBuffer
+        let textureTypes = VideoHandler.getTextureTypesForFormat(CVPixelBufferGetPixelFormatType(pixelBuffer))
+        // Add upscaling first
+        for i in 0...1 {
+            var textureOut:CVMetalTexture! = nil
+            var err:OSStatus = 0
+            let width = CVPixelBufferGetWidth(pixelBuffer)
+            let height = CVPixelBufferGetHeight(pixelBuffer)
+            if i == 0 {
+                err = CVMetalTextureCacheCreateTextureFromImage(
+                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
+                    width, height, 0, &textureOut);
+            } else {
+                err = CVMetalTextureCacheCreateTextureFromImage(
+                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
+                    width/2, height/2, 1, &textureOut);
+            }
+            if err != 0 {
+                fatalError("CVMetalTextureCacheCreateTextureFromImage \(err)")
+            }
+            guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
+                fatalError("CVMetalTextureCacheCreateTextureFromImage")
+            }
+            if (upscalers.count > i) {
+                metalTextures.append(upscalers[i].addUpscaleCommand(inputTexture: metalTexture, commandBuffer: commandBuffer))
+            }
+            else {
+                metalTextures.append(metalTexture)
+            }
+        }
+        
         /// Final pass rendering code here
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             fatalError("Failed to create render encoder")
@@ -851,38 +911,13 @@ class Renderer {
             renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
         }
         
-        guard let queuedFrame = queuedFrame else {
-            renderEncoder.endEncoding()
-            return
-        }
-        let pixelBuffer = queuedFrame.imageBuffer
         // https://cs.android.com/android/platform/superproject/main/+/main:external/webrtc/sdk/objc/components/renderer/metal/RTCMTLNV12Renderer.mm;l=108;drc=a81e9c82fc3fbc984f0f110407d1e44c9c01958a
         // TODO(zhuowei): yolo
         //TODO: prevailing wisdom on stackoverflow says that the CVMetalTextureRef has to be held until
         // rendering is complete, or the MtlTexture will be invalid?
         
-        let textureTypes = VideoHandler.getTextureTypesForFormat(CVPixelBufferGetPixelFormatType(pixelBuffer))
         for i in 0...1 {
-            var textureOut:CVMetalTexture! = nil
-            var err:OSStatus = 0
-            let width = CVPixelBufferGetWidth(pixelBuffer)
-            let height = CVPixelBufferGetHeight(pixelBuffer)
-            if i == 0 {
-                err = CVMetalTextureCacheCreateTextureFromImage(
-                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
-                    width, height, 0, &textureOut);
-            } else {
-                err = CVMetalTextureCacheCreateTextureFromImage(
-                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
-                    width/2, height/2, 1, &textureOut);
-            }
-            if err != 0 {
-                fatalError("CVMetalTextureCacheCreateTextureFromImage \(err)")
-            }
-            guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
-                fatalError("CVMetalTextureCacheCreateTextureFromImage")
-            }
-            renderEncoder.setFragmentTexture(metalTexture, index: i)
+            renderEncoder.setFragmentTexture(metalTextures[i], index: i)
         }
         
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
