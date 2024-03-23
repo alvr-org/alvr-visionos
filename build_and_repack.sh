@@ -18,7 +18,7 @@ cargo install cbindgen
 rustup target add aarch64-apple-ios
 
 CARGO_TARGET_DIR=ALVR/target cargo build --manifest-path ALVR/Cargo.toml --target=aarch64-apple-ios -p alvr_client_core --profile distribution
-mkdir ALVR/build
+mkdir -p ALVR/build
 cd ALVR/alvr/client_core
 cbindgen --config cbindgen.toml --crate alvr_client_core --output ../../build/alvr_client_core.h
 cd ../../../

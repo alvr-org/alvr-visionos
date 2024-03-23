@@ -38,7 +38,7 @@ struct Entry: View {
                 .toggleStyle(.switch)
 
                 Toggle(isOn: $settings.enableMetalFX) {
-                    Text("Enable MetalFX for upscaling*")
+                    Text("Enable MetalFX for upscaling")
                 }
                 .toggleStyle(.switch)
                 
