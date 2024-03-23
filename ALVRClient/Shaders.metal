@@ -206,15 +206,6 @@ struct VertexOut {
     float2 texCoord;
 };
 
-// Vertex shader
-vertex VertexOut basicVertexShader(constant VertexIn *vertexArray [[buffer(0)]],
-                                   uint vertexID [[vertex_id]]) {
-    VertexOut out;
-    out.position = vertexArray[vertexID].position;
-    out.texCoord = vertexArray[vertexID].texCoord;
-    return out;
-}
-
 kernel void yuvToRgbComputeKernel(
     texture2d<float, access::sample> yTexture [[ texture(0) ]],
     texture2d<float, access::sample> uvTexture [[ texture(1) ]],

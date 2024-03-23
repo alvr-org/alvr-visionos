@@ -8,9 +8,10 @@ import Foundation
 import CoreGraphics
 import ImageIO
 import Metal
-import MetalFX
 import CoreGraphics
 import MobileCoreServices
+import MetalPerformanceShaders
+
 
 func saveCGImageToFile(image: CGImage, url: URL, format: CFString = kUTTypePNG) {
     guard let destination = CGImageDestinationCreateWithURL(url as CFURL, format, 1, nil) else {
@@ -103,11 +104,11 @@ class YUV2RGBConverter
     }
 }
 
+
 func GPUTextureToImage(texture: MTLTexture, device: MTLDevice) -> CGImage? {
     let width = texture.width
     let height = texture.height
     let pixelByteCount = 4 * width * height
-
     let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm, width: width, height: height, mipmapped: false)
     textureDescriptor.usage = [.shaderRead, .pixelFormatView]
     textureDescriptor.storageMode = .shared
@@ -123,8 +124,14 @@ func GPUTextureToImage(texture: MTLTexture, device: MTLDevice) -> CGImage? {
         print("Failed to create command queue or command buffer")
         return nil
     }
+    
+    var texture_rgb8: MTLTexture? = texture;
+    if (texture.pixelFormat == .rgba16Float)
+    {
+        texture_rgb8 = convertRGBA16FloatToRGBA8Unorm(device: device, commandQueue: commandQueue, sourceTexture: texture)
+    }
 
-    blitEncoder.copy(from: texture,
+    blitEncoder.copy(from: texture_rgb8!,
                      sourceSlice: 0,
                      sourceLevel: 0,
                      sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
@@ -162,6 +169,79 @@ func GPUTextureToImage(texture: MTLTexture, device: MTLDevice) -> CGImage? {
 
     return cgImage
 }
+
+
+func convertRGBA16FloatToRGBA8Unorm(device: MTLDevice, commandQueue: MTLCommandQueue, sourceTexture: MTLTexture) -> MTLTexture? {
+    // Create a descriptor for the destination texture
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm,
+                                                              width: sourceTexture.width,
+                                                              height: sourceTexture.height,
+                                                              mipmapped: false)
+    descriptor.usage = [.shaderRead, .shaderWrite]
+    guard let destinationTexture = device.makeTexture(descriptor: descriptor) else {
+        print("Failed to create destination texture.")
+        return nil
+    }
+
+    // Create an MPSImageConversion kernel
+    let conversionKernel = MPSImageConversion(device: device,
+                                              srcAlpha: .alphaIsOne,
+                                              destAlpha: .alphaIsOne,
+                                              backgroundColor: nil,
+                                              conversionInfo: nil) // Use default conversionInfo
+
+    // Encode the conversion to a command buffer
+    guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+        print("Failed to create command buffer.")
+        return nil
+    }
+    
+    conversionKernel.encode(commandBuffer: commandBuffer,
+                            sourceTexture: sourceTexture,
+                            destinationTexture: destinationTexture)
+    
+    return destinationTexture
+}
+
+//
+//func convertTexture16Fto8U(device: MTLDevice, commandQueue: MTLCommandQueue, inputTexture: MTLTexture) -> MTLTexture? {
+//    guard let library = device.makeDefaultLibrary(),
+//          let kernelFunction = library.makeFunction(name: "rgba16FloatToRgba8Unorm"),
+//          let computePipelineState = try? device.makeComputePipelineState(function: kernelFunction),
+//          let commandBuffer = commandQueue.makeCommandBuffer(),
+//          let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
+//        print("Failed to set up Metal components for conversion.")
+//        return nil
+//    }
+//
+//    // Create the output texture with RGBA8Unorm format
+//    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm,
+//                                                              width: inputTexture.width,
+//                                                              height: inputTexture.height,
+//                                                              mipmapped: false)
+//    descriptor.usage = [.shaderWrite, .shaderRead]
+//    guard let outputTexture = device.makeTexture(descriptor: descriptor) else {
+//        print("Failed to create output texture.")
+//        return nil
+//    }
+//
+//    // Set up and execute the compute shader
+//    computeEncoder.setComputePipelineState(computePipelineState)
+//    computeEncoder.setTexture(inputTexture, index: 0)
+//    computeEncoder.setTexture(outputTexture, index: 1)
+//    
+//    let threadgroupSize = MTLSize(width: 8, height: 8, depth: 1) // Adjust based on GPU
+//    let threadgroups = MTLSize(width: (inputTexture.width + threadgroupSize.width - 1) / threadgroupSize.width,
+//                               height: (inputTexture.height + threadgroupSize.height - 1) / threadgroupSize.height,
+//                               depth: 1)
+//    
+//    computeEncoder.dispatchThreadgroups(threadgroups, threadsPerThreadgroup: threadgroupSize)
+//    computeEncoder.endEncoding()
+////    commandBuffer.commit()
+////    commandBuffer.waitUntilCompleted()
+//    
+//    return outputTexture
+//}
 
 
 func textureToImage(texture: MTLTexture) -> CGImage? {

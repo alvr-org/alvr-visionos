@@ -89,9 +89,8 @@ class Renderer {
     // Was curious if it improved; it's still juddery.
     var useApplesReprojection = false
     
-    var upscalers: [MetalUpscaler] = []
-    var yuv2rgb_converted: YUV2RGBConverter?
-    
+    var upscaler: MetalUpscaler? = nil
+    var yuv2rgb_converted: YUV2RGBConverter? = nil
     var documentsDirectory: URL?
     
     var tick: Int = 0
@@ -193,18 +192,7 @@ class Renderer {
             }
             else
             {
-                print("Will setup MetalFX upscaler")
-                for i in 0...1 {
-                    let upscaler = MetalUpscaler(device: self.device, scaling: global_settings.upscalingFactor)
-                    if upscaler != nil {
-                        upscalers.append(upscaler!)
-                    }
-                }
-                if (upscalers.count != 2)
-                {
-                    print("Unable to setup MetaFX upscaler, are you in simulator?")
-                    upscalers.removeAll()
-                }
+                upscaler = MetalUpscaler(device: self.device, scaling: global_settings.upscalingFactor)
                 yuv2rgb_converted = YUV2RGBConverter(device: self.device)
             }
             videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
@@ -870,6 +858,8 @@ class Renderer {
         }
         var rawTextures: [MTLTexture] = []
         var metalTextures: [MTLTexture] = []
+        var rgbTextureRaw: MTLTexture? = nil
+        var rgbTextureUpscaled: MTLTexture? = nil
         let pixelBuffer = queuedFrame.imageBuffer
         let textureTypes = VideoHandler.getTextureTypesForFormat(CVPixelBufferGetPixelFormatType(pixelBuffer))
         // Add upscaling first
@@ -894,13 +884,13 @@ class Renderer {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage")
             }
             rawTextures.append(metalTexture)
-            if (upscalers.count > i) {
-                metalTextures.append(upscalers[i].addUpscaleCommand(inputTexture: metalTexture, commandBuffer: commandBuffer))
-            }
-            else {
                 metalTextures.append(metalTexture)
-            }
         }
+        
+//        if (upscaler != nil) {
+//            rgbTextureRaw = yuv2rgb_converted?.addToBuffer(commandBuffer: commandBuffer, metalY: rawTextures[0], metalUV: rawTextures[1])
+//            rgbTextureUpscaled = upscaler?.addUpscaleCommand(inputTexture: rgbTextureRaw!, commandBuffer: commandBuffer)
+//        }
         
         /// Final pass rendering code here
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
@@ -942,9 +932,16 @@ class Renderer {
         //TODO: prevailing wisdom on stackoverflow says that the CVMetalTextureRef has to be held until
         // rendering is complete, or the MtlTexture will be invalid?
         
+        if (upscaler != nil && false)
+        {
+            renderEncoder.setFragmentTexture(rgbTextureUpscaled, index: 0)
+        }
+        else {
         for i in 0...1 {
             renderEncoder.setFragmentTexture(metalTextures[i], index: i)
+            }
         }
+        
         
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
@@ -952,23 +949,20 @@ class Renderer {
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
         
-        if (self.tick % 100 == 0 && self.upscalers.count > 0)
-        {
-            let rawTexture = yuv2rgb_converted?.convert(device: self.device, metalY: rawTextures[0], metalUV: rawTextures[1])
-            let metalTexture = yuv2rgb_converted?.convert(device: self.device, metalY: metalTextures[0], metalUV: metalTextures[1])
-
-            let raw_image = GPUTextureToImage(texture: rawTexture!, device: self.device)!
-            let upscaled_img = GPUTextureToImage(texture: metalTexture!, device: self.device)
-            
-            if ((documentsDirectory) != nil)
-            {
-                let file_raw = documentsDirectory?.appendingPathComponent("upscaling_logging/raw_\(self.tick).png")
-                saveCGImageToFile(image: raw_image, url: file_raw!)
-                
-                let file_upscaled = documentsDirectory?.appendingPathComponent("upscaling_logging/upscaled_\(self.tick).png")
-                saveCGImageToFile(image: upscaled_img!, url: file_upscaled!)
-            }
-        }
+//        if (self.tick % 100 == 0 && self.upscaler != nil)
+//        {
+//            let raw_image = GPUTextureToImage(texture: rgbTextureRaw!, device: device)!
+//            let upscaled_img = GPUTextureToImage(texture: rgbTextureUpscaled!, device: device)!
+//            if ((documentsDirectory) != nil)
+//            {
+//                let file_raw = documentsDirectory?.appendingPathComponent("upscaling_logging/raw_\(self.tick)_rgb.png")
+//                saveCGImageToFile(image: raw_image, url: file_raw!)
+//                
+//                let file_upscaled = documentsDirectory?.appendingPathComponent("upscaling_logging/upscaled_\(self.tick)_rgb.png")
+//                saveCGImageToFile(image: upscaled_img, url: file_upscaled!)
+//            }
+//        }
+        
         self.tick += 1
         //renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
         //renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
