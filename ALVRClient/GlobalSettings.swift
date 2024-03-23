@@ -10,6 +10,7 @@ struct GlobalSettings: Codable {
     var showHandsOverlaid: Bool = false
     var setDisplayTo96Hz: Bool = false
     var upscalingFactor: Float32 = 1.0
+    var enableMetalFX: Bool = false
     
     init() {}
     
@@ -20,6 +21,7 @@ struct GlobalSettings: Codable {
         self.showHandsOverlaid = try container.decodeIfPresent(Bool.self, forKey: .showHandsOverlaid) ?? self.showHandsOverlaid
         self.setDisplayTo96Hz = try container.decodeIfPresent(Bool.self, forKey: .setDisplayTo96Hz) ?? self.setDisplayTo96Hz
         self.upscalingFactor = try container.decodeIfPresent(Float32.self, forKey: .upscalingFactor) ?? self.upscalingFactor
+        self.enableMetalFX = try container.decodeIfPresent(Bool.self, forKey: .enableMetalFX) ?? self.enableMetalFX
     }
 }
 

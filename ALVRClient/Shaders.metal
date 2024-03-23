@@ -191,6 +191,45 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
     return float4(color.rgb, 1.0);
 }
 
+fragment float4 videoFrameFragmentShader_rgbPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_rgb, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
+// https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
+    
+    float2 sampleCoord;
+    if (FFR_ENABLED) {
+        sampleCoord = decompressAxisAlignedCoord(in.texCoord);
+    } else {
+        sampleCoord = in.texCoord;
+    }
+    
+    constexpr sampler colorSampler(mip_filter::linear,
+                                   mag_filter::linear,
+                                   min_filter::linear);
+    
+    float3 rgb_uncorrect = in_tex_rgb.sample(colorSampler, sampleCoord).rgb;
+    
+    const float DIV12 = 1. / 12.92;
+    const float DIV1 = 1. / 1.055;
+    const float THRESHOLD = 0.04045;
+    const float3 GAMMA = float3(2.4);
+        
+    float3 condition = float3(rgb_uncorrect.r < THRESHOLD, rgb_uncorrect.g < THRESHOLD, rgb_uncorrect.b < THRESHOLD);
+    float3 lowValues = rgb_uncorrect * DIV12;
+    float3 highValues = pow((rgb_uncorrect + 0.055) * DIV1, GAMMA);
+    float3 color = condition * lowValues + (1.0 - condition) * highValues;
+
+    const float3x3 linearToDisplayP3 = {
+        float3(1.2249, -0.0420, -0.0197),
+        float3(-0.2247, 1.0419, -0.0786),
+        float3(0.0, 0.0, 1.0979),
+    };
+
+    //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
+    //color = linearToDisplayP3 * color;
+
+    return float4(color.rgb, 1.0);
+}
+
+
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
     return float4(0.0, 0.0, 0.0, 1.0);
 }

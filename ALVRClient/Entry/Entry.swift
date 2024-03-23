@@ -37,10 +37,17 @@ struct Entry: View {
                 }
                 .toggleStyle(.switch)
 
-                Text("MetalFX Upscaling \(settings.upscalingFactor)")
-                    .font(.system(size: 20, weight: .bold))
+                Toggle(isOn: $settings.enableMetalFX) {
+                    Text("Enable MetalFX for upscaling*")
+                }
+                .toggleStyle(.switch)
                 
-                Slider(value: $settings.upscalingFactor, in: 1.0 ... 2.5, step: 0.1) {
+                if settings.enableMetalFX {
+                    Text("MetalFX Upscaling \(String(format: "%.1f", settings.upscalingFactor))")
+                        .font(.system(size: 20, weight: .bold))
+                    
+                    Slider(value: $settings.upscalingFactor, in: 1.1 ... 2.5, step: 0.1) {
+                    }
                 }
                 
                 
