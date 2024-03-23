@@ -953,7 +953,7 @@ class Renderer {
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
         
-        if (self.tick % 100 == 0 && self.upscaler != nil)
+        if (global_settings.enableDebugSaveScreenshot && self.tick % 100 == 0 && self.upscaler != nil)
         {
             let raw_image = GPUTextureToImage(texture: rgbTextureRaw!, device: device)!
             let upscaled_img = GPUTextureToImage(texture: rgbTextureUpscaled!, device: device)!
