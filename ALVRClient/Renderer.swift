@@ -47,6 +47,8 @@ let fullscreenQuadVertices:[Float] = [-panel_depth, -panel_depth, -panel_depth,
 
 class Renderer {
 
+    var global_settings: GlobalSettings!
+    
     public let device: MTLDevice
     let commandQueue: MTLCommandQueue
     
@@ -88,7 +90,14 @@ class Renderer {
     // Was curious if it improved; it's still juddery.
     var useApplesReprojection = false
     
-    init(_ layerRenderer: LayerRenderer) {
+    var upscaler: MetalUpscaler? = nil
+    var yuv2rgb_converted: YUV2RGBConverter? = nil
+    var documentsDirectory: URL?
+    
+    var tick: Int = 0
+
+    init(_ layerRenderer: LayerRenderer, global_settings: GlobalSettings!) {
+        self.global_settings = global_settings
         self.layerRenderer = layerRenderer
         self.device = layerRenderer.device
         self.commandQueue = self.device.makeCommandQueue()!
@@ -151,6 +160,25 @@ class Renderer {
         }
 
         EventHandler.shared.renderStarted = true
+        
+        initDebugLogFolder()
+    }
+    
+    func initDebugLogFolder() {
+        let fileManager = FileManager.default
+        self.documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+        let newFolderURL = self.documentsDirectory!.appendingPathComponent("upscaling_logging")
+        if !fileManager.fileExists(atPath: newFolderURL.path) {
+            do {
+                try fileManager.createDirectory(at: newFolderURL, withIntermediateDirectories: true, attributes: nil)
+                print("Folder created")
+            } catch {
+                print("Error creating folder: \(error.localizedDescription)")
+            }
+        } else {
+            print("Folder already exists")
+        }
+        
     }
     
     func startRenderLoop() {
@@ -159,13 +187,29 @@ class Renderer {
                 fatalError("streaming started: failed to retrieve alvr settings")
             }
             let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
-            videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
-                                device: device,
-                                layerRenderer: layerRenderer,
-                                mtlVertexDescriptor: mtlVertexDescriptor,
-                                foveationVars: foveationVars,
-                                variantName: "YpCbCrBiPlanar"
-            )
+            if (!global_settings.enableMetalFX || global_settings.upscalingFactor == 1.0)
+            {
+                print("global_settings.enableMetalFX \(global_settings.enableMetalFX) upscalingFactor set to \(global_settings.upscalingFactor) metalFx will be disable")
+                videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
+                                    device: device,
+                                    layerRenderer: layerRenderer,
+                                    mtlVertexDescriptor: mtlVertexDescriptor,
+                                    foveationVars: foveationVars,
+                                    variantName: "YpCbCrBiPlanar"
+                )
+            }
+            else
+            {
+                upscaler = MetalUpscaler(device: self.device, scaling: global_settings.upscalingFactor)
+                yuv2rgb_converted = YUV2RGBConverter(device: self.device)
+                videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
+                                    device: device,
+                                    layerRenderer: layerRenderer,
+                                    mtlVertexDescriptor: mtlVertexDescriptor,
+                                    foveationVars: foveationVars,
+                                    variantName: "rgbPlanar"
+                )
+            }
             videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
                                 device: device,
                                 layerRenderer: layerRenderer,
@@ -538,7 +582,7 @@ class Renderer {
             // Don't show frame if we haven't sent the view config and received frames
             // with that config applied.
             frameIsSuitableForDisplaying = false
-            print("IPD is bad, no frame")
+//            print("IPD is bad, no frame")
         }
         if !WorldTracker.shared.worldTrackingAddedOriginAnchor && EventHandler.shared.framesRendered < 300 {
             // Don't show frame if we haven't figured out our origin yet.
@@ -818,6 +862,43 @@ class Renderer {
             renderPassDescriptor.renderTargetArrayLength = drawable.views.count
         }
         
+        guard let queuedFrame = queuedFrame else {
+            return
+        }
+        var rawTextures: [MTLTexture] = []
+        var rgbTextureRaw: MTLTexture? = nil
+        var rgbTextureUpscaled: MTLTexture? = nil
+        let pixelBuffer = queuedFrame.imageBuffer
+        let textureTypes = VideoHandler.getTextureTypesForFormat(CVPixelBufferGetPixelFormatType(pixelBuffer))
+        // Add upscaling first
+        for i in 0...1 {
+            var textureOut:CVMetalTexture! = nil
+            var err:OSStatus = 0
+            let width = CVPixelBufferGetWidth(pixelBuffer)
+            let height = CVPixelBufferGetHeight(pixelBuffer)
+            if i == 0 {
+                err = CVMetalTextureCacheCreateTextureFromImage(
+                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
+                    width, height, 0, &textureOut);
+            } else {
+                err = CVMetalTextureCacheCreateTextureFromImage(
+                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
+                    width/2, height/2, 1, &textureOut);
+            }
+            if err != 0 {
+                fatalError("CVMetalTextureCacheCreateTextureFromImage \(err)")
+            }
+            guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
+                fatalError("CVMetalTextureCacheCreateTextureFromImage")
+            }
+            rawTextures.append(metalTexture)
+        }
+        
+        if (upscaler != nil) {
+            rgbTextureRaw = yuv2rgb_converted?.addToBuffer(commandBuffer: commandBuffer, metalY: rawTextures[0], metalUV: rawTextures[1])
+            rgbTextureUpscaled = upscaler?.addUpscaleCommand(inputTexture: rgbTextureRaw!, commandBuffer: commandBuffer)
+        }
+        
         /// Final pass rendering code here
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             fatalError("Failed to create render encoder")
@@ -854,38 +935,19 @@ class Renderer {
             renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
         }
         
-        guard let queuedFrame = queuedFrame else {
-            renderEncoder.endEncoding()
-            return
-        }
-        let pixelBuffer = queuedFrame.imageBuffer
         // https://cs.android.com/android/platform/superproject/main/+/main:external/webrtc/sdk/objc/components/renderer/metal/RTCMTLNV12Renderer.mm;l=108;drc=a81e9c82fc3fbc984f0f110407d1e44c9c01958a
         // TODO(zhuowei): yolo
         //TODO: prevailing wisdom on stackoverflow says that the CVMetalTextureRef has to be held until
         // rendering is complete, or the MtlTexture will be invalid?
         
-        let textureTypes = VideoHandler.getTextureTypesForFormat(CVPixelBufferGetPixelFormatType(pixelBuffer))
-        for i in 0...1 {
-            var textureOut:CVMetalTexture! = nil
-            var err:OSStatus = 0
-            let width = CVPixelBufferGetWidth(pixelBuffer)
-            let height = CVPixelBufferGetHeight(pixelBuffer)
-            if i == 0 {
-                err = CVMetalTextureCacheCreateTextureFromImage(
-                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
-                    width, height, 0, &textureOut);
-            } else {
-                err = CVMetalTextureCacheCreateTextureFromImage(
-                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
-                    width/2, height/2, 1, &textureOut);
+        if (upscaler != nil)
+        {
+            renderEncoder.setFragmentTexture(rgbTextureUpscaled, index: 0)
+        }
+        else {
+            for i in 0...1 {
+                renderEncoder.setFragmentTexture(rawTextures[i], index: i)
             }
-            if err != 0 {
-                fatalError("CVMetalTextureCacheCreateTextureFromImage \(err)")
-            }
-            guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
-                fatalError("CVMetalTextureCacheCreateTextureFromImage")
-            }
-            renderEncoder.setFragmentTexture(metalTexture, index: i)
         }
         
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
@@ -894,6 +956,21 @@ class Renderer {
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
         
+        if (global_settings.enableDebugSaveScreenshot && self.tick % 100 == 0 && self.upscaler != nil)
+        {
+            let raw_image = GPUTextureToImage(texture: rgbTextureRaw!, device: device)!
+            let upscaled_img = GPUTextureToImage(texture: rgbTextureUpscaled!, device: device)!
+            if ((documentsDirectory) != nil)
+            {
+                let file_raw = documentsDirectory?.appendingPathComponent("upscaling_logging/raw_\(self.tick)_rgb.png")
+                saveCGImageToFile(image: raw_image, url: file_raw!)
+                
+                let file_upscaled = documentsDirectory?.appendingPathComponent("upscaling_logging/upscaled_\(self.tick)_rgb.png")
+                saveCGImageToFile(image: upscaled_img, url: file_upscaled!)
+            }
+        }
+        
+        self.tick += 1
         //renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
         //renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
     }

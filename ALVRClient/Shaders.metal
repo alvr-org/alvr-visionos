@@ -207,6 +207,80 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
     return float4(color.rgb, 1.0);
 }
 
+fragment float4 videoFrameFragmentShader_rgbPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_rgb, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
+// https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
+    
+    float2 sampleCoord;
+    if (FFR_ENABLED) {
+        sampleCoord = decompressAxisAlignedCoord(in.texCoord);
+    } else {
+        sampleCoord = in.texCoord;
+    }
+    
+    constexpr sampler colorSampler(mip_filter::linear,
+                                   mag_filter::linear,
+                                   min_filter::linear);
+    
+    float3 rgb_uncorrect = in_tex_rgb.sample(colorSampler, sampleCoord).rgb;
+    
+    const float DIV12 = 1. / 12.92;
+    const float DIV1 = 1. / 1.055;
+    const float THRESHOLD = 0.04045;
+    const float3 GAMMA = float3(2.4);
+        
+    float3 condition = float3(rgb_uncorrect.r < THRESHOLD, rgb_uncorrect.g < THRESHOLD, rgb_uncorrect.b < THRESHOLD);
+    float3 lowValues = rgb_uncorrect * DIV12;
+    float3 highValues = pow((rgb_uncorrect + 0.055) * DIV1, GAMMA);
+    float3 color = condition * lowValues + (1.0 - condition) * highValues;
+
+    const float3x3 linearToDisplayP3 = {
+        float3(1.2249, -0.0420, -0.0197),
+        float3(-0.2247, 1.0419, -0.0786),
+        float3(0.0, 0.0, 1.0979),
+    };
+
+    //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
+    //color = linearToDisplayP3 * color;
+
+    return float4(color.rgb, 1.0);
+}
+
+
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
     return float4(0.0, 0.0, 0.0, 1.0);
+}
+
+struct VertexIn {
+    float4 position [[attribute(0)]];
+    float2 texCoord [[attribute(1)]];
+};
+
+// Vertex output structure
+struct VertexOut {
+    float4 position [[position]];
+    float2 texCoord;
+};
+
+kernel void yuvToRgbComputeKernel(
+    texture2d<float, access::sample> yTexture [[ texture(0) ]],
+    texture2d<float, access::sample> uvTexture [[ texture(1) ]],
+    texture2d<float, access::write> rgbTexture [[ texture(2) ]],
+    uint2 gid [[ thread_position_in_grid ]])
+{
+    // Ensure we do not access out of bounds
+    if (gid.x >= rgbTexture.get_width() || gid.y >= rgbTexture.get_height()) {
+        return;
+    }
+
+    float y = yTexture.read(gid).r;
+    float2 uv = uvTexture.read(gid / 2).rg - float2(0.5, 0.5);
+
+    // Simple YUV to RGB conversion
+    float3 rgb;
+    rgb.r = y + 1.402 * uv.y;
+    rgb.g = y - 0.344136 * uv.x - 0.714136 * uv.y;
+    rgb.b = y + 1.772 * uv.x;
+    
+    // Write the RGB color to the output texture
+    rgbTexture.write(float4(rgb, 1.0), gid);
 }

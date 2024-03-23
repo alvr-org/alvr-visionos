@@ -9,7 +9,10 @@ struct GlobalSettings: Codable {
     var keepSteamVRCenter: Bool = true
     var showHandsOverlaid: Bool = false
     var setDisplayTo96Hz: Bool = false
-    
+    var upscalingFactor: Float32 = 1.0
+    var enableMetalFX: Bool = false
+    var enableDebugSaveScreenshot: Bool = false
+
     init() {}
     
     init(from decoder: Decoder) throws {
@@ -18,6 +21,9 @@ struct GlobalSettings: Codable {
         self.keepSteamVRCenter = try container.decodeIfPresent(Bool.self, forKey: .keepSteamVRCenter) ?? self.keepSteamVRCenter
         self.showHandsOverlaid = try container.decodeIfPresent(Bool.self, forKey: .showHandsOverlaid) ?? self.showHandsOverlaid
         self.setDisplayTo96Hz = try container.decodeIfPresent(Bool.self, forKey: .setDisplayTo96Hz) ?? self.setDisplayTo96Hz
+        self.upscalingFactor = try container.decodeIfPresent(Float32.self, forKey: .upscalingFactor) ?? self.upscalingFactor
+        self.enableMetalFX = try container.decodeIfPresent(Bool.self, forKey: .enableMetalFX) ?? self.enableMetalFX
+        self.enableDebugSaveScreenshot = try container.decodeIfPresent(Bool.self, forKey: .enableDebugSaveScreenshot) ?? self.enableDebugSaveScreenshot
     }
 }
 

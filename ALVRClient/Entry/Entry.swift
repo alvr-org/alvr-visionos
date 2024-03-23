@@ -36,6 +36,25 @@ struct Entry: View {
                     .font(.system(size: 10))
                 }
                 .toggleStyle(.switch)
+
+                Toggle(isOn: $settings.enableMetalFX) {
+                    Text("Enable MetalFX for upscaling")
+                }
+                .toggleStyle(.switch)
+                
+                if settings.enableMetalFX {
+                    Text("MetalFX Upscaling \(String(format: "%.1f", settings.upscalingFactor))")
+                    
+                    Slider(value: $settings.upscalingFactor, in: 1.1 ... 2.5, step: 0.1) {
+                    }
+                    
+                    Toggle(isOn: $settings.enableDebugSaveScreenshot) {
+                        Text("Save debug screenshot*")
+                        Text("*This will reduce system performance*")
+                        .font(.system(size: 10))
+                    }
+                    .toggleStyle(.switch)
+                }
                 
                 
             }
