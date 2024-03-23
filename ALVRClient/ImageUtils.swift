@@ -203,47 +203,6 @@ func convertRGBA16FloatToRGBA8Unorm(device: MTLDevice, commandQueue: MTLCommandQ
     return destinationTexture
 }
 
-//
-//func convertTexture16Fto8U(device: MTLDevice, commandQueue: MTLCommandQueue, inputTexture: MTLTexture) -> MTLTexture? {
-//    guard let library = device.makeDefaultLibrary(),
-//          let kernelFunction = library.makeFunction(name: "rgba16FloatToRgba8Unorm"),
-//          let computePipelineState = try? device.makeComputePipelineState(function: kernelFunction),
-//          let commandBuffer = commandQueue.makeCommandBuffer(),
-//          let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
-//        print("Failed to set up Metal components for conversion.")
-//        return nil
-//    }
-//
-//    // Create the output texture with RGBA8Unorm format
-//    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm,
-//                                                              width: inputTexture.width,
-//                                                              height: inputTexture.height,
-//                                                              mipmapped: false)
-//    descriptor.usage = [.shaderWrite, .shaderRead]
-//    guard let outputTexture = device.makeTexture(descriptor: descriptor) else {
-//        print("Failed to create output texture.")
-//        return nil
-//    }
-//
-//    // Set up and execute the compute shader
-//    computeEncoder.setComputePipelineState(computePipelineState)
-//    computeEncoder.setTexture(inputTexture, index: 0)
-//    computeEncoder.setTexture(outputTexture, index: 1)
-//    
-//    let threadgroupSize = MTLSize(width: 8, height: 8, depth: 1) // Adjust based on GPU
-//    let threadgroups = MTLSize(width: (inputTexture.width + threadgroupSize.width - 1) / threadgroupSize.width,
-//                               height: (inputTexture.height + threadgroupSize.height - 1) / threadgroupSize.height,
-//                               depth: 1)
-//    
-//    computeEncoder.dispatchThreadgroups(threadgroups, threadsPerThreadgroup: threadgroupSize)
-//    computeEncoder.endEncoding()
-////    commandBuffer.commit()
-////    commandBuffer.waitUntilCompleted()
-//    
-//    return outputTexture
-//}
-
-
 func textureToImage(texture: MTLTexture) -> CGImage? {
     let bytesPerPixel = 4
     let bytesPerRow = bytesPerPixel * texture.width
