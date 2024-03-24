@@ -150,6 +150,7 @@ class Renderer {
             fullscreenQuadBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
         }
 
+        EventHandler.shared.handleRenderStarted()
         EventHandler.shared.renderStarted = true
     }
     
