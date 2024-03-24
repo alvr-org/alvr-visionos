@@ -170,12 +170,19 @@ class WorldTracker {
         self.settings = settings
         resetPlayspace()
         
+        let authStatus = await arSession.requestAuthorization(for: [.handTracking, .worldSensing])
+        
+        var trackingList: [any DataProvider] = [worldTracking]
+        if authStatus[.handTracking] == .allowed {
+            trackingList.append(handTracking)
+        }
+        if authStatus[.worldSensing] == .allowed {
+            trackingList.append(sceneReconstruction)
+            trackingList.append(planeDetection)
+        }
+        
         do {
-            #if targetEnvironment(simulator)
-            try await arSession.run([worldTracking])
-            #else
-            try await arSession.run([worldTracking, handTracking, sceneReconstruction, planeDetection])
-            #endif
+            try await arSession.run(trackingList)
         } catch {
             fatalError("Failed to initialize ARSession")
         }
