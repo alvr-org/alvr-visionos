@@ -158,26 +158,32 @@ class Renderer {
         EventHandler.shared.renderStarted = true
     }
     
+    func rebuildRenderPipelines() {
+        guard let settings = Settings.getAlvrSettings() else {
+            fatalError("streaming started: failed to retrieve alvr settings")
+        }
+            
+        encodingGamma = settings.video.encoderConfig.encodingGamma
+            
+        let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
+        videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
+                            device: device,
+                            layerRenderer: layerRenderer,
+                            mtlVertexDescriptor: mtlVertexDescriptor,
+                            foveationVars: foveationVars,
+                            variantName: "YpCbCrBiPlanar"
+        )
+        videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
+                            device: device,
+                            layerRenderer: layerRenderer,
+                            mtlVertexDescriptor: mtlVertexDescriptor,
+                            foveationVars: foveationVars
+        )
+    }
+    
     func startRenderLoop() {
         Task {
-            guard let settings = Settings.getAlvrSettings() else {
-                fatalError("streaming started: failed to retrieve alvr settings")
-            }
-            let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
-            videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
-                                device: device,
-                                layerRenderer: layerRenderer,
-                                mtlVertexDescriptor: mtlVertexDescriptor,
-                                foveationVars: foveationVars,
-                                variantName: "YpCbCrBiPlanar"
-            )
-            videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
-                                device: device,
-                                layerRenderer: layerRenderer,
-                                mtlVertexDescriptor: mtlVertexDescriptor,
-                                foveationVars: foveationVars
-            )
-            encodingGamma = settings.video.encoderConfig.encodingGamma
+            rebuildRenderPipelines()
             let renderThread = Thread {
                 self.renderLoop()
             }
@@ -448,6 +454,8 @@ class Renderer {
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
             if abs(EventHandler.shared.lastIpd - ipd) > 0.001 {
+                rebuildRenderPipelines()
+
                 print("Send view config")
                 if EventHandler.shared.lastIpd != -1 {
                     print("IPD changed!", EventHandler.shared.lastIpd, "->", ipd)
@@ -572,7 +580,7 @@ class Renderer {
             // TODO: maybe also show the room in wireframe or something cool here
             renderNothing(drawable: drawable, commandBuffer: commandBuffer, framePose: noFramePose ?? matrix_identity_float4x4)
             
-            if EventHandler.shared.totalFramesRendered > 90 {
+            if EventHandler.shared.totalFramesRendered > 300 {
                 fadeInOverlayAlpha += 0.02
                 if fadeInOverlayAlpha > 1.0 {
                     fadeInOverlayAlpha = 1.0
