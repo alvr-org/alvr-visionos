@@ -10,7 +10,7 @@ import AVKit
 import Foundation
 import Network
 
-class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
+class EventHandler: ObservableObject {
     static let shared = EventHandler()
 
     var eventsThread : Thread?
@@ -58,7 +58,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
     var numberOfEventThreadRestarts: Int = 0
     var mdnsListener: NWListener? = nil
     
-    //init() {}
+    init() {}
     
     func initializeAlvr() {
         fixAudioForDirectStereo()
