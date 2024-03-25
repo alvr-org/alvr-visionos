@@ -364,7 +364,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
         }
         
         if let utf8String = String(bytes: byteArray, encoding: .utf8) {
-            var ret = utf8String.trimmingCharacters(in: ["\0"]);
+            let ret = utf8String.trimmingCharacters(in: ["\0"]);
             return ret + ".alvr"; // Hack: runtime needs to fix this D:
         } else {
             print("Unable to decode alvr_hostname into a UTF-8 string.")
@@ -382,7 +382,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
         }
         
         if let utf8String = String(bytes: byteArray, encoding: .utf8) {
-            var ret = utf8String.trimmingCharacters(in: ["\0"]);
+            let ret = utf8String.trimmingCharacters(in: ["\0"]);
             return ret.replacing(".local", with: "", maxReplacements: 1);
         } else {
             print("Unable to decode alvr_mdns_service into a UTF-8 string.")
@@ -400,7 +400,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
         }
         
         if let utf8String = String(bytes: byteArray, encoding: .utf8) {
-            var ret = utf8String.trimmingCharacters(in: ["\0"]);
+            let ret = utf8String.trimmingCharacters(in: ["\0"]);
             return ret;
         } else {
             print("Unable to decode alvr_protocol_id into a UTF-8 string.")
@@ -437,8 +437,8 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
             let diffSinceLastNal = currentTime - timeLastFrameGot
             let diffSinceLastDecode = currentTime - timeLastFrameSent
             if (!renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 20.0 || diffSinceLastNal >= 20.0))
-               || (renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 10.0 || diffSinceLastNal >= 10.0))
-               || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 10.0)) {
+               || (renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 30.0 || diffSinceLastNal >= 30.0))
+               || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 30.0)) {
                 EventHandler.shared.updateConnectionState(.disconnected)
                 
                 print("Kick ALVR...")
