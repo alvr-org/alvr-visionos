@@ -85,6 +85,10 @@ class Renderer {
     var fullscreenQuadBuffer:MTLBuffer!
     var encodingGamma: Float = 1.0
     
+    var drawPlanesWithInformedColors: Bool = false
+    var fadeInOverlayAlpha: Float = 0.0
+    var coolPulsingColorsTime: Float = 0.0
+    
     // Was curious if it improved; it's still juddery.
     var useApplesReprojection = false
     
@@ -382,38 +386,35 @@ class Renderer {
     func renderFrame() {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
+        EventHandler.shared.totalFramesRendered += 1
         var streamingActiveForFrame = EventHandler.shared.streamingActive
         var isReprojected = false
         
         var queuedFrame:QueuedFrame? = nil
-        if streamingActiveForFrame {
-            let startPollTime = CACurrentMediaTime()
-            while true {
-                sched_yield()
-                objc_sync_enter(EventHandler.shared.frameQueueLock)
-                queuedFrame = EventHandler.shared.frameQueue.count > 0 ? EventHandler.shared.frameQueue.removeFirst() : nil
-                objc_sync_exit(EventHandler.shared.frameQueueLock)
-                if queuedFrame != nil {
-                    break
-                }
-                
-                // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
-                if EventHandler.shared.lastQueuedFrame != nil {
-                    //print("Using last frame...")
-                    queuedFrame = EventHandler.shared.lastQueuedFrame
-                    EventHandler.shared.framesRendered -= 1
-                    isReprojected = true
-                    break
-                }
-                
-                if CACurrentMediaTime() - startPollTime > 0.002 {
-                    EventHandler.shared.framesRendered -= 1
-                    break
-                }
+        
+        let startPollTime = CACurrentMediaTime()
+        while true {
+            sched_yield()
+            objc_sync_enter(EventHandler.shared.frameQueueLock)
+            queuedFrame = EventHandler.shared.frameQueue.count > 0 ? EventHandler.shared.frameQueue.removeFirst() : nil
+            objc_sync_exit(EventHandler.shared.frameQueueLock)
+            if queuedFrame != nil {
+                break
             }
-        }
-        else {
-            EventHandler.shared.framesRendered -= 1
+            
+            // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
+            if EventHandler.shared.lastQueuedFrame != nil {
+                //print("Using last frame...")
+                queuedFrame = EventHandler.shared.lastQueuedFrame
+                EventHandler.shared.framesRendered -= 1
+                isReprojected = true
+                break
+            }
+            
+            if CACurrentMediaTime() - startPollTime > 0.002 {
+                EventHandler.shared.framesRendered -= 1
+                break
+            }
         }
         
         if queuedFrame == nil && streamingActiveForFrame {
@@ -551,6 +552,10 @@ class Renderer {
             frameIsSuitableForDisplaying = false
             print("Missing anchor, no frame")
         }
+        if EventHandler.shared.videoFormat == nil {
+            frameIsSuitableForDisplaying = false
+            print("Missing video format, no frame")
+        }
         
         if renderingStreaming && frameIsSuitableForDisplaying {
             //print("render")
@@ -560,11 +565,32 @@ class Renderer {
                 LayerRenderer.Clock().wait(until: drawable.frameTiming.renderingDeadline)
             }
         }
-        else {
+        else
+        {
+            let noFramePose = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform
             // TODO: draw a cool loading logo
             // TODO: maybe also show the room in wireframe or something cool here
-            renderNothing(drawable: drawable, commandBuffer: commandBuffer)
+            renderNothing(drawable: drawable, commandBuffer: commandBuffer, framePose: noFramePose ?? matrix_identity_float4x4)
+            
+            if EventHandler.shared.totalFramesRendered > 90 {
+                fadeInOverlayAlpha += 0.02
+                if fadeInOverlayAlpha > 1.0 {
+                    fadeInOverlayAlpha = 1.0
+                }
+                if fadeInOverlayAlpha < 0.0 {
+                    fadeInOverlayAlpha = 0.0
+                }
+            }
+            
+            coolPulsingColorsTime += 0.005
+            if coolPulsingColorsTime > 4.0 {
+                coolPulsingColorsTime = 0.0
+            }
+            
+            renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
+            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
         }
+        
         
         drawable.encodePresent(commandBuffer: commandBuffer)
         commandBuffer.commit()
@@ -575,28 +601,56 @@ class Renderer {
     }
     
     func planeToColor(plane: PlaneAnchor) -> simd_float4 {
+        let planeAlpha = fadeInOverlayAlpha
         let subtleChange = 0.75 + ((Float(plane.id.hashValue & 0xFF) / Float(0xff)) * 0.25)
-        switch(plane.classification) {
-            case .ceiling: // #62ea80
-                return simd_float4(0.3843137254901961, 0.9176470588235294, 0.5019607843137255, 1.0) * subtleChange
-            case .door: // #1a5ff4
-                return simd_float4(0.10196078431372549, 0.37254901960784315, 0.9568627450980393, 1.0) * subtleChange
-            case .floor: // #bf6505
-                return simd_float4(0.7490196078431373, 0.396078431372549, 0.0196078431372549, 1.0) * subtleChange
-            case .seat: // #ef67af
-                return simd_float4(0.9372549019607843, 0.403921568627451, 0.6862745098039216, 1.0) * subtleChange
-            case .table: // #c937d3
-                return simd_float4(0.788235294117647, 0.21568627450980393, 0.8274509803921568, 1.0) * subtleChange
-            case .wall: // #dced5e
-                return simd_float4(0.8627450980392157, 0.9294117647058824, 0.3686274509803922, 1.0) * subtleChange
-            case .window: // #4aefce
-                return simd_float4(0.2901960784313726, 0.9372549019607843, 0.807843137254902, 1.0) * subtleChange
-            case .unknown: // #0e576b
-                return simd_float4(0.054901960784313725, 0.3411764705882353, 0.4196078431372549, 1.0) * subtleChange
-            case .undetermined: // #749606
-                return simd_float4(0.4549019607843137, 0.5882352941176471, 0.023529411764705882, 1.0) * subtleChange
-            default:
-                return simd_float4(1.0, 0.0, 0.0, 1.0) * subtleChange // red
+        
+        if drawPlanesWithInformedColors {
+            switch(plane.classification) {
+                case .ceiling: // #62ea80
+                    return simd_float4(0.3843137254901961, 0.9176470588235294, 0.5019607843137255, 1.0) * subtleChange * planeAlpha
+                case .door: // #1a5ff4
+                    return simd_float4(0.10196078431372549, 0.37254901960784315, 0.9568627450980393, 1.0) * subtleChange * planeAlpha
+                case .floor: // #bf6505
+                    return simd_float4(0.7490196078431373, 0.396078431372549, 0.0196078431372549, 1.0) * subtleChange * planeAlpha
+                case .seat: // #ef67af
+                    return simd_float4(0.9372549019607843, 0.403921568627451, 0.6862745098039216, 1.0) * subtleChange * planeAlpha
+                case .table: // #c937d3
+                    return simd_float4(0.788235294117647, 0.21568627450980393, 0.8274509803921568, 1.0) * subtleChange * planeAlpha
+                case .wall: // #dced5e
+                    return simd_float4(0.8627450980392157, 0.9294117647058824, 0.3686274509803922, 1.0) * subtleChange * planeAlpha
+                case .window: // #4aefce
+                    return simd_float4(0.2901960784313726, 0.9372549019607843, 0.807843137254902, 1.0) * subtleChange * planeAlpha
+                case .unknown: // #0e576b
+                    return simd_float4(0.054901960784313725, 0.3411764705882353, 0.4196078431372549, 1.0) * subtleChange * planeAlpha
+                case .undetermined: // #749606
+                    return simd_float4(0.4549019607843137, 0.5882352941176471, 0.023529411764705882, 1.0) * subtleChange * planeAlpha
+                default:
+                    return simd_float4(1.0, 0.0, 0.0, 1.0) * subtleChange * planeAlpha // red
+            }
+        }
+        else {
+            // Color picked from the ALVR logo
+            let lightColor = simd_float4(0.05624, 0.73124, 0.75999, 1.0)
+            let darkColor = simd_float4(0.01305, 0.26223, 0.63828, 1.0)
+            var switchingFnT: Float = 0.0 // hold on light
+            
+            if coolPulsingColorsTime >= 1.0 && coolPulsingColorsTime < 2.0 {
+                switchingFnT = coolPulsingColorsTime - 1.0 // light -> dark
+            }
+            else if coolPulsingColorsTime >= 2.0 && coolPulsingColorsTime < 3.0 {
+                switchingFnT = 1.0 // hold on dark
+            }
+            else if coolPulsingColorsTime >= 3.0 && coolPulsingColorsTime < 4.0 {
+                switchingFnT = coolPulsingColorsTime - 2.0 // dark -> light
+            }
+
+            var switchingFn = sin(switchingFnT * Float.pi * 0.5)
+            if coolPulsingColorsTime >= 4.0 {
+                switchingFn = 0.0
+            }
+            let color = simd_mix(lightColor, darkColor, simd_float4(repeating: switchingFn))
+            
+            return color * subtleChange * planeAlpha
         }
     }
     
@@ -686,12 +740,16 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func renderNothing(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer) {
+    func renderNothing(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, framePose: simd_float4x4) {
+        self.updateDynamicBufferState()
+        
+        self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose)
+        
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
-        renderPassDescriptor.colorAttachments[0].loadAction = .load
+        renderPassDescriptor.colorAttachments[0].loadAction = .clear
         renderPassDescriptor.colorAttachments[0].storeAction = .store
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
         renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
@@ -712,7 +770,7 @@ class Renderer {
         renderEncoder.setCullMode(.back)
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
-        renderEncoder.setDepthStencilState(depthStateGreater)
+        renderEncoder.setDepthStencilState(depthStateAlways)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
@@ -730,6 +788,9 @@ class Renderer {
             renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
         }
         
+        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
+        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
+        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         
         renderEncoder.endEncoding()
     }
@@ -789,6 +850,7 @@ class Renderer {
             self.planeUniforms[0].planeColor = planeToColor(plane: plane)
             renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
             
+            renderEncoder.setTriangleFillMode(.lines)
             renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
                                                 indexCount: faces.count*3,
                                                 indexType: faces.bytesPerIndex == 2 ? MTLIndexType.uint16 : MTLIndexType.uint32,
@@ -801,6 +863,11 @@ class Renderer {
     }
     
     func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?, framePose: simd_float4x4) {
+        fadeInOverlayAlpha -= 0.01
+        if fadeInOverlayAlpha < 0.0 {
+            fadeInOverlayAlpha = 0.0
+        }
+    
         self.updateDynamicBufferState()
         
         self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose)
@@ -895,8 +962,10 @@ class Renderer {
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
         
-        //renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
-        //renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
+        if fadeInOverlayAlpha > 0.0 {
+            renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
+            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
+        }
     }
     
     func renderLoop() {

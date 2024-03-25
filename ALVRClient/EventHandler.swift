@@ -46,6 +46,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
     var streamEvent: AlvrEvent? = nil
     
     var framesRendered:Int = 0
+    var totalFramesRendered:Int = 0
     var eventHeartbeat:Int = 0
     var lastEventHeartbeat:Int = -1
     
@@ -174,7 +175,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
             mdnsListener = nil
         }
 
-        if mdnsListener == nil && !renderStarted {
+        if mdnsListener == nil && !streamingActive {
             do {
                 mdnsListener = try NWListener(using: .tcp)
             } catch {
@@ -220,7 +221,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
         }
         let batteryLevel = UIDevice.current.batteryLevel
         let isCharging = UIDevice.current.batteryState == .charging
-        if renderStarted {
+        if streamingActive {
             alvr_send_battery(WorldTracker.deviceIdHead, batteryLevel, isCharging)
         }
         
@@ -230,7 +231,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
     func eventsWatchdog() {
         while true {
             if eventHeartbeat == lastEventHeartbeat {
-                if renderStarted || numberOfEventThreadRestarts > 10 {
+                if (renderStarted && numberOfEventThreadRestarts > 3) || numberOfEventThreadRestarts > 10 {
                     print("Event thread is MIA, exiting")
                     exit(0)
                 }
@@ -408,6 +409,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
     }
 
     func handleAlvrEvents() {
+        print("Start event thread...")
         while inputRunning {
             eventHeartbeat += 1
             // Send periodic updated values, such as battery percentage, once every five seconds
@@ -435,8 +437,8 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
             let diffSinceLastNal = currentTime - timeLastFrameGot
             let diffSinceLastDecode = currentTime - timeLastFrameSent
             if (!renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 20.0 || diffSinceLastNal >= 20.0))
-               || (renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 5.0 || diffSinceLastNal >= 5.0))
-               || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 5.0)) {
+               || (renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 10.0 || diffSinceLastNal >= 10.0))
+               || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 10.0)) {
                 EventHandler.shared.updateConnectionState(.disconnected)
                 
                 print("Kick ALVR...")
@@ -469,14 +471,17 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
             switch UInt32(alvrEvent.tag) {
             case ALVR_EVENT_HUD_MESSAGE_UPDATED.rawValue:
                 print("hud message updated")
-                let hudMessageBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
-                alvr_hud_message(hudMessageBuffer.baseAddress)
-                let message = String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8)!
-                parseMessage(message)
-                print(message)
-                hudMessageBuffer.deallocate()
+                if !renderStarted {
+                    let hudMessageBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
+                    alvr_hud_message(hudMessageBuffer.baseAddress)
+                    let message = String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8)!
+                    parseMessage(message)
+                    print(message)
+                    hudMessageBuffer.deallocate()
+                }
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started \(alvrEvent.STREAMING_STARTED)")
+                numberOfEventThreadRestarts = 0
                 if !streamingActive {
                     streamEvent = alvrEvent
                     streamingActive = true
@@ -525,7 +530,7 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
                 }
                 while alvrInitialized {
                    guard let (nal, _) = VideoHandler.pollNal() else {
-                       fatalError("create decoder: failed to poll nal?!")
+                       print("create decoder: failed to poll nal?!")
                        break
                    }
                    //NSLog("%@", nal as NSData)
@@ -561,6 +566,9 @@ class EventHandler: NSObject, ObservableObject, NetServiceDelegate {
     }
     
     func updateConnectionState(_ newState: ConnectionState) {
+        /*if renderStarted {
+            return
+        }*/
         DispatchQueue.main.async {
             self.connectionState = newState
         }
