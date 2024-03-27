@@ -55,6 +55,7 @@ class EventHandler: ObservableObject {
     var timeLastAlvrEvent: Double = 0.0
     var timeLastFrameGot: Double = 0.0
     var timeLastFrameSent: Double = 0.0
+    var timeLastFrameDecoded: Double = 0.0
     var numberOfEventThreadRestarts: Int = 0
     var mdnsListener: NWListener? = nil
     
@@ -142,6 +143,7 @@ class EventHandler: ObservableObject {
         timeLastAlvrEvent = CACurrentMediaTime()
         timeLastFrameGot = CACurrentMediaTime()
         timeLastFrameSent = CACurrentMediaTime()
+        timeLastFrameDecoded = CACurrentMediaTime()
     }
 
     func fixAudioForDirectStereo() {
@@ -308,6 +310,9 @@ class EventHandler: ObservableObject {
                     guard let imageBuffer = imageBuffer else {
                         return
                     }
+                    
+                    //print(timestamp, (CACurrentMediaTime() - timeLastFrameDecoded) * 1000.0)
+                    timeLastFrameDecoded = CACurrentMediaTime()
 
                     //let imageBufferPtr = Unmanaged.passUnretained(imageBuffer).toOpaque()
                     //print("finish decode: \(timestamp), \(imageBufferPtr), \(nal_type)")
@@ -329,7 +334,7 @@ class EventHandler: ObservableObject {
                         else {
                             frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
                         }
-                        if frameQueue.count > 2 {
+                        if frameQueue.count > 3 {
                             frameQueue.removeFirst()
                         }
 
@@ -548,9 +553,9 @@ class EventHandler: ObservableObject {
             case ALVR_EVENT_FRAME_READY.rawValue:
                 streamingActive = true
                 //print("frame ready")
-                EventHandler.shared.updateConnectionState(.connected)
-                 
+                
                 handleNals()
+                EventHandler.shared.updateConnectionState(.connected)
                  
                  
              default:
@@ -558,17 +563,13 @@ class EventHandler: ObservableObject {
              }
         }
         
-        if let service = mdnsListener {
-            service.cancel()
-            mdnsListener = nil
-        }
         print("Events thread stopped")
     }
     
     func updateConnectionState(_ newState: ConnectionState) {
-        /*if renderStarted {
+        if renderStarted || self.connectionState == newState {
             return
-        }*/
+        }
         DispatchQueue.main.async {
             self.connectionState = newState
         }

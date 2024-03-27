@@ -55,8 +55,6 @@ class Renderer {
     var depthStateGreater: MTLDepthStencilState
     var colorMap: MTLTexture
 
-    let inFlightSemaphore = DispatchSemaphore(value: maxBuffersInFlight)
-
     var dynamicUniformBuffer: MTLBuffer
     var uniformBufferOffset = 0
     var uniformBufferIndex = 0
@@ -405,9 +403,28 @@ class Renderer {
         
         var queuedFrame:QueuedFrame? = nil
         
+        guard let frame = layerRenderer.queryNextFrame() else { return }
+        guard let timing = frame.predictTiming() else { return }
+        
+        frame.startUpdate()
+        frame.endUpdate()
+        LayerRenderer.Clock().wait(until: timing.optimalInputTime)
+        frame.startSubmission()
+        
         let startPollTime = CACurrentMediaTime()
         while true {
             sched_yield()
+            
+            // If visionOS skipped our last frame, let the queue fill up a bit
+            if EventHandler.shared.lastQueuedFrame != nil {
+                if EventHandler.shared.lastQueuedFrame!.timestamp != EventHandler.shared.lastSubmittedTimestamp && EventHandler.shared.frameQueue.count < 2 {
+                    queuedFrame = EventHandler.shared.lastQueuedFrame
+                    EventHandler.shared.framesRendered -= 1
+                    isReprojected = false
+                    break
+                }
+            }
+            
             objc_sync_enter(EventHandler.shared.frameQueueLock)
             queuedFrame = EventHandler.shared.frameQueue.count > 0 ? EventHandler.shared.frameQueue.removeFirst() : nil
             objc_sync_exit(EventHandler.shared.frameQueueLock)
@@ -415,33 +432,24 @@ class Renderer {
                 break
             }
             
-            // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
-            if EventHandler.shared.lastQueuedFrame != nil {
-                //print("Using last frame...")
-                queuedFrame = EventHandler.shared.lastQueuedFrame
-                EventHandler.shared.framesRendered -= 1
-                isReprojected = true
+            if CACurrentMediaTime() - startPollTime > 0.005 {
+                //EventHandler.shared.framesRendered -= 1
                 break
             }
-            
-            if CACurrentMediaTime() - startPollTime > 0.002 {
-                EventHandler.shared.framesRendered -= 1
-                break
-            }
+        }
+        
+        // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
+        if queuedFrame == nil && EventHandler.shared.lastQueuedFrame != nil {
+            //print("Using last frame...")
+            queuedFrame = EventHandler.shared.lastQueuedFrame
+            EventHandler.shared.framesRendered -= 1
+            isReprojected = true
         }
         
         if queuedFrame == nil && streamingActiveForFrame {
             streamingActiveForFrame = false
         }
-        
-        guard let frame = layerRenderer.queryNextFrame() else { return }
-        guard let timing = frame.predictTiming() else { return }
         let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
-        
-        frame.startUpdate()
-        frame.endUpdate()
-        LayerRenderer.Clock().wait(until: timing.optimalInputTime)
-        frame.startSubmission()
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             fatalError("Failed to create command buffer")
@@ -483,8 +491,6 @@ class Renderer {
                 rebuildThread.start()
             }
         }
-        
-        _ = inFlightSemaphore.wait(timeout: DispatchTime.distantFuture)
         
         objc_sync_enter(EventHandler.shared.frameQueueLock)
         EventHandler.shared.framesSinceLastDecode += 1
@@ -541,7 +547,6 @@ class Renderer {
             print("draw: \(test_ts)")
         }*/
         
-        let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             if EventHandler.shared.alvrInitialized && queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame?.timestamp {
                 let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
@@ -549,7 +554,6 @@ class Renderer {
                 alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
                 EventHandler.shared.lastSubmittedTimestamp = queuedFrame!.timestamp
             }
-            semaphore.signal()
         }
         
         // List of reasons to not display a frame
@@ -626,7 +630,6 @@ class Renderer {
         if fadeInOverlayAlpha < 0.0 {
             fadeInOverlayAlpha = 0.0
         }
-        
         
         drawable.encodePresent(commandBuffer: commandBuffer)
         commandBuffer.commit()

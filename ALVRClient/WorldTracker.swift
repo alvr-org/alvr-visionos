@@ -636,7 +636,7 @@ class WorldTracker {
                     }
     
                     if let engine = leftEngine {
-                        print("haptic!")
+                        //print("haptic!")
                         var duration = leftHapticsEnd - leftHapticsStart
                         var amplitude = leftHapticsAmplitude
                         if duration < 0 {
@@ -647,7 +647,7 @@ class WorldTracker {
                         if leftHapticsEnd < CACurrentMediaTime() {
                             amplitude = 0.0
                             duration = 0.032
-                            print("Skip haptic, already over")
+                            //print("Skip haptic, already over")
                         }
                         if duration > 0.5 {
                             duration = 0.5
@@ -699,7 +699,7 @@ class WorldTracker {
                     }
     
                     if let engine = rightEngine {
-                        print("haptic!")
+                        //print("haptic!")
                         var duration = rightHapticsEnd - rightHapticsStart
                         var amplitude = rightHapticsAmplitude
                         if duration < 0 {
@@ -710,7 +710,7 @@ class WorldTracker {
                         if rightHapticsEnd < CACurrentMediaTime() {
                             amplitude = 0.0
                             duration = 0.032
-                            print("Skip haptic, already over")
+                            //print("Skip haptic, already over")
                         }
                         if duration > 0.5 {
                             duration = 0.5
