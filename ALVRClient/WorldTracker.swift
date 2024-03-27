@@ -748,7 +748,7 @@ class WorldTracker {
     // TODO: figure out how stable Apple's predictions are into the future
     // targetTimestamp: The timestamp of the pose we will send to ALVR--capped by how far we can predict forward.
     // realTargetTimestamp: The timestamp we tell ALVR, which always includes the full round-trip prediction.
-    func sendTracking(targetTimestamp: Double, realTargetTimestamp: Double) {
+    func sendTracking(targetTimestamp: Double, realTargetTimestamp: Double, delay: Double) {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
@@ -860,12 +860,18 @@ class WorldTracker {
         //let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
-        
-        sendGamepadInputs()
 
         EventHandler.shared.lastRequestedTimestamp = realTargetTimestampNS
         lastSentHandsTs = lastHandsUpdatedTs
-        alvr_send_tracking(realTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+        
+        if delay == 0.0 {
+            sendGamepadInputs()
+        }
+
+        Thread {
+            Thread.sleep(forTimeInterval: delay)
+            alvr_send_tracking(realTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+        }.start()
     }
     
     func lookupDeviceAnchorFor(timestamp: UInt64) -> simd_float4x4? {

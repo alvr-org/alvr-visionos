@@ -394,6 +394,8 @@ class Renderer {
         }
     }
 
+    var roundTripRenderTime: Double = 0.0
+    var lastRoundTripRenderTimestamp: Double = 0.0
     func renderFrame() {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
@@ -410,6 +412,9 @@ class Renderer {
         frame.endUpdate()
         LayerRenderer.Clock().wait(until: timing.optimalInputTime)
         frame.startSubmission()
+        
+        roundTripRenderTime = CACurrentMediaTime() - lastRoundTripRenderTimestamp
+        lastRoundTripRenderTimestamp = CACurrentMediaTime()
         
         let startPollTime = CACurrentMediaTime()
         while true {
@@ -534,9 +539,25 @@ class Renderer {
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
-            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            let realTargetTimestamp = vsyncTime + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestamp, realTargetTimestamp: realTargetTimestamp)
+            let nowTs = CACurrentMediaTime()
+            let nowToVsync = vsyncTime - nowTs
+            
+            // Sometimes upload speeds can be less than optimal.
+            // To compensate, we will send 3 predictions at a fixed interval and hope that
+            // one of them is optimal enough to avoid a re-sent timestamp frame
+            var interval = ((11.0 / 1000.0) / 3.0)
+            if queuedFrame != nil {
+                interval = roundTripRenderTime / 3.0
+            }
+            let targetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let realTargetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            let targetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let realTargetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            let targetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let realTargetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
+            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
+            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
         }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
