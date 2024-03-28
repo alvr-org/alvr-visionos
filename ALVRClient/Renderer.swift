@@ -55,8 +55,6 @@ class Renderer {
     var depthStateGreater: MTLDepthStencilState
     var colorMap: MTLTexture
 
-    let inFlightSemaphore = DispatchSemaphore(value: maxBuffersInFlight)
-
     var dynamicUniformBuffer: MTLBuffer
     var uniformBufferOffset = 0
     var uniformBufferIndex = 0
@@ -84,6 +82,12 @@ class Renderer {
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
     var encodingGamma: Float = 1.0
+    
+    var drawPlanesWithInformedColors: Bool = false
+    var fadeInOverlayAlpha: Float = 0.0
+    var coolPulsingColorsTime: Float = 0.0
+    var reprojectedFramesInARow: Int = 0
+    var currentYuvTransform: simd_float4x4 = matrix_identity_float4x4
     
     // Was curious if it improved; it's still juddery.
     var useApplesReprojection = false
@@ -150,29 +154,35 @@ class Renderer {
             fullscreenQuadBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
         }
 
+        EventHandler.shared.handleRenderStarted()
         EventHandler.shared.renderStarted = true
+    }
+    
+    func rebuildRenderPipelines() {
+        guard let settings = Settings.getAlvrSettings() else {
+            fatalError("streaming started: failed to retrieve alvr settings")
+        }
+            
+        encodingGamma = settings.video.encoderConfig.encodingGamma
+            
+        let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
+        videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
+                            device: device,
+                            layerRenderer: layerRenderer,
+                            mtlVertexDescriptor: mtlVertexDescriptor,
+                            foveationVars: foveationVars,
+                            variantName: "YpCbCrBiPlanar"
+        )
     }
     
     func startRenderLoop() {
         Task {
-            guard let settings = Settings.getAlvrSettings() else {
-                fatalError("streaming started: failed to retrieve alvr settings")
-            }
-            let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
-            videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
-                                device: device,
-                                layerRenderer: layerRenderer,
-                                mtlVertexDescriptor: mtlVertexDescriptor,
-                                foveationVars: foveationVars,
-                                variantName: "YpCbCrBiPlanar"
-            )
             videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
-                                device: device,
-                                layerRenderer: layerRenderer,
-                                mtlVertexDescriptor: mtlVertexDescriptor,
-                                foveationVars: foveationVars
+                    device: device,
+                    layerRenderer: layerRenderer,
+                    mtlVertexDescriptor: mtlVertexDescriptor
             )
-            encodingGamma = settings.video.encoderConfig.encodingGamma
+            rebuildRenderPipelines()
             let renderThread = Thread {
                 self.renderLoop()
             }
@@ -223,6 +233,14 @@ class Renderer {
         pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
 
         pipelineDescriptor.colorAttachments[0].pixelFormat = layerRenderer.configuration.colorFormat
+        pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
+        pipelineDescriptor.colorAttachments[0].rgbBlendOperation = .add
+        pipelineDescriptor.colorAttachments[0].alphaBlendOperation = .add
+        pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = .sourceAlpha
+        pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+        
         pipelineDescriptor.depthAttachmentPixelFormat = layerRenderer.configuration.depthFormat
 
         pipelineDescriptor.maxVertexAmplificationCount = layerRenderer.properties.viewCount
@@ -233,16 +251,14 @@ class Renderer {
     // Depth-only renderer, for correcting after overlay render just so Apple's compositor isn't annoying about it
     class func buildRenderPipelineForVideoFrameDepthWithDevice(device: MTLDevice,
                                                           layerRenderer: LayerRenderer,
-                                                          mtlVertexDescriptor: MTLVertexDescriptor,
-                                                          foveationVars: FoveationVars) throws -> MTLRenderPipelineState {
+                                                          mtlVertexDescriptor: MTLVertexDescriptor) throws -> MTLRenderPipelineState {
         /// Build a render state pipeline object
 
         let library = device.makeDefaultLibrary()
 
         let vertexFunction = library?.makeFunction(name: "videoFrameVertexShader")
          
-        let fragmentConstants = FFR.makeFunctionConstants(foveationVars)
-        let fragmentFunction = try library?.makeFunction(name: "videoFrameDepthFragmentShader", constantValues: fragmentConstants)
+        let fragmentFunction = library?.makeFunction(name: "videoFrameDepthFragmentShader")
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.label = "VideoFrameDepthRenderPipeline"
@@ -378,55 +394,67 @@ class Renderer {
         }
     }
 
+    var roundTripRenderTime: Double = 0.0
+    var lastRoundTripRenderTimestamp: Double = 0.0
     func renderFrame() {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
+        EventHandler.shared.totalFramesRendered += 1
         var streamingActiveForFrame = EventHandler.shared.streamingActive
         var isReprojected = false
         
         var queuedFrame:QueuedFrame? = nil
-        if streamingActiveForFrame {
-            let startPollTime = CACurrentMediaTime()
-            while true {
-                sched_yield()
-                objc_sync_enter(EventHandler.shared.frameQueueLock)
-                queuedFrame = EventHandler.shared.frameQueue.count > 0 ? EventHandler.shared.frameQueue.removeFirst() : nil
-                objc_sync_exit(EventHandler.shared.frameQueueLock)
-                if queuedFrame != nil {
-                    break
-                }
-                
-                // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
-                if EventHandler.shared.lastQueuedFrame != nil {
-                    //print("Using last frame...")
-                    queuedFrame = EventHandler.shared.lastQueuedFrame
-                    EventHandler.shared.framesRendered -= 1
-                    isReprojected = true
-                    break
-                }
-                
-                if CACurrentMediaTime() - startPollTime > 0.002 {
-                    EventHandler.shared.framesRendered -= 1
-                    break
-                }
-            }
-        }
-        else {
-            EventHandler.shared.framesRendered -= 1
-        }
-        
-        if queuedFrame == nil && streamingActiveForFrame {
-            streamingActiveForFrame = false
-        }
         
         guard let frame = layerRenderer.queryNextFrame() else { return }
         guard let timing = frame.predictTiming() else { return }
-        let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
         frame.startUpdate()
         frame.endUpdate()
         LayerRenderer.Clock().wait(until: timing.optimalInputTime)
         frame.startSubmission()
+        
+        roundTripRenderTime = CACurrentMediaTime() - lastRoundTripRenderTimestamp
+        lastRoundTripRenderTimestamp = CACurrentMediaTime()
+        
+        let startPollTime = CACurrentMediaTime()
+        while true {
+            sched_yield()
+            
+            // If visionOS skipped our last frame, let the queue fill up a bit
+            if EventHandler.shared.lastQueuedFrame != nil {
+                if EventHandler.shared.lastQueuedFrame!.timestamp != EventHandler.shared.lastSubmittedTimestamp && EventHandler.shared.frameQueue.count < 2 {
+                    queuedFrame = EventHandler.shared.lastQueuedFrame
+                    EventHandler.shared.framesRendered -= 1
+                    isReprojected = false
+                    break
+                }
+            }
+            
+            objc_sync_enter(EventHandler.shared.frameQueueLock)
+            queuedFrame = EventHandler.shared.frameQueue.count > 0 ? EventHandler.shared.frameQueue.removeFirst() : nil
+            objc_sync_exit(EventHandler.shared.frameQueueLock)
+            if queuedFrame != nil {
+                break
+            }
+            
+            if CACurrentMediaTime() - startPollTime > 0.005 {
+                //EventHandler.shared.framesRendered -= 1
+                break
+            }
+        }
+        
+        // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
+        if queuedFrame == nil && EventHandler.shared.lastQueuedFrame != nil {
+            //print("Using last frame...")
+            queuedFrame = EventHandler.shared.lastQueuedFrame
+            EventHandler.shared.framesRendered -= 1
+            isReprojected = true
+        }
+        
+        if queuedFrame == nil && streamingActiveForFrame {
+            streamingActiveForFrame = false
+        }
+        let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             fatalError("Failed to create command buffer")
@@ -459,11 +487,15 @@ class Renderer {
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
                 let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
                 let fovs = [leftFov, rightFov]
-                alvr_send_views_config(fovs, ipd)
+                
+                let rebuildThread = Thread {
+                    self.rebuildRenderPipelines()
+                    alvr_send_views_config(fovs, ipd)
+                }
+                rebuildThread.name = "Rebuild Render Pipelines Thread"
+                rebuildThread.start()
             }
         }
-        
-        _ = inFlightSemaphore.wait(timeout: DispatchTime.distantFuture)
         
         objc_sync_enter(EventHandler.shared.frameQueueLock)
         EventHandler.shared.framesSinceLastDecode += 1
@@ -507,9 +539,25 @@ class Renderer {
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
-            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            let realTargetTimestamp = vsyncTime + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestamp, realTargetTimestamp: realTargetTimestamp)
+            let nowTs = CACurrentMediaTime()
+            let nowToVsync = vsyncTime - nowTs
+            
+            // Sometimes upload speeds can be less than optimal.
+            // To compensate, we will send 3 predictions at a fixed interval and hope that
+            // one of them is optimal enough to avoid a re-sent timestamp frame
+            var interval = ((11.0 / 1000.0) / 3.0)
+            if queuedFrame != nil {
+                interval = roundTripRenderTime / 3.0
+            }
+            let targetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let realTargetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            let targetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let realTargetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            let targetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let realTargetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
+            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
+            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
         }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
@@ -520,7 +568,6 @@ class Renderer {
             print("draw: \(test_ts)")
         }*/
         
-        let semaphore = inFlightSemaphore
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             if EventHandler.shared.alvrInitialized && queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame?.timestamp {
                 let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
@@ -528,7 +575,6 @@ class Renderer {
                 alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
                 EventHandler.shared.lastSubmittedTimestamp = queuedFrame!.timestamp
             }
-            semaphore.signal()
         }
         
         // List of reasons to not display a frame
@@ -550,19 +596,60 @@ class Renderer {
             frameIsSuitableForDisplaying = false
             print("Missing anchor, no frame")
         }
+        if EventHandler.shared.videoFormat == nil {
+            frameIsSuitableForDisplaying = false
+            print("Missing video format, no frame")
+        }
         
-        if renderingStreaming && frameIsSuitableForDisplaying {
+        if let videoFormat = EventHandler.shared.videoFormat {
+            currentYuvTransform = VideoHandler.getYUVTransformForVideoFormat(videoFormat)
+        }
+        
+        if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
             //print("render")
             renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
             
             if isReprojected && useApplesReprojection {
                 LayerRenderer.Clock().wait(until: drawable.frameTiming.renderingDeadline)
             }
+            if isReprojected {
+                reprojectedFramesInARow += 1
+                if reprojectedFramesInARow > 90 {
+                    fadeInOverlayAlpha += 0.02
+                }
+            }
+            else {
+                reprojectedFramesInARow = 0
+                fadeInOverlayAlpha -= 0.02
+            }
         }
-        else {
+        else
+        {
+            reprojectedFramesInARow = 0;
+
+            let noFramePose = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform
             // TODO: draw a cool loading logo
             // TODO: maybe also show the room in wireframe or something cool here
-            renderNothing(drawable: drawable, commandBuffer: commandBuffer)
+            renderNothing(drawable: drawable, commandBuffer: commandBuffer, framePose: noFramePose ?? matrix_identity_float4x4)
+            
+            if EventHandler.shared.totalFramesRendered > 300 {
+                fadeInOverlayAlpha += 0.02
+            }
+            
+            renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
+            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
+        }
+        
+        coolPulsingColorsTime += 0.005
+        if coolPulsingColorsTime > 4.0 {
+            coolPulsingColorsTime = 0.0
+        }
+        
+        if fadeInOverlayAlpha > 1.0 {
+            fadeInOverlayAlpha = 1.0
+        }
+        if fadeInOverlayAlpha < 0.0 {
+            fadeInOverlayAlpha = 0.0
         }
         
         drawable.encodePresent(commandBuffer: commandBuffer)
@@ -573,29 +660,86 @@ class Renderer {
         EventHandler.shared.lastQueuedFramePose = framePreviouslyPredictedPose
     }
     
+    func coolPulsingColor() -> simd_float4 {
+        // Color picked from the ALVR logo
+        let lightColor = simd_float4(0.05624, 0.73124, 0.75999, 1.0)
+        let darkColor = simd_float4(0.01305, 0.26223, 0.63828, 1.0)
+        var switchingFnT: Float = 0.0 // hold on light
+        
+        if coolPulsingColorsTime >= 1.0 && coolPulsingColorsTime < 2.0 {
+            switchingFnT = coolPulsingColorsTime - 1.0 // light -> dark
+        }
+        else if coolPulsingColorsTime >= 2.0 && coolPulsingColorsTime < 3.0 {
+            switchingFnT = 1.0 // hold on dark
+        }
+        else if coolPulsingColorsTime >= 3.0 && coolPulsingColorsTime < 4.0 {
+            switchingFnT = coolPulsingColorsTime - 2.0 // dark -> light
+        }
+
+        var switchingFn = sin(switchingFnT * Float.pi * 0.5)
+        if coolPulsingColorsTime >= 4.0 {
+            switchingFn = 0.0
+        }
+        return simd_mix(lightColor, darkColor, simd_float4(repeating: switchingFn))
+    }
+    
     func planeToColor(plane: PlaneAnchor) -> simd_float4 {
+        let planeAlpha = fadeInOverlayAlpha
+        var subtleChange = 0.75 + ((Float(plane.id.hashValue & 0xFF) / Float(0xff)) * 0.25)
+        
+        if drawPlanesWithInformedColors {
+            switch(plane.classification) {
+                case .ceiling: // #62ea80
+                    return simd_float4(0.3843137254901961, 0.9176470588235294, 0.5019607843137255, 1.0) * subtleChange * planeAlpha
+                case .door: // #1a5ff4
+                    return simd_float4(0.10196078431372549, 0.37254901960784315, 0.9568627450980393, 1.0) * subtleChange * planeAlpha
+                case .floor: // #bf6505
+                    return simd_float4(0.7490196078431373, 0.396078431372549, 0.0196078431372549, 1.0) * subtleChange * planeAlpha
+                case .seat: // #ef67af
+                    return simd_float4(0.9372549019607843, 0.403921568627451, 0.6862745098039216, 1.0) * subtleChange * planeAlpha
+                case .table: // #c937d3
+                    return simd_float4(0.788235294117647, 0.21568627450980393, 0.8274509803921568, 1.0) * subtleChange * planeAlpha
+                case .wall: // #dced5e
+                    return simd_float4(0.8627450980392157, 0.9294117647058824, 0.3686274509803922, 1.0) * subtleChange * planeAlpha
+                case .window: // #4aefce
+                    return simd_float4(0.2901960784313726, 0.9372549019607843, 0.807843137254902, 1.0) * subtleChange * planeAlpha
+                case .unknown: // #0e576b
+                    return simd_float4(0.054901960784313725, 0.3411764705882353, 0.4196078431372549, 1.0) * subtleChange * planeAlpha
+                case .undetermined: // #749606
+                    return simd_float4(0.4549019607843137, 0.5882352941176471, 0.023529411764705882, 1.0) * subtleChange * planeAlpha
+                default:
+                    return simd_float4(1.0, 0.0, 0.0, 1.0) * subtleChange * planeAlpha // red
+            }
+        }
+        else {
+            if plane.classification == .ceiling {
+                subtleChange *= 0.4
+            }
+            else if plane.classification == .wall {
+                subtleChange *= 0.1
+            }
+            else if plane.classification == .floor {
+                subtleChange *= 0.2
+            }
+            else if plane.classification == .seat {
+                subtleChange *= 0.5
+            }
+            else {
+                subtleChange = 0.01
+            }
+            return coolPulsingColor() * subtleChange * planeAlpha
+        }
+    }
+    
+    func planeToLineColor(plane: PlaneAnchor) -> simd_float4 {
+        let planeAlpha = fadeInOverlayAlpha
         let subtleChange = 0.75 + ((Float(plane.id.hashValue & 0xFF) / Float(0xff)) * 0.25)
-        switch(plane.classification) {
-            case .ceiling: // #62ea80
-                return simd_float4(0.3843137254901961, 0.9176470588235294, 0.5019607843137255, 1.0) * subtleChange
-            case .door: // #1a5ff4
-                return simd_float4(0.10196078431372549, 0.37254901960784315, 0.9568627450980393, 1.0) * subtleChange
-            case .floor: // #bf6505
-                return simd_float4(0.7490196078431373, 0.396078431372549, 0.0196078431372549, 1.0) * subtleChange
-            case .seat: // #ef67af
-                return simd_float4(0.9372549019607843, 0.403921568627451, 0.6862745098039216, 1.0) * subtleChange
-            case .table: // #c937d3
-                return simd_float4(0.788235294117647, 0.21568627450980393, 0.8274509803921568, 1.0) * subtleChange
-            case .wall: // #dced5e
-                return simd_float4(0.8627450980392157, 0.9294117647058824, 0.3686274509803922, 1.0) * subtleChange
-            case .window: // #4aefce
-                return simd_float4(0.2901960784313726, 0.9372549019607843, 0.807843137254902, 1.0) * subtleChange
-            case .unknown: // #0e576b
-                return simd_float4(0.054901960784313725, 0.3411764705882353, 0.4196078431372549, 1.0) * subtleChange
-            case .undetermined: // #749606
-                return simd_float4(0.4549019607843137, 0.5882352941176471, 0.023529411764705882, 1.0) * subtleChange
-            default:
-                return simd_float4(1.0, 0.0, 0.0, 1.0) * subtleChange // red
+        
+        if drawPlanesWithInformedColors {
+            return planeToColor(plane: plane)
+        }
+        else {
+            return coolPulsingColor() * subtleChange * planeAlpha
         }
     }
     
@@ -685,12 +829,16 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func renderNothing(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer) {
+    func renderNothing(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, framePose: simd_float4x4) {
+        self.updateDynamicBufferState()
+        
+        self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose)
+        
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
-        renderPassDescriptor.colorAttachments[0].loadAction = .load
+        renderPassDescriptor.colorAttachments[0].loadAction = .clear
         renderPassDescriptor.colorAttachments[0].storeAction = .store
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
         renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
@@ -711,7 +859,7 @@ class Renderer {
         renderEncoder.setCullMode(.back)
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
-        renderEncoder.setDepthStencilState(depthStateGreater)
+        renderEncoder.setDepthStencilState(depthStateAlways)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
@@ -729,6 +877,9 @@ class Renderer {
             renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
         }
         
+        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
+        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
+        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         
         renderEncoder.endEncoding()
     }
@@ -776,6 +927,8 @@ class Renderer {
         renderEncoder.setDepthStencilState(depthStateGreater)
         
         WorldTracker.shared.lockPlaneAnchors()
+        
+        // Render planes
         for plane in WorldTracker.shared.planeAnchors {
             let plane = plane.value
             let faces = plane.geometry.meshFaces
@@ -786,8 +939,32 @@ class Renderer {
             selectNextPlaneUniformBuffer()
             self.planeUniforms[0].planeTransform = plane.originFromAnchorTransform
             self.planeUniforms[0].planeColor = planeToColor(plane: plane)
+            self.planeUniforms[0].planeDoProximity = 1.0
             renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
             
+            renderEncoder.setTriangleFillMode(.fill)
+            renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
+                                                indexCount: faces.count*3,
+                                                indexType: faces.bytesPerIndex == 2 ? MTLIndexType.uint16 : MTLIndexType.uint32,
+                                                indexBuffer: faces.buffer,
+                                                indexBufferOffset: 0)
+        }
+        
+        // Render lines
+        for plane in WorldTracker.shared.planeAnchors {
+            let plane = plane.value
+            let faces = plane.geometry.meshFaces
+            renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.position.rawValue)
+            renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.texcoord.rawValue)
+            
+            //self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose, planeTransform: plane.originFromAnchorTransform)
+            selectNextPlaneUniformBuffer()
+            self.planeUniforms[0].planeTransform = plane.originFromAnchorTransform
+            self.planeUniforms[0].planeColor = planeToLineColor(plane: plane)
+            self.planeUniforms[0].planeDoProximity = 0.0
+            renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+            
+            renderEncoder.setTriangleFillMode(.lines)
             renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
                                                 indexCount: faces.count*3,
                                                 indexType: faces.bytesPerIndex == 2 ? MTLIndexType.uint16 : MTLIndexType.uint32,
@@ -800,6 +977,11 @@ class Renderer {
     }
     
     func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?, framePose: simd_float4x4) {
+        fadeInOverlayAlpha -= 0.01
+        if fadeInOverlayAlpha < 0.0 {
+            fadeInOverlayAlpha = 0.0
+        }
+    
         self.updateDynamicBufferState()
         
         self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose)
@@ -838,7 +1020,7 @@ class Renderer {
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
         
-        self.encodingUniforms[0].yuvTransform = VideoHandler.getYUVTransformForVideoFormat(EventHandler.shared.videoFormat!)
+        self.encodingUniforms[0].yuvTransform = currentYuvTransform
         self.encodingUniforms[0].encodingGamma = encodingGamma
         renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue)
         
@@ -894,8 +1076,10 @@ class Renderer {
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
         
-        //renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
-        //renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
+        if fadeInOverlayAlpha > 0.0 {
+            renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
+            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
+        }
     }
     
     func renderLoop() {

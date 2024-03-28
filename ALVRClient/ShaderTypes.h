@@ -55,6 +55,7 @@ typedef struct
 {
     matrix_float4x4 planeTransform;
     simd_float4 planeColor;
+    float planeDoProximity;
 } PlaneUniform;
 
 typedef struct

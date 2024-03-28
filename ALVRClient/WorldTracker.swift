@@ -170,12 +170,19 @@ class WorldTracker {
         self.settings = settings
         resetPlayspace()
         
+        let authStatus = await arSession.requestAuthorization(for: [.handTracking, .worldSensing])
+        
+        var trackingList: [any DataProvider] = [worldTracking]
+        if authStatus[.handTracking] == .allowed {
+            trackingList.append(handTracking)
+        }
+        if authStatus[.worldSensing] == .allowed {
+            trackingList.append(sceneReconstruction)
+            trackingList.append(planeDetection)
+        }
+        
         do {
-            #if targetEnvironment(simulator)
-            try await arSession.run([worldTracking])
-            #else
-            try await arSession.run([worldTracking, handTracking, sceneReconstruction, planeDetection])
-            #endif
+            try await arSession.run(trackingList)
         } catch {
             fatalError("Failed to initialize ARSession")
         }
@@ -629,7 +636,7 @@ class WorldTracker {
                     }
     
                     if let engine = leftEngine {
-                        print("haptic!")
+                        //print("haptic!")
                         var duration = leftHapticsEnd - leftHapticsStart
                         var amplitude = leftHapticsAmplitude
                         if duration < 0 {
@@ -640,7 +647,7 @@ class WorldTracker {
                         if leftHapticsEnd < CACurrentMediaTime() {
                             amplitude = 0.0
                             duration = 0.032
-                            print("Skip haptic, already over")
+                            //print("Skip haptic, already over")
                         }
                         if duration > 0.5 {
                             duration = 0.5
@@ -692,7 +699,7 @@ class WorldTracker {
                     }
     
                     if let engine = rightEngine {
-                        print("haptic!")
+                        //print("haptic!")
                         var duration = rightHapticsEnd - rightHapticsStart
                         var amplitude = rightHapticsAmplitude
                         if duration < 0 {
@@ -703,7 +710,7 @@ class WorldTracker {
                         if rightHapticsEnd < CACurrentMediaTime() {
                             amplitude = 0.0
                             duration = 0.032
-                            print("Skip haptic, already over")
+                            //print("Skip haptic, already over")
                         }
                         if duration > 0.5 {
                             duration = 0.5
@@ -741,7 +748,7 @@ class WorldTracker {
     // TODO: figure out how stable Apple's predictions are into the future
     // targetTimestamp: The timestamp of the pose we will send to ALVR--capped by how far we can predict forward.
     // realTargetTimestamp: The timestamp we tell ALVR, which always includes the full round-trip prediction.
-    func sendTracking(targetTimestamp: Double, realTargetTimestamp: Double) {
+    func sendTracking(targetTimestamp: Double, realTargetTimestamp: Double, delay: Double) {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
@@ -853,12 +860,18 @@ class WorldTracker {
         //let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
-        
-        sendGamepadInputs()
 
         EventHandler.shared.lastRequestedTimestamp = realTargetTimestampNS
         lastSentHandsTs = lastHandsUpdatedTs
-        alvr_send_tracking(realTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+        
+        if delay == 0.0 {
+            sendGamepadInputs()
+        }
+
+        Thread {
+            Thread.sleep(forTimeInterval: delay)
+            alvr_send_tracking(realTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+        }.start()
     }
     
     func lookupDeviceAnchorFor(timestamp: UInt64) -> simd_float4x4? {

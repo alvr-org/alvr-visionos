@@ -7,6 +7,8 @@ import Metal
 import VideoToolbox
 import Combine
 import AVKit
+import Foundation
+import Network
 
 class EventHandler: ObservableObject {
     static let shared = EventHandler()
@@ -44,14 +46,18 @@ class EventHandler: ObservableObject {
     var streamEvent: AlvrEvent? = nil
     
     var framesRendered:Int = 0
+    var totalFramesRendered:Int = 0
     var eventHeartbeat:Int = 0
     var lastEventHeartbeat:Int = -1
     
     var timeLastSentPeriodicUpdatedValues: Double = 0.0
+    var timeLastSentMdnsBroadcast: Double = 0.0
     var timeLastAlvrEvent: Double = 0.0
     var timeLastFrameGot: Double = 0.0
     var timeLastFrameSent: Double = 0.0
+    var timeLastFrameDecoded: Double = 0.0
     var numberOfEventThreadRestarts: Int = 0
+    var mdnsListener: NWListener? = nil
     
     init() {}
     
@@ -131,6 +137,14 @@ class EventHandler: ObservableObject {
     func handleHeadsetEntered() {
         fixAudioForDirectStereo()
     }
+    
+    func handleRenderStarted() {
+        // Prevent event thread rebooting if we can
+        timeLastAlvrEvent = CACurrentMediaTime()
+        timeLastFrameGot = CACurrentMediaTime()
+        timeLastFrameSent = CACurrentMediaTime()
+        timeLastFrameDecoded = CACurrentMediaTime()
+    }
 
     func fixAudioForDirectStereo() {
         let audioSession = AVAudioSession.sharedInstance()
@@ -154,6 +168,54 @@ class EventHandler: ObservableObject {
         }
     }
 
+    // Handle mDNS broadcasts
+    func handleMdnsBroadcasts() {
+        // HACK: Some mDNS clients seem to only see edge updates (ie, when a client appears/disappears)
+        // so we just create/destroy this every 2s until we're streaming.
+        if mdnsListener != nil {
+            mdnsListener!.cancel()
+            mdnsListener = nil
+        }
+
+        if mdnsListener == nil && !streamingActive {
+            do {
+                mdnsListener = try NWListener(using: .tcp)
+            } catch {
+                mdnsListener = nil
+                print("Failed to create mDNS NWListener?")
+            }
+            
+            if let listener = mdnsListener {
+                let txtRecord = NWTXTRecord(["protocol" : getMdnsProtocolId()])
+                listener.service = NWListener.Service(name: "ALVR Apple Vision Pro", type: getMdnsService(), txtRecord: txtRecord)
+
+                // Handle errors if any
+                listener.stateUpdateHandler = { newState in
+                    switch newState {
+                    case .ready:
+                        print("mDNS listener is ready")
+                    case .waiting(let error):
+                        print("mDNS listener is waiting with error: \(error)")
+                    case .failed(let error):
+                        print("mDNS listener failed with error: \(error)")
+                    default:
+                        break
+                    }
+                }
+                listener.serviceRegistrationUpdateHandler = { change in
+                    print("mDNS registration updated:", change)
+                }
+                listener.newConnectionHandler = { connection in
+                    connection.cancel()
+                }
+
+                listener.start(queue: DispatchQueue.main)
+            }
+        }
+        
+        timeLastSentMdnsBroadcast = CACurrentMediaTime()
+    }
+
     // Data which only needs to be sent periodically, such as battery percentage
     func handlePeriodicUpdatedValues() {
         if !UIDevice.current.isBatteryMonitoringEnabled {
@@ -161,7 +223,9 @@ class EventHandler: ObservableObject {
         }
         let batteryLevel = UIDevice.current.batteryLevel
         let isCharging = UIDevice.current.batteryState == .charging
-        alvr_send_battery(WorldTracker.deviceIdHead, batteryLevel, isCharging)
+        if streamingActive {
+            alvr_send_battery(WorldTracker.deviceIdHead, batteryLevel, isCharging)
+        }
         
         timeLastSentPeriodicUpdatedValues = CACurrentMediaTime()
     }
@@ -169,7 +233,7 @@ class EventHandler: ObservableObject {
     func eventsWatchdog() {
         while true {
             if eventHeartbeat == lastEventHeartbeat {
-                if renderStarted || numberOfEventThreadRestarts > 10 {
+                if (renderStarted && numberOfEventThreadRestarts > 3) || numberOfEventThreadRestarts > 10 {
                     print("Event thread is MIA, exiting")
                     exit(0)
                 }
@@ -188,6 +252,10 @@ class EventHandler: ObservableObject {
                 let state = UIApplication.shared.applicationState
                 if state == .background {
                     print("App in background, exiting")
+                    if let service = self.mdnsListener {
+                        service.cancel()
+                        self.mdnsListener = nil
+                    }
                     exit(0)
                 }
             }
@@ -242,6 +310,9 @@ class EventHandler: ObservableObject {
                     guard let imageBuffer = imageBuffer else {
                         return
                     }
+                    
+                    //print(timestamp, (CACurrentMediaTime() - timeLastFrameDecoded) * 1000.0)
+                    timeLastFrameDecoded = CACurrentMediaTime()
 
                     //let imageBufferPtr = Unmanaged.passUnretained(imageBuffer).toOpaque()
                     //print("finish decode: \(timestamp), \(imageBufferPtr), \(nal_type)")
@@ -263,7 +334,7 @@ class EventHandler: ObservableObject {
                         else {
                             frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
                         }
-                        if frameQueue.count > 2 {
+                        if frameQueue.count > 3 {
                             frameQueue.removeFirst()
                         }
 
@@ -287,8 +358,63 @@ class EventHandler: ObservableObject {
             }
         }
     }
+    
+    func getHostname() -> String {
+        var byteArray = [UInt8](repeating: 0, count: 256)
+
+        byteArray.withUnsafeMutableBytes { (ptr: UnsafeMutableRawBufferPointer) -> Void in
+            let cStringPtr = ptr.bindMemory(to: CChar.self).baseAddress
+            
+            alvr_hostname(cStringPtr)
+        }
+        
+        if let utf8String = String(bytes: byteArray, encoding: .utf8) {
+            let ret = utf8String.trimmingCharacters(in: ["\0"]);
+            return ret + ".alvr"; // Hack: runtime needs to fix this D:
+        } else {
+            print("Unable to decode alvr_hostname into a UTF-8 string.")
+            return "unknown.client.alvr";
+        }
+    }
+    
+    func getMdnsService() -> String {
+        var byteArray = [UInt8](repeating: 0, count: 256)
+
+        byteArray.withUnsafeMutableBytes { (ptr: UnsafeMutableRawBufferPointer) -> Void in
+            let cStringPtr = ptr.bindMemory(to: CChar.self).baseAddress
+            
+            alvr_mdns_service(cStringPtr)
+        }
+        
+        if let utf8String = String(bytes: byteArray, encoding: .utf8) {
+            let ret = utf8String.trimmingCharacters(in: ["\0"]);
+            return ret.replacing(".local", with: "", maxReplacements: 1);
+        } else {
+            print("Unable to decode alvr_mdns_service into a UTF-8 string.")
+            return "_alvr._tcp";
+        }
+    }
+    
+    func getMdnsProtocolId() -> String {
+        var byteArray = [UInt8](repeating: 0, count: 256)
+
+        byteArray.withUnsafeMutableBytes { (ptr: UnsafeMutableRawBufferPointer) -> Void in
+            let cStringPtr = ptr.bindMemory(to: CChar.self).baseAddress
+            
+            alvr_protocol_id(cStringPtr)
+        }
+        
+        if let utf8String = String(bytes: byteArray, encoding: .utf8) {
+            let ret = utf8String.trimmingCharacters(in: ["\0"]);
+            return ret;
+        } else {
+            print("Unable to decode alvr_protocol_id into a UTF-8 string.")
+            return "unknown";
+        }
+    }
 
     func handleAlvrEvents() {
+        print("Start event thread...")
         while inputRunning {
             eventHeartbeat += 1
             // Send periodic updated values, such as battery percentage, once every five seconds
@@ -296,11 +422,18 @@ class EventHandler: ObservableObject {
             if currentTime - timeLastSentPeriodicUpdatedValues >= 5.0 {
                 handlePeriodicUpdatedValues()
             }
+            if currentTime - timeLastSentMdnsBroadcast >= 2.0 {
+                handleMdnsBroadcasts()
+            }
             
             DispatchQueue.main.async {
                 let state = UIApplication.shared.applicationState
                 if state == .background {
                     print("App in background, exiting")
+                    if let service = self.mdnsListener {
+                        service.cancel()
+                        self.mdnsListener = nil
+                    }
                     exit(0)
                 }
             }
@@ -308,8 +441,9 @@ class EventHandler: ObservableObject {
             let diffSinceLastEvent = currentTime - timeLastAlvrEvent
             let diffSinceLastNal = currentTime - timeLastFrameGot
             let diffSinceLastDecode = currentTime - timeLastFrameSent
-            if (timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 5.0 || diffSinceLastNal >= 5.0))
-               || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 5.0)) {
+            if (!renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 20.0 || diffSinceLastNal >= 20.0))
+               || (renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 30.0 || diffSinceLastNal >= 30.0))
+               || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 30.0)) {
                 EventHandler.shared.updateConnectionState(.disconnected)
                 
                 print("Kick ALVR...")
@@ -342,14 +476,17 @@ class EventHandler: ObservableObject {
             switch UInt32(alvrEvent.tag) {
             case ALVR_EVENT_HUD_MESSAGE_UPDATED.rawValue:
                 print("hud message updated")
-                let hudMessageBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
-                alvr_hud_message(hudMessageBuffer.baseAddress)
-                let message = String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8)!
-                parseMessage(message)
-                print(message)
-                hudMessageBuffer.deallocate()
+                if !renderStarted {
+                    let hudMessageBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
+                    alvr_hud_message(hudMessageBuffer.baseAddress)
+                    let message = String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8)!
+                    parseMessage(message)
+                    print(message)
+                    hudMessageBuffer.deallocate()
+                }
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started \(alvrEvent.STREAMING_STARTED)")
+                numberOfEventThreadRestarts = 0
                 if !streamingActive {
                     streamEvent = alvrEvent
                     streamingActive = true
@@ -398,7 +535,7 @@ class EventHandler: ObservableObject {
                 }
                 while alvrInitialized {
                    guard let (nal, _) = VideoHandler.pollNal() else {
-                       fatalError("create decoder: failed to poll nal?!")
+                       print("create decoder: failed to poll nal?!")
                        break
                    }
                    //NSLog("%@", nal as NSData)
@@ -416,19 +553,23 @@ class EventHandler: ObservableObject {
             case ALVR_EVENT_FRAME_READY.rawValue:
                 streamingActive = true
                 //print("frame ready")
-                EventHandler.shared.updateConnectionState(.connected)
-                 
+                
                 handleNals()
+                EventHandler.shared.updateConnectionState(.connected)
                  
                  
              default:
                  print("msg")
              }
         }
+        
         print("Events thread stopped")
     }
     
     func updateConnectionState(_ newState: ConnectionState) {
+        if renderStarted || self.connectionState == newState {
+            return
+        }
         DispatchQueue.main.async {
             self.connectionState = newState
         }
@@ -443,7 +584,7 @@ class EventHandler: ObservableObject {
                 let value = keyValuePair[1].trimmingCharacters(in: .whitespaces)
                 
                 if key == "hostname" {
-                    updateHostname(value + ".alvr") // Hack: runtime needs to fix this D:
+                    updateHostname(getHostname())
                 } else if key == "IP" {
                     updateIP(value)
                 }
