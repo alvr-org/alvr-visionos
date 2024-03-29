@@ -614,7 +614,7 @@ class Renderer {
             }
             
             renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
-            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
+            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
         }
         
         coolPulsingColorsTime += 0.005
@@ -720,7 +720,7 @@ class Renderer {
         }
     }
     
-    func renderStreamingFrameDepth(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?, framePose: simd_float4x4) {
+    func renderStreamingFrameDepth(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?) {
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
         renderPassDescriptor.colorAttachments[0].loadAction = .load
@@ -729,7 +729,7 @@ class Renderer {
         renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
-        renderPassDescriptor.depthAttachment.clearDepth = 0.0
+        renderPassDescriptor.depthAttachment.clearDepth = 0.000000001
         renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
         if layerRenderer.configuration.layout == .layered {
             renderPassDescriptor.renderTargetArrayLength = drawable.views.count
@@ -746,7 +746,7 @@ class Renderer {
         renderEncoder.setCullMode(.back)
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
-        renderEncoder.setDepthStencilState(depthStateGreater)
+        renderEncoder.setDepthStencilState(depthStateAlways)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
@@ -1054,8 +1054,12 @@ class Renderer {
         renderEncoder.endEncoding()
         
         if fadeInOverlayAlpha > 0.0 {
+            let fullViewPose = drawable.deviceAnchor != nil ? drawable.deviceAnchor!.originFromAnchorTransform : framePose
+            // Not super kosher--we need the depth to be correct for the video frame box, but we can't have the view
+            // outside of the video frame box be 0.0 depth or it won't get rastered by the compositor at all.
+            // So we re-render the frame depth.
             renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
-            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
+            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
         }
     }
     
