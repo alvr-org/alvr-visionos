@@ -264,16 +264,22 @@ struct VideoHandler {
         }
     }
 
-    static func pollNal() -> (Data, UInt64)? {
-        let nalLength = alvr_poll_nal(nil, nil)
+    static func pollNal() -> (UInt64, [AlvrViewParams], Data)? {
+        let nalLength = alvr_poll_nal(nil, nil, nil)
         if nalLength == 0 {
             return nil
         }
         let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength))
+        let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
         defer { nalBuffer.deallocate() }
+        defer { nalViewsPtr.deallocate() }
         var nalTimestamp:UInt64 = 0
-        alvr_poll_nal(nalBuffer.baseAddress, &nalTimestamp)
-        return (Data(buffer: nalBuffer), nalTimestamp)
+        alvr_poll_nal(&nalTimestamp, nalViewsPtr, nalBuffer.baseAddress)
+        
+        let nalViews = [nalViewsPtr[0], nalViewsPtr[1]]
+        
+        // TODO: pass views along
+        return (nalTimestamp, nalViews, Data(buffer: nalBuffer))
     }
     
     static func abandonAllPendingNals() {

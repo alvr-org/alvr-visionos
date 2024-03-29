@@ -480,20 +480,20 @@ class Renderer {
                 }
                 else {
                     EventHandler.shared.framesRendered = 0
+                    
+                    let rebuildThread = Thread {
+                        self.rebuildRenderPipelines()
+                    }
+                    rebuildThread.name = "Rebuild Render Pipelines Thread"
+                    rebuildThread.start()
                 }
-                EventHandler.shared.lastIpd = ipd
                 let leftAngles = atan(drawable.views[0].tangents)
                 let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
                 let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
-                let fovs = [leftFov, rightFov]
-                
-                let rebuildThread = Thread {
-                    self.rebuildRenderPipelines()
-                    alvr_send_views_config(fovs, ipd)
-                }
-                rebuildThread.name = "Rebuild Render Pipelines Thread"
-                rebuildThread.start()
+                EventHandler.shared.viewFovs = [leftFov, rightFov]
+                EventHandler.shared.viewTransforms = [drawable.views[0].transform, drawable.views.count > 1 ? drawable.views[1].transform : drawable.views[0].transform]
+                EventHandler.shared.lastIpd = ipd
             }
         }
         
@@ -539,6 +539,9 @@ class Renderer {
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
+            let viewFovs = EventHandler.shared.viewFovs
+            let viewTransforms = EventHandler.shared.viewTransforms
+        
             let nowTs = CACurrentMediaTime()
             let nowToVsync = vsyncTime - nowTs
             
@@ -555,9 +558,9 @@ class Renderer {
             let realTargetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
             let targetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
             let realTargetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
+            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
+            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
+            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
         }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
@@ -580,7 +583,7 @@ class Renderer {
         // List of reasons to not display a frame
         var frameIsSuitableForDisplaying = true
         //print(EventHandler.shared.lastIpd, WorldTracker.shared.worldTrackingAddedOriginAnchor, EventHandler.shared.framesRendered)
-        if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
+        if EventHandler.shared.lastIpd == -1 {
             // Don't show frame if we haven't sent the view config and received frames
             // with that config applied.
             frameIsSuitableForDisplaying = false

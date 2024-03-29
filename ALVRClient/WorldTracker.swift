@@ -748,7 +748,7 @@ class WorldTracker {
     // TODO: figure out how stable Apple's predictions are into the future
     // targetTimestamp: The timestamp of the pose we will send to ALVR--capped by how far we can predict forward.
     // realTargetTimestamp: The timestamp we tell ALVR, which always includes the full round-trip prediction.
-    func sendTracking(targetTimestamp: Double, realTargetTimestamp: Double, delay: Double) {
+    func sendTracking(viewTransforms: [simd_float4x4], viewFovs: [AlvrFov], targetTimestamp: Double, realTargetTimestamp: Double, delay: Double) {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
@@ -809,12 +809,17 @@ class WorldTracker {
 
         // Don't move SteamVR center/bounds when the headset recenters
         let transform = self.worldTrackingSteamVRTransform.inverse * deviceAnchor.originFromAnchorTransform
+        let leftTransform = transform * viewTransforms[0]
+        let rightTransform = transform * viewTransforms[1]
         
-        let orientation = simd_quaternion(transform)
-        let position = transform.columns.3
-        let headPose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
-        let headTrackingMotion = AlvrDeviceMotion(device_id: WorldTracker.deviceIdHead, pose: headPose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
-        var trackingMotions = [headTrackingMotion]
+        let leftOrientation = simd_quaternion(leftTransform)
+        let leftPosition = leftTransform.columns.3
+        let leftPose = AlvrPose(orientation: AlvrQuat(x: leftOrientation.vector.x, y: leftOrientation.vector.y, z: leftOrientation.vector.z, w: leftOrientation.vector.w), position: (leftPosition.x, leftPosition.y, leftPosition.z))
+        let rightOrientation = simd_quaternion(rightTransform)
+        let rightPosition = rightTransform.columns.3
+        let rightPose = AlvrPose(orientation: AlvrQuat(x: rightOrientation.vector.x, y: rightOrientation.vector.y, z: rightOrientation.vector.z, w: rightOrientation.vector.w), position: (rightPosition.x, rightPosition.y, rightPosition.z))
+        
+        var trackingMotions:[AlvrDeviceMotion] = []
         var skeletonLeft:[AlvrPose]? = nil
         var skeletonRight:[AlvrPose]? = nil
         
@@ -860,6 +865,10 @@ class WorldTracker {
         //let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
+        
+        let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+        viewFovsPtr[0] = AlvrViewParams(pose: leftPose, fov: viewFovs[0])
+        viewFovsPtr[1] = AlvrViewParams(pose: rightPose, fov: viewFovs[1])
 
         EventHandler.shared.lastRequestedTimestamp = realTargetTimestampNS
         lastSentHandsTs = lastHandsUpdatedTs
@@ -870,7 +879,7 @@ class WorldTracker {
 
         Thread {
             Thread.sleep(forTimeInterval: delay)
-            alvr_send_tracking(realTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+            alvr_send_tracking(realTargetTimestampNS, UnsafePointer(viewFovsPtr), trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
         }.start()
     }
     

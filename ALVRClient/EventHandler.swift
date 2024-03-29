@@ -39,6 +39,8 @@ class EventHandler: ObservableObject {
     var lastRequestedTimestamp: UInt64 = 0
     var lastSubmittedTimestamp: UInt64 = 0
     var lastIpd: Float = -1
+    var viewTransforms: [simd_float4x4] = [matrix_identity_float4x4, matrix_identity_float4x4]
+    var viewFovs: [AlvrFov] = [AlvrFov(left: -1.0471973, right: 0.7853982, up: 0.7853982, down: -0.8726632), AlvrFov(left: -0.7853982, right: 1.0471973, up: 0.7853982, down: -0.8726632)]
 
     var framesSinceLastIDR:Int = 0
     var framesSinceLastDecode:Int = 0
@@ -270,10 +272,10 @@ class EventHandler: ObservableObject {
     func handleNals() {
         timeLastFrameGot = CACurrentMediaTime()
         while renderStarted {
-            guard let (nal, timestamp) = VideoHandler.pollNal() else {
+            guard let (timestamp, viewParams, nal) = VideoHandler.pollNal() else {
                 break
             }
-
+            
             //print("nal bytecount:", nal.count, "for ts:", timestamp)
             framesSinceLastIDR += 1
 
@@ -494,6 +496,7 @@ class EventHandler: ObservableObject {
                     framesSinceLastIDR = 0
                     framesSinceLastDecode = 0
                     lastIpd = -1
+                    EventHandler.shared.updateConnectionState(.connected)
                 }
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
@@ -534,7 +537,7 @@ class EventHandler: ObservableObject {
                     continue
                 }
                 while alvrInitialized {
-                   guard let (nal, _) = VideoHandler.pollNal() else {
+                   guard let (_, _, nal) = VideoHandler.pollNal() else {
                        print("create decoder: failed to poll nal?!")
                        break
                    }
