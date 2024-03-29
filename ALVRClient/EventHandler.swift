@@ -276,15 +276,8 @@ class EventHandler: ObservableObject {
                 break
             }
             
-            //print("nal bytecount:", nal.count, "for ts:", timestamp)
-            framesSinceLastIDR += 1
-
-            // Don't submit NALs for decoding if we have already decoded a later frame
             objc_sync_enter(frameQueueLock)
-            if timestamp < frameQueueLastTimestamp {
-                //objc_sync_exit(frameQueueLock)
-                //continue
-            }
+            framesSinceLastIDR += 1
 
             // If we're receiving NALs timestamped from >400ms ago, stop decoding them
             // to prevent a cascade of needless decoding lag
@@ -331,10 +324,10 @@ class EventHandler: ObservableObject {
                         // the next frame is starting, so keep this around for now just in case.
                         if frameQueueLastImageBuffer != nil {
                             //frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
-                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, viewParams: viewParams))
                         }
                         else {
-                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, viewParams: viewParams))
                         }
                         if frameQueue.count > 3 {
                             frameQueue.removeFirst()
@@ -498,6 +491,9 @@ class EventHandler: ObservableObject {
                     lastIpd = -1
                     EventHandler.shared.updateConnectionState(.connected)
                 }
+                if !renderStarted {
+                    WorldTracker.shared.sendFakeTracking(viewFovs: viewFovs, targetTimestamp: CACurrentMediaTime() - 1.0)
+                }
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
                 if streamingActive {
@@ -616,4 +612,5 @@ enum ConnectionState {
 struct QueuedFrame {
     let imageBuffer: CVImageBuffer
     let timestamp: UInt64
+    let viewParams: [AlvrViewParams]
 }

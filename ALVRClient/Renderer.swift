@@ -505,62 +505,41 @@ class Renderer {
         
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
-        var framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
-
-        var missingAnchor = false
-        if renderingStreaming && queuedFrame != nil && framePreviouslyPredictedPose == nil {
-            print("missing anchor!!", queuedFrame!.timestamp)
-            
-            // Last minute reprojection??
-            if EventHandler.shared.lastQueuedFrame != nil {
-                print("falling back to last frame last-minute")
-                queuedFrame = EventHandler.shared.lastQueuedFrame
-                framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
-                if framePreviouslyPredictedPose == nil {
-                    framePreviouslyPredictedPose = EventHandler.shared.lastQueuedFramePose
-                }
-                
-                if framePreviouslyPredictedPose == nil {
-                    print("darn, no pose for that one either")
-                    missingAnchor = true
-                    isReprojected = true
-                }
-            }
-            else {
-                missingAnchor = true
-                isReprojected = true
-            }
-            
-            // Try and avoid weird anchored past frames from sneaking in.
-            if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
-                EventHandler.shared.framesRendered = 0
-            }
-        }
+        let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
-        if EventHandler.shared.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
+        if EventHandler.shared.alvrInitialized {
+            // TODO: I suspect Apple changes view transforms every frame to account for pupil swim, figure out how to fit the latest view transforms in?
+            // Since pupil swim is purely an axial thing, maybe we can just timewarp the view transforms as well idk
             let viewFovs = EventHandler.shared.viewFovs
             let viewTransforms = EventHandler.shared.viewTransforms
         
-            let nowTs = CACurrentMediaTime()
-            let nowToVsync = vsyncTime - nowTs
+            //let nowTs = CACurrentMediaTime()
+            //let nowToVsync = vsyncTime - nowTs
             
             // Sometimes upload speeds can be less than optimal.
             // To compensate, we will send 3 predictions at a fixed interval and hope that
             // one of them is optimal enough to avoid a re-sent timestamp frame
-            var interval = ((11.0 / 1000.0) / 3.0)
-            if queuedFrame != nil {
-                interval = roundTripRenderTime / 3.0
-            }
-            let targetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            let realTargetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            let targetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            let realTargetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            let targetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            let realTargetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
-            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
-            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
+            // TODO: revisit this
+            //var interval = ((11.0 / 1000.0) / 3.0)
+#if !targetEnvironment(simulator)
+            //if queuedFrame != nil {
+            //    interval = roundTripRenderTime / 3.0
+            //}
+#endif
+            //let targetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            //let realTargetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            //let targetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            //let realTargetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            //let targetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            //let realTargetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
+            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
+            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
+            
+            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let realTargetTimestamp = vsyncTime + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, realTargetTimestamp: realTargetTimestamp, delay: 0.0)
         }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
@@ -583,7 +562,7 @@ class Renderer {
         // List of reasons to not display a frame
         var frameIsSuitableForDisplaying = true
         //print(EventHandler.shared.lastIpd, WorldTracker.shared.worldTrackingAddedOriginAnchor, EventHandler.shared.framesRendered)
-        if EventHandler.shared.lastIpd == -1 {
+        if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 90 {
             // Don't show frame if we haven't sent the view config and received frames
             // with that config applied.
             frameIsSuitableForDisplaying = false
@@ -593,11 +572,6 @@ class Renderer {
             // Don't show frame if we haven't figured out our origin yet.
             frameIsSuitableForDisplaying = false
             print("Origin is bad, no frame")
-        }
-        if missingAnchor {
-            // We can't timewarp any more, so stop rendering
-            frameIsSuitableForDisplaying = false
-            print("Missing anchor, no frame")
         }
         if EventHandler.shared.videoFormat == nil {
             frameIsSuitableForDisplaying = false

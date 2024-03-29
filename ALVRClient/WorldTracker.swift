@@ -18,10 +18,6 @@ class WorldTracker {
     let sceneReconstruction: SceneReconstructionProvider!
     let planeDetection: PlaneDetectionProvider!
     
-    var deviceAnchorsLock = NSObject()
-    var deviceAnchorsQueue = [UInt64]()
-    var deviceAnchorsDictionary = [UInt64: simd_float4x4]()
-    
     // Playspace and boundaries state
     var planeAnchors: [UUID: PlaneAnchor] = [:]
     var worldAnchors: [UUID: WorldAnchor] = [:]
@@ -799,13 +795,6 @@ class WorldTracker {
         
         //let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
         let realTargetTimestampNS = UInt64(realTargetTimestamp * Double(NSEC_PER_SEC))
-        
-        deviceAnchorsQueue.append(realTargetTimestampNS)
-        if deviceAnchorsQueue.count > 1000 {
-            let val = deviceAnchorsQueue.removeFirst()
-            deviceAnchorsDictionary.removeValue(forKey: val)
-        }
-        deviceAnchorsDictionary[realTargetTimestampNS] = deviceAnchor.originFromAnchorTransform
 
         // Don't move SteamVR center/bounds when the headset recenters
         let transform = self.worldTrackingSteamVRTransform.inverse * deviceAnchor.originFromAnchorTransform
@@ -883,8 +872,30 @@ class WorldTracker {
         }.start()
     }
     
-    func lookupDeviceAnchorFor(timestamp: UInt64) -> simd_float4x4? {
-        return deviceAnchorsDictionary[timestamp]
+    // We want video frames ASAP, so we send a fake view pose/FOVs to keep the frames coming
+    // until we have access to real values
+    func sendFakeTracking(viewFovs: [AlvrFov], targetTimestamp: Double) {
+        let dummyPose = AlvrPose(orientation: AlvrQuat(x: 0.0, y: 0.0, z: 0.0, w: 1.0), position: (0.0, 0.0, 0.0))
+        let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
+        
+        let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+        viewFovsPtr[0] = AlvrViewParams(pose: dummyPose, fov: viewFovs[0])
+        viewFovsPtr[1] = AlvrViewParams(pose: dummyPose, fov: viewFovs[1])
+        
+        alvr_send_tracking(targetTimestampNS, UnsafePointer(viewFovsPtr), nil, 0, nil, nil)
     }
     
+    // The poses we get back from the ALVR runtime are in SteamVR coordniate space,
+    // so we need to convert them back to local space
+    func convertSteamVRViewPose(_ viewParams: [AlvrViewParams]) -> simd_float4x4 {
+        let o = viewParams[0].pose.orientation
+        let p = viewParams[0].pose.position
+        var leftTransform = simd_float4x4(simd_quatf(ix: o.x, iy: o.y, iz: o.z, r: o.w))
+        leftTransform.columns.3 = simd_float4(p.0, p.1, p.2, 1.0)
+        
+        leftTransform = EventHandler.shared.viewTransforms[0].inverse * leftTransform
+        leftTransform = worldTrackingSteamVRTransform * leftTransform
+        
+        return leftTransform
+    }
 }

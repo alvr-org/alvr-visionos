@@ -278,7 +278,6 @@ struct VideoHandler {
         
         let nalViews = [nalViewsPtr[0], nalViewsPtr[1]]
         
-        // TODO: pass views along
         return (nalTimestamp, nalViews, Data(buffer: nalBuffer))
     }
     
@@ -538,6 +537,7 @@ struct VideoHandler {
         var err: OSStatus = 0
         
         let naluIndices = findNaluIndices(buffer: buffer)
+
         
         // we're replacing the 3/4 nalu headers with a 4 byte length, so add an extra byte on top of the original length for each 3-byte nalu header
         let blockBufferLength = buffer.count + naluIndices.filter(\.threeByteHeader).count
@@ -589,6 +589,13 @@ struct VideoHandler {
         err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
             //print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
             //print("status: \(status), image_nil?: \(imageBuffer == nil), infoFlags: \(infoFlags)")
+            
+            // If the decoder is failing somehow, request an IDR and get back on track
+            if status < 0 && EventHandler.shared.framesSinceLastIDR > 90*2 {
+                EventHandler.shared.framesSinceLastIDR = 0
+                alvr_request_idr()
+            }
+
             callback(imageBuffer)
         }
         if err != 0 {
