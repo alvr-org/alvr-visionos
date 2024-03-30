@@ -744,7 +744,7 @@ class WorldTracker {
     // TODO: figure out how stable Apple's predictions are into the future
     // targetTimestamp: The timestamp of the pose we will send to ALVR--capped by how far we can predict forward.
     // realTargetTimestamp: The timestamp we tell ALVR, which always includes the full round-trip prediction.
-    func sendTracking(viewTransforms: [simd_float4x4], viewFovs: [AlvrFov], targetTimestamp: Double, realTargetTimestamp: Double, delay: Double) {
+    func sendTracking(viewTransforms: [simd_float4x4], viewFovs: [AlvrFov], targetTimestamp: Double, reportedTargetTimestamp: Double, delay: Double) {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
@@ -794,7 +794,7 @@ class WorldTracker {
         sentPoses += 1
         
         //let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
-        let realTargetTimestampNS = UInt64(realTargetTimestamp * Double(NSEC_PER_SEC))
+        let reportedTargetTimestampNS = UInt64(reportedTargetTimestamp * Double(NSEC_PER_SEC))
 
         // Don't move SteamVR center/bounds when the headset recenters
         let transform = self.worldTrackingSteamVRTransform.inverse * deviceAnchor.originFromAnchorTransform
@@ -859,7 +859,7 @@ class WorldTracker {
         viewFovsPtr[0] = AlvrViewParams(pose: leftPose, fov: viewFovs[0])
         viewFovsPtr[1] = AlvrViewParams(pose: rightPose, fov: viewFovs[1])
 
-        EventHandler.shared.lastRequestedTimestamp = realTargetTimestampNS
+        EventHandler.shared.lastRequestedTimestamp = reportedTargetTimestampNS
         lastSentHandsTs = lastHandsUpdatedTs
         
         if delay == 0.0 {
@@ -867,8 +867,8 @@ class WorldTracker {
         }
 
         Thread {
-            Thread.sleep(forTimeInterval: delay)
-            alvr_send_tracking(realTargetTimestampNS, UnsafePointer(viewFovsPtr), trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+            //Thread.sleep(forTimeInterval: delay)
+            alvr_send_tracking(reportedTargetTimestampNS, UnsafePointer(viewFovsPtr), trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
         }.start()
     }
     

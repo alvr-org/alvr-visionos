@@ -514,8 +514,8 @@ class Renderer {
             let viewFovs = EventHandler.shared.viewFovs
             let viewTransforms = EventHandler.shared.viewTransforms
         
-            let nowTs = CACurrentMediaTime()
-            let nowToVsync = vsyncTime - nowTs
+            //let nowTs = CACurrentMediaTime()
+            //let nowToVsync = vsyncTime - nowTs
             
             // Sometimes upload speeds can be less than optimal.
             // To compensate, we will send 3 predictions at a fixed interval and hope that
@@ -538,8 +538,8 @@ class Renderer {
             //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
             
             let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            let realTargetTimestamp = vsyncTime + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, realTargetTimestamp: realTargetTimestamp, delay: nowToVsync)
+            let reportedTargetTimestamp = vsyncTime
+            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, delay: 0.0)
         }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
