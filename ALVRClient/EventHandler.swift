@@ -39,6 +39,8 @@ class EventHandler: ObservableObject {
     var lastRequestedTimestamp: UInt64 = 0
     var lastSubmittedTimestamp: UInt64 = 0
     var lastIpd: Float = -1
+    var viewTransforms: [simd_float4x4] = [matrix_identity_float4x4, matrix_identity_float4x4]
+    var viewFovs: [AlvrFov] = [AlvrFov(left: -1.0471973, right: 0.7853982, up: 0.7853982, down: -0.8726632), AlvrFov(left: -0.7853982, right: 1.0471973, up: 0.7853982, down: -0.8726632)]
 
     var framesSinceLastIDR:Int = 0
     var framesSinceLastDecode:Int = 0
@@ -270,19 +272,12 @@ class EventHandler: ObservableObject {
     func handleNals() {
         timeLastFrameGot = CACurrentMediaTime()
         while renderStarted {
-            guard let (nal, timestamp) = VideoHandler.pollNal() else {
+            guard let (timestamp, viewParams, nal) = VideoHandler.pollNal() else {
                 break
             }
-
-            //print("nal bytecount:", nal.count, "for ts:", timestamp)
-            framesSinceLastIDR += 1
-
-            // Don't submit NALs for decoding if we have already decoded a later frame
+            
             objc_sync_enter(frameQueueLock)
-            if timestamp < frameQueueLastTimestamp {
-                //objc_sync_exit(frameQueueLock)
-                //continue
-            }
+            framesSinceLastIDR += 1
 
             // If we're receiving NALs timestamped from >400ms ago, stop decoding them
             // to prevent a cascade of needless decoding lag
@@ -329,10 +324,10 @@ class EventHandler: ObservableObject {
                         // the next frame is starting, so keep this around for now just in case.
                         if frameQueueLastImageBuffer != nil {
                             //frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
-                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, viewParams: viewParams))
                         }
                         else {
-                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+                            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, viewParams: viewParams))
                         }
                         if frameQueue.count > 3 {
                             frameQueue.removeFirst()
@@ -494,6 +489,10 @@ class EventHandler: ObservableObject {
                     framesSinceLastIDR = 0
                     framesSinceLastDecode = 0
                     lastIpd = -1
+                    EventHandler.shared.updateConnectionState(.connected)
+                }
+                if !renderStarted {
+                    WorldTracker.shared.sendFakeTracking(viewFovs: viewFovs, targetTimestamp: CACurrentMediaTime() - 1.0)
                 }
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
@@ -534,7 +533,7 @@ class EventHandler: ObservableObject {
                     continue
                 }
                 while alvrInitialized {
-                   guard let (nal, _) = VideoHandler.pollNal() else {
+                   guard let (_, _, nal) = VideoHandler.pollNal() else {
                        print("create decoder: failed to poll nal?!")
                        break
                    }
@@ -613,4 +612,5 @@ enum ConnectionState {
 struct QueuedFrame {
     let imageBuffer: CVImageBuffer
     let timestamp: UInt64
+    let viewParams: [AlvrViewParams]
 }

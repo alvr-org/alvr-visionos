@@ -480,20 +480,20 @@ class Renderer {
                 }
                 else {
                     EventHandler.shared.framesRendered = 0
+                    
+                    let rebuildThread = Thread {
+                        self.rebuildRenderPipelines()
+                    }
+                    rebuildThread.name = "Rebuild Render Pipelines Thread"
+                    rebuildThread.start()
                 }
-                EventHandler.shared.lastIpd = ipd
                 let leftAngles = atan(drawable.views[0].tangents)
                 let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
                 let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
-                let fovs = [leftFov, rightFov]
-                
-                let rebuildThread = Thread {
-                    self.rebuildRenderPipelines()
-                    alvr_send_views_config(fovs, ipd)
-                }
-                rebuildThread.name = "Rebuild Render Pipelines Thread"
-                rebuildThread.start()
+                EventHandler.shared.viewFovs = [leftFov, rightFov]
+                EventHandler.shared.viewTransforms = [drawable.views[0].transform, drawable.views.count > 1 ? drawable.views[1].transform : drawable.views[0].transform]
+                EventHandler.shared.lastIpd = ipd
             }
         }
         
@@ -505,59 +505,41 @@ class Renderer {
         
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
-        var framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
-
-        var missingAnchor = false
-        if renderingStreaming && queuedFrame != nil && framePreviouslyPredictedPose == nil {
-            print("missing anchor!!", queuedFrame!.timestamp)
-            
-            // Last minute reprojection??
-            if EventHandler.shared.lastQueuedFrame != nil {
-                print("falling back to last frame last-minute")
-                queuedFrame = EventHandler.shared.lastQueuedFrame
-                framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
-                if framePreviouslyPredictedPose == nil {
-                    framePreviouslyPredictedPose = EventHandler.shared.lastQueuedFramePose
-                }
-                
-                if framePreviouslyPredictedPose == nil {
-                    print("darn, no pose for that one either")
-                    missingAnchor = true
-                    isReprojected = true
-                }
-            }
-            else {
-                missingAnchor = true
-                isReprojected = true
-            }
-            
-            // Try and avoid weird anchored past frames from sneaking in.
-            if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
-                EventHandler.shared.framesRendered = 0
-            }
-        }
+        let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
-        if EventHandler.shared.alvrInitialized /*&& (lastSubmittedTimestamp != queuedFrame?.timestamp)*/ {
-            let nowTs = CACurrentMediaTime()
-            let nowToVsync = vsyncTime - nowTs
+        if EventHandler.shared.alvrInitialized {
+            // TODO: I suspect Apple changes view transforms every frame to account for pupil swim, figure out how to fit the latest view transforms in?
+            // Since pupil swim is purely an axial thing, maybe we can just timewarp the view transforms as well idk
+            let viewFovs = EventHandler.shared.viewFovs
+            let viewTransforms = EventHandler.shared.viewTransforms
+        
+            //let nowTs = CACurrentMediaTime()
+            //let nowToVsync = vsyncTime - nowTs
             
             // Sometimes upload speeds can be less than optimal.
             // To compensate, we will send 3 predictions at a fixed interval and hope that
             // one of them is optimal enough to avoid a re-sent timestamp frame
-            var interval = ((11.0 / 1000.0) / 3.0)
-            if queuedFrame != nil {
-                interval = roundTripRenderTime / 3.0
-            }
-            let targetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            let realTargetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            let targetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            let realTargetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            let targetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            let realTargetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
-            WorldTracker.shared.sendTracking(targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
+            // TODO: revisit this
+            //var interval = ((11.0 / 1000.0) / 3.0)
+#if !targetEnvironment(simulator)
+            //if queuedFrame != nil {
+            //    interval = roundTripRenderTime / 3.0
+            //}
+#endif
+            //let targetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            //let realTargetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            //let targetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            //let realTargetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            //let targetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            //let realTargetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
+            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
+            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
+            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
+            
+            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let reportedTargetTimestamp = vsyncTime
+            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, delay: 0.0)
         }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
@@ -580,7 +562,7 @@ class Renderer {
         // List of reasons to not display a frame
         var frameIsSuitableForDisplaying = true
         //print(EventHandler.shared.lastIpd, WorldTracker.shared.worldTrackingAddedOriginAnchor, EventHandler.shared.framesRendered)
-        if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 10 {
+        if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 90 {
             // Don't show frame if we haven't sent the view config and received frames
             // with that config applied.
             frameIsSuitableForDisplaying = false
@@ -590,11 +572,6 @@ class Renderer {
             // Don't show frame if we haven't figured out our origin yet.
             frameIsSuitableForDisplaying = false
             print("Origin is bad, no frame")
-        }
-        if missingAnchor {
-            // We can't timewarp any more, so stop rendering
-            frameIsSuitableForDisplaying = false
-            print("Missing anchor, no frame")
         }
         if EventHandler.shared.videoFormat == nil {
             frameIsSuitableForDisplaying = false
@@ -637,7 +614,7 @@ class Renderer {
             }
             
             renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
-            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
+            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
         }
         
         coolPulsingColorsTime += 0.005
@@ -743,7 +720,7 @@ class Renderer {
         }
     }
     
-    func renderStreamingFrameDepth(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?, framePose: simd_float4x4) {
+    func renderStreamingFrameDepth(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?) {
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
         renderPassDescriptor.colorAttachments[0].loadAction = .load
@@ -752,7 +729,7 @@ class Renderer {
         renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
-        renderPassDescriptor.depthAttachment.clearDepth = 0.0
+        renderPassDescriptor.depthAttachment.clearDepth = 0.000000001
         renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
         if layerRenderer.configuration.layout == .layered {
             renderPassDescriptor.renderTargetArrayLength = drawable.views.count
@@ -769,7 +746,7 @@ class Renderer {
         renderEncoder.setCullMode(.back)
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
-        renderEncoder.setDepthStencilState(depthStateGreater)
+        renderEncoder.setDepthStencilState(depthStateAlways)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
@@ -1077,8 +1054,12 @@ class Renderer {
         renderEncoder.endEncoding()
         
         if fadeInOverlayAlpha > 0.0 {
+            let fullViewPose = drawable.deviceAnchor != nil ? drawable.deviceAnchor!.originFromAnchorTransform : framePose
+            // Not super kosher--we need the depth to be correct for the video frame box, but we can't have the view
+            // outside of the video frame box be 0.0 depth or it won't get rastered by the compositor at all.
+            // So we re-render the frame depth.
             renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
-            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
+            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
         }
     }
     
