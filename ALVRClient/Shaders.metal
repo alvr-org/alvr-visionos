@@ -53,8 +53,7 @@ vertex ColorInOutPlane vertexShader(Vertex in [[stage_in]],
     return out;
 }
 
-fragment float4 fragmentShader(ColorInOutPlane in [[stage_in]],
-                               texture2d<half> colorMap     [[ texture(TextureIndexColor) ]])
+fragment float4 fragmentShader(ColorInOutPlane in [[stage_in]])
 {
     float4 color = in.color;
     if (in.planeDoProximity >= 0.5) {
@@ -86,6 +85,9 @@ constant float2 EYE_SIZE_RATIO [[ function_constant(ALVRFunctionConstantFfrCommo
 constant float2 CENTER_SIZE [[ function_constant(ALVRFunctionConstantFfrCommonShaderCenterSize) ]];
 constant float2 CENTER_SHIFT [[ function_constant(ALVRFunctionConstantFfrCommonShaderCenterShift) ]];
 constant float2 EDGE_RATIO [[ function_constant(ALVRFunctionConstantFfrCommonShaderEdgeRatio) ]];
+constant bool CHROMAKEY_ENABLED [[ function_constant(ALVRFunctionConstantChromaKeyEnabled) ]];
+constant float3 CHROMAKEY_COLOR [[ function_constant(ALVRFunctionConstantChromaKeyColor) ]];
+constant float2 CHROMAKEY_LERP_DIST_RANGE [[ function_constant(ALVRFunctionConstantChromaKeyLerpDistRange) ]];
 
 float2 TextureToEyeUV(float2 textureUV, bool isRightEye) {
     // flip distortion horizontally for right eye
@@ -145,29 +147,28 @@ float2 decompressAxisAlignedCoord(float2 uv) {
 
 // VERTEX_SHADER
 
-vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
-                               ushort amp_id [[amplification_id]],
-                               constant UniformsArray & uniformsArray [[ buffer(BufferIndexUniforms) ]])
+ColorInOut videoFrameVertexShaderCommon(Vertex in [[stage_in]],
+                                int which,
+                               matrix_float4x4 projectionMatrix,
+                               matrix_float4x4 modelViewMatrixFrame,
+                               simd_float4 tangents)
 {
     ColorInOut out;
-
-    Uniforms uniforms = uniformsArray.uniforms[amp_id];
-    
     float4 position = float4(in.position, 1.0);
     if (position.x < 1.0) {
-        position.x *= uniforms.tangents[0];
+        position.x *= tangents[0];
     }
     else {
-        position.x *= uniforms.tangents[1];
+        position.x *= tangents[1];
     }
     if (position.y < 1.0) {
-        position.y *= uniforms.tangents[3];
+        position.y *= tangents[3];
     }
     else {
-        position.y *= uniforms.tangents[2];
+        position.y *= tangents[2];
     }
-    out.position = uniforms.projectionMatrix * uniforms.modelViewMatrixFrame * position;
-    if (amp_id == 0) {
+    out.position = projectionMatrix * modelViewMatrixFrame * position;
+    if (which == 0) {
         out.texCoord = in.texCoord;
     } else {
         out.texCoord = float2(in.texCoord.x + 0.5, in.texCoord.y);
@@ -175,6 +176,16 @@ vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
     out.color = float4(1.0, 1.0, 1.0, 1.0);
 
     return out;
+}
+
+vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
+                               ushort amp_id [[amplification_id]],
+                               constant UniformsArray & uniformsArray [[ buffer(BufferIndexUniforms) ]])
+{
+
+    Uniforms uniforms = uniformsArray.uniforms[amp_id];
+    
+    return videoFrameVertexShaderCommon(in, uniforms.which, uniforms.projectionMatrix, uniforms.modelViewMatrixFrame, uniforms.tangents);
 }
 
 float3 NonlinearToLinearRGB(float3 color) {
@@ -195,6 +206,18 @@ float3 EncodingNonlinearToLinearRGB(float3 color, float gamma) {
     ret.g = color.g < 0.0 ? color.g : pow(color.g, gamma);
     ret.b = color.b < 0.0 ? color.b : pow(color.b, gamma);
     return ret;
+}
+
+//compute color distance in the UV (CbCr, PbPr) plane
+float colorclose(float3 yuv, float3 keyYuv, float2 tol)
+{
+    float tmp = sqrt(pow(keyYuv.g - yuv.g, 2.0) + pow(keyYuv.b - yuv.b, 2.0));
+    if (tmp < tol.x)
+      return 0.0;
+   	else if (tmp < tol.y)
+      return (tmp - tol.x)/(tol.y - tol.x);
+   	else
+      return 1.0;
 }
 
 fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
@@ -230,10 +253,24 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
 
     //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
     //color = linearToDisplayP3 * color;
+    
+    // TODO: use inverse of encodingUniform.yuvTransform instead to save one matmul
+    if (CHROMAKEY_ENABLED) {
+        const matrix_float4x4 RGBtoYUV = matrix_float4x4(0.257,  0.439, -0.148, 0.0,
+                         0.504, -0.368, -0.291, 0.0,
+                         0.098, -0.071,  0.439, 0.0,
+                         0.0625, 0.500,  0.500, 1.0);
+        float4 chromaKeyYCbCr = RGBtoYUV * float4(CHROMAKEY_COLOR, 1.0);
+        float4 newYCbCr = RGBtoYUV * float4(color.rgb, 1.0);
+        float mask = colorclose(newYCbCr.rgb, chromaKeyYCbCr.rgb, CHROMAKEY_LERP_DIST_RANGE);
 
-    return float4(color.rgb, 1.0);
+        return float4(color.rgb, mask);
+    }
+    else {
+        return float4(color.rgb, 1.0);
+    }
 }
 
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
-    return float4(0.0, 0.0, 0.0, 1.0);
+    return float4(0.0, 0.0, 0.0, 0.0);
 }

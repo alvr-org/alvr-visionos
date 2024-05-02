@@ -56,7 +56,7 @@ struct MetalRendererApp: App {
             .environment(model)
             .environmentObject(EventHandler.shared)
         }
-        .defaultSize(width: 650, height: 600)
+        .defaultSize(width: 650, height: 850)
         .windowStyle(.plain)
         .onChange(of: scenePhase) {
             switch scenePhase {
@@ -95,21 +95,40 @@ struct MetalRendererApp: App {
             }
         }
         
+        ImmersiveSpace(id: "DummyImmersiveSpace") {
+            CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
+                let renderer = DummyMetalRenderer(layerRenderer)
+                renderer.startRenderLoop()
+            }
+        }.immersionStyle(selection: .constant(.full), in: .full)
+        
+        ImmersiveSpace(id: "RealityKitClientWithHands") {
+            RealityKitClientView()
+        }
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+        .upperLimbVisibility(.visible)
+        
+        ImmersiveSpace(id: "RealityKitClientNoHands") {
+            RealityKitClientView()
+        }
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+        .upperLimbVisibility(.hidden)
+        
         // This is dumb but I think it might genuinely be the correct solution.
         // But also, somehow it doesn't work, so I'm out of ideas here.
-        ImmersiveSpace(id: "ClientWithHands") {
+        ImmersiveSpace(id: "MetalClientWithHands") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
-                let renderer = Renderer(layerRenderer)
-                renderer.startRenderLoop()
+                let system = MetalClientSystem(layerRenderer)
+                system.startRenderLoop()
             }
         }
         .immersionStyle(selection: $clientImmersionStyle, in: .full)
         .upperLimbVisibility(.visible)
         
-        ImmersiveSpace(id: "ClientNoHands") {
+        ImmersiveSpace(id: "MetalClientNoHands") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
-                let renderer = Renderer(layerRenderer)
-                renderer.startRenderLoop()
+                let system = MetalClientSystem(layerRenderer)
+                system.startRenderLoop()
             }
         }
         .immersionStyle(selection: $clientImmersionStyle, in: .full)

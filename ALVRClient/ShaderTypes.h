@@ -44,6 +44,7 @@ typedef struct
     matrix_float4x4 modelViewMatrixFrame;
     matrix_float4x4 modelViewMatrix;
     simd_float4 tangents;
+    uint32_t which;
 } Uniforms;
 
 typedef struct
@@ -75,4 +76,7 @@ typedef NS_ENUM(EnumBackingType, ALVRFunctionConstant)
     ALVRFunctionConstantFfrCommonShaderCenterSize = 104,
     ALVRFunctionConstantFfrCommonShaderCenterShift = 105,
     ALVRFunctionConstantFfrCommonShaderEdgeRatio = 106,
+    ALVRFunctionConstantChromaKeyEnabled = 200,
+    ALVRFunctionConstantChromaKeyColor = 201,
+    ALVRFunctionConstantChromaKeyLerpDistRange = 202,
 };

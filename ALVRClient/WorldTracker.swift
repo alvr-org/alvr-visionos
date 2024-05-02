@@ -227,7 +227,7 @@ class WorldTracker {
                     print("Early origin anchor?", anchorDistanceFromOrigin(anchor: update.anchor), "Current Origin,", self.worldOriginAnchor.id)
                     
                     // If we randomly get an anchor added within 3.5m, consider that our origin
-                    if anchorDistanceFromOrigin(anchor: update.anchor) < 3.5 {
+                    if anchorDistanceFromOrigin(anchor: update.anchor) < 3.5 && update.anchor.isTracked {
                         print("Set new origin!")
                         
                         // This has a (positive) minor side-effect: all redundant anchors within 3.5m will get cleaned up,

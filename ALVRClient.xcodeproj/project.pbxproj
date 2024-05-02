@@ -23,7 +23,12 @@
 		D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61E6FDF2B71CE080076031A /* VideoHandler.swift */; };
 		D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */ = {isa = PBXBuildFile; fileRef = D68FA8082B742F6F0052B7FF /* FFR.swift */; };
 		E702FBDC2B899B8700EE75D0 /* GlobalSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */; };
+		E72683DB2BE73DD10065B78B /* MetalClientSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */; };
 		E7285AAE2B9C44CB0032514C /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7285AAD2B9C44CB0032514C /* AVKit.framework */; };
+		E7A98A9E2BE2EEAB003DF333 /* DummyMetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */; };
+		E7A98AA02BE2EEEA003DF333 /* RealityKitClientSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */; };
+		E7F222422BE2F03800D10191 /* RealityKitClientView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7F222412BE2F03800D10191 /* RealityKitClientView.swift */; };
+		E7F222442BE2F21600D10191 /* SBSMaterial.usda in Resources */ = {isa = PBXBuildFile; fileRef = E7F222432BE2F21600D10191 /* SBSMaterial.usda */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -62,7 +67,12 @@
 		D68FA8052B73D6260052B7FF /* Override.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Override.xcconfig; sourceTree = "<group>"; };
 		D68FA8082B742F6F0052B7FF /* FFR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFR.swift; sourceTree = "<group>"; };
 		E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSettings.swift; sourceTree = "<group>"; };
+		E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalClientSystem.swift; sourceTree = "<group>"; };
 		E7285AAD2B9C44CB0032514C /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
+		E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DummyMetalRenderer.swift; sourceTree = "<group>"; };
+		E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitClientSystem.swift; sourceTree = "<group>"; };
+		E7F222412BE2F03800D10191 /* RealityKitClientView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitClientView.swift; sourceTree = "<group>"; };
+		E7F222432BE2F21600D10191 /* SBSMaterial.usda */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SBSMaterial.usda; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -117,12 +127,17 @@
 		C5E5902C2B6379ED00328ED6 /* ALVRClient */ = {
 			isa = PBXGroup;
 			children = (
+				E7F222432BE2F21600D10191 /* SBSMaterial.usda */,
 				9ED257162B8062A1008DC22F /* Settings.swift */,
 				8E1240FD2B7CC021005B75F2 /* Entry */,
 				8E739C892B7898EC0045ED16 /* Model */,
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
 				C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */,
+				E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */,
 				E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */,
+				E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */,
+				E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */,
+				E7F222412BE2F03800D10191 /* RealityKitClientView.swift */,
 				C5E590352B6379ED00328ED6 /* Renderer.swift */,
 				D61E6FDF2B71CE080076031A /* VideoHandler.swift */,
 				8E458AB22B7E05FB0019FC73 /* EventHandler.swift */,
@@ -218,6 +233,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C5E5903E2B6379EE00328ED6 /* Assets.xcassets in Resources */,
+				E7F222442BE2F21600D10191 /* SBSMaterial.usda in Resources */,
 				C5E5903C2B6379ED00328ED6 /* Preview Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -230,11 +246,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				8E458AB52B7E2C010019FC73 /* WorldTracker.swift in Sources */,
+				E7F222422BE2F03800D10191 /* RealityKitClientView.swift in Sources */,
 				C5E590382B6379ED00328ED6 /* Shaders.metal in Sources */,
+				E7A98AA02BE2EEEA003DF333 /* RealityKitClientSystem.swift in Sources */,
 				D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */,
 				8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */,
 				8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */,
+				E7A98A9E2BE2EEAB003DF333 /* DummyMetalRenderer.swift in Sources */,
 				E702FBDC2B899B8700EE75D0 /* GlobalSettings.swift in Sources */,
+				E72683DB2BE73DD10065B78B /* MetalClientSystem.swift in Sources */,
 				8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */,
 				D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */,
 				9ED257172B8062A2008DC22F /* Settings.swift in Sources */,
@@ -375,6 +395,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
+				DEVELOPMENT_TEAM = A2R992S5N3;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_ARCHS = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -413,6 +434,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
+				DEVELOPMENT_TEAM = A2R992S5N3;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_ARCHS = x86_64;
 				GENERATE_INFOPLIST_FILE = YES;
