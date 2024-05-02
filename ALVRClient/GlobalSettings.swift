@@ -9,6 +9,15 @@ struct GlobalSettings: Codable {
     var keepSteamVRCenter: Bool = true
     var showHandsOverlaid: Bool = false
     var setDisplayTo96Hz: Bool = false
+    var experimental40ppd: Bool = false
+    var chromaKeyEnabled: Bool = false
+    var chromaKeyDistRangeMin: Float = 0.005
+    var chromaKeyDistRangeMax: Float = 0.1
+    var chromaKeyColorR: Float = 0.0
+    var chromaKeyColorG: Float = 1.0
+    var chromaKeyColorB: Float = 0.0
+    var dismissWindowOnEnter: Bool = true
+    var realityKitRenderScale: Float = 2.0
     
     init() {}
     
@@ -18,6 +27,15 @@ struct GlobalSettings: Codable {
         self.keepSteamVRCenter = try container.decodeIfPresent(Bool.self, forKey: .keepSteamVRCenter) ?? self.keepSteamVRCenter
         self.showHandsOverlaid = try container.decodeIfPresent(Bool.self, forKey: .showHandsOverlaid) ?? self.showHandsOverlaid
         self.setDisplayTo96Hz = try container.decodeIfPresent(Bool.self, forKey: .setDisplayTo96Hz) ?? self.setDisplayTo96Hz
+        self.experimental40ppd = try container.decodeIfPresent(Bool.self, forKey: .experimental40ppd) ?? self.experimental40ppd
+        self.chromaKeyEnabled = try container.decodeIfPresent(Bool.self, forKey: .chromaKeyEnabled) ?? self.chromaKeyEnabled
+        self.chromaKeyDistRangeMin = try container.decodeIfPresent(Float.self, forKey: .chromaKeyDistRangeMin) ?? self.chromaKeyDistRangeMin
+        self.chromaKeyDistRangeMax = try container.decodeIfPresent(Float.self, forKey: .chromaKeyDistRangeMax) ?? self.chromaKeyDistRangeMax
+        self.chromaKeyColorR = try container.decodeIfPresent(Float.self, forKey: .chromaKeyColorR) ?? self.chromaKeyColorR
+        self.chromaKeyColorG = try container.decodeIfPresent(Float.self, forKey: .chromaKeyColorG) ?? self.chromaKeyColorG
+        self.chromaKeyColorB = try container.decodeIfPresent(Float.self, forKey: .chromaKeyColorB) ?? self.chromaKeyColorB
+        self.dismissWindowOnEnter = try container.decodeIfPresent(Bool.self, forKey: .dismissWindowOnEnter) ?? self.dismissWindowOnEnter
+        self.realityKitRenderScale = try container.decodeIfPresent(Float.self, forKey: .realityKitRenderScale) ?? self.realityKitRenderScale
     }
 }
 

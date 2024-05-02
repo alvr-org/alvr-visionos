@@ -407,6 +407,17 @@ class EventHandler: ObservableObject {
             return "unknown";
         }
     }
+    
+    func kickAlvr() {
+        stop()
+        alvrInitialized = false
+        alvr_destroy()
+        initializeAlvr()
+        
+        timeLastAlvrEvent = CACurrentMediaTime()
+        timeLastFrameGot = CACurrentMediaTime()
+        timeLastFrameSent = CACurrentMediaTime()
+    }
 
     func handleAlvrEvents() {
         print("Start event thread...")
@@ -417,7 +428,7 @@ class EventHandler: ObservableObject {
             if currentTime - timeLastSentPeriodicUpdatedValues >= 5.0 {
                 handlePeriodicUpdatedValues()
             }
-            if currentTime - timeLastSentMdnsBroadcast >= 2.0 {
+            if currentTime - timeLastSentMdnsBroadcast >= 5.0 {
                 handleMdnsBroadcasts()
             }
             
@@ -445,14 +456,7 @@ class EventHandler: ObservableObject {
                 print("diffSinceLastEvent:", diffSinceLastEvent)
                 print("diffSinceLastNal:", diffSinceLastNal)
                 print("diffSinceLastDecode:", diffSinceLastDecode)
-                stop()
-                alvrInitialized = false
-                alvr_destroy()
-                initializeAlvr()
-                
-                timeLastAlvrEvent = CACurrentMediaTime()
-                timeLastFrameGot = CACurrentMediaTime()
-                timeLastFrameSent = CACurrentMediaTime()
+                kickAlvr()
             }
             
             if alvrInitialized && (diffSinceLastNal >= 5.0) {
