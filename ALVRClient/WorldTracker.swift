@@ -129,6 +129,7 @@ class WorldTracker {
     static let rightHandOrientationCorrection = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_float3(0.0, 0.0, -1.0)) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
     static let leftForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
     static let rightForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+    var testPosition = simd_float3(0.0, 0.0, 0.0)
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -226,7 +227,7 @@ class WorldTracker {
                     print("Early origin anchor?", anchorDistanceFromOrigin(anchor: update.anchor), "Current Origin,", self.worldOriginAnchor.id)
                     
                     // If we randomly get an anchor added within 3.5m, consider that our origin
-                    if anchorDistanceFromOrigin(anchor: update.anchor) < 3.5 {
+                    if anchorDistanceFromOrigin(anchor: update.anchor) < 3.5 && update.anchor.isTracked {
                         print("Set new origin!")
                         
                         // This has a (positive) minor side-effect: all redundant anchors within 3.5m will get cleaned up,
@@ -850,6 +851,14 @@ class WorldTracker {
                 trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdRightElbow, pose: skeletonRight[27], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
             }
         }
+        
+        // selection ray tests, replaces left forearm
+        /*var testPoseApple = matrix_identity_float4x4
+        testPoseApple.columns.3 = simd_float4(self.testPosition.x, self.testPosition.y, self.testPosition.z, 1.0)
+        testPoseApple = self.worldTrackingSteamVRTransform.inverse * testPoseApple
+        let testPosApple = testPoseApple.columns.3
+        let testPose = AlvrPose(orientation: AlvrQuat(x: 0.0, y: 0.0, z: 0.0, w: 1.0), position: (testPosApple.x, testPosApple.y, testPosApple.z))
+        trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftForearm, pose: testPose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))*/
         
         //let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))

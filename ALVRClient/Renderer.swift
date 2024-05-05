@@ -15,18 +15,11 @@ let alignedUniformsSize = (MemoryLayout<UniformsArray>.size + 0xFF) & -0x100
 let alignedPlaneUniformSize = (MemoryLayout<PlaneUniform>.size + 0xFF) & -0x100
 let alignedEncodingUniformSize = (MemoryLayout<EncodingUniform>.size + 0xFF) & -0x100
 
-let maxBuffersInFlight = 3
+let maxBuffersInFlight = 6
 let maxPlanesDrawn = 512
 
 enum RendererError: Error {
     case badVertexDescriptor
-}
-
-extension LayerRenderer.Clock.Instant.Duration {
-    var timeInterval: TimeInterval {
-        let nanoseconds = TimeInterval(components.attoseconds / 1_000_000_000)
-        return TimeInterval(components.seconds) + (nanoseconds / TimeInterval(NSEC_PER_SEC))
-    }
 }
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
@@ -45,6 +38,18 @@ let fullscreenQuadVertices:[Float] = [-panel_depth, -panel_depth, -panel_depth,
                                        0, 0,
                                        0.5, 0]
 
+func NonlinearToLinearRGB(_ color: simd_float3) -> simd_float3 {
+    let DIV12: Float = 1.0 / 12.92;
+    let DIV1: Float = 1.0 / 1.055;
+    let THRESHOLD: Float = 0.04045;
+    let GAMMA = simd_float3(repeating: 2.4);
+        
+    let condition = simd_float3(color.x < THRESHOLD ? 1.0 : 0.0, color.y < THRESHOLD ? 1.0 : 0.0, color.z < THRESHOLD ? 1.0 : 0.0);
+    let lowValues = color * DIV12;
+    let highValues = pow((color + 0.055) * DIV1, GAMMA);
+    return condition * lowValues + (1.0 - condition) * highValues;
+}
+
 class Renderer {
 
     public let device: MTLDevice
@@ -53,7 +58,6 @@ class Renderer {
     var pipelineState: MTLRenderPipelineState
     var depthStateAlways: MTLDepthStencilState
     var depthStateGreater: MTLDepthStencilState
-    var colorMap: MTLTexture
 
     var dynamicUniformBuffer: MTLBuffer
     var uniformBufferOffset = 0
@@ -70,18 +74,14 @@ class Renderer {
     var encodingUniformBufferIndex = 0
     var encodingUniforms: UnsafeMutablePointer<EncodingUniform>
 
-    var rotation: Float = 0
-
-    var mesh: MTKMesh
-
-    let layerRenderer: LayerRenderer
-    // TODO(zhuowei): make this a real deque
+    let layerRenderer: LayerRenderer?
     var metalTextureCache: CVMetalTextureCache!
     let mtlVertexDescriptor: MTLVertexDescriptor
     var videoFramePipelineState_YpCbCrBiPlanar: MTLRenderPipelineState!
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
     var encodingGamma: Float = 1.0
+    var lastReconfigureTime: Double = 0.0
     
     var drawPlanesWithInformedColors: Bool = false
     var fadeInOverlayAlpha: Float = 0.0
@@ -92,9 +92,28 @@ class Renderer {
     // Was curious if it improved; it's still juddery.
     var useApplesReprojection = false
     
-    init(_ layerRenderer: LayerRenderer) {
+    // More readable helper var than layerRenderer == nil
+    var isRealityKit = false
+    
+    //
+    // Chroma keying shader vars
+    //
+    var chromaKeyEnabled = false // TODO
+    var chromaKeyColor = simd_float3(0.0, 1.0, 0.0); // green
+    
+    //chromaKeyLerpDistRange is used to decide the amount of color to be used from either foreground or background
+    //if the current distance from pixel color to chromaKey is smaller then chromaKeyLerpDistRange.x we use background,
+    //if the current distance from pixel color to chromaKey is bigger then chromaKeyLerpDistRange.y we use foreground,
+    //else, we alpha blend them
+    //playing with this variable will decide how much the foreground and background blend together
+    var chromaKeyLerpDistRange = simd_float2(0.005, 0.1);
+    
+    init(_ layerRenderer: LayerRenderer?) {
         self.layerRenderer = layerRenderer
-        self.device = layerRenderer.device
+        if layerRenderer == nil {
+            isRealityKit = true
+        }
+        self.device = layerRenderer?.device ?? MTLCreateSystemDefaultDevice()!
         self.commandQueue = self.device.makeCommandQueue()!
 
         let uniformBufferSize = alignedUniformsSize * maxBuffersInFlight
@@ -119,8 +138,12 @@ class Renderer {
 
         do {
             pipelineState = try Renderer.buildRenderPipelineWithDevice(device: device,
-                                                                       layerRenderer: layerRenderer,
-                                                                       mtlVertexDescriptor: mtlVertexDescriptor)
+                                                                       mtlVertexDescriptor: mtlVertexDescriptor,
+                                                                       colorFormat: layerRenderer?.configuration.colorFormat ?? renderColorFormat,
+                                                                       depthFormat: layerRenderer?.configuration.depthFormat ?? renderDepthFormat,
+                                                                       viewCount: layerRenderer?.properties.viewCount ?? renderViewCount,
+                                                                       vertexShaderName: "vertexShader",
+                                                                       fragmentShaderName: "fragmentShader")
         } catch {
             fatalError("Unable to compile render pipeline state.  Error info: \(error)")
         }
@@ -134,18 +157,6 @@ class Renderer {
         depthStateDescriptorGreater.depthCompareFunction = MTLCompareFunction.greater
         depthStateDescriptorGreater.isDepthWriteEnabled = true
         self.depthStateGreater = device.makeDepthStencilState(descriptor:depthStateDescriptorGreater)!
-
-        do {
-            mesh = try Renderer.buildMesh(device: device, mtlVertexDescriptor: mtlVertexDescriptor)
-        } catch {
-            fatalError("Unable to build MetalKit Mesh. Error info: \(error)")
-        }
-
-        do {
-            colorMap = try Renderer.loadTexture(device: device, textureName: "ColorMap")
-        } catch {
-            fatalError("Unable to load texture. Error info: \(error)")
-        }
         
         if CVMetalTextureCacheCreate(nil, nil, self.device, nil, &metalTextureCache) != 0 {
             fatalError("CVMetalTextureCacheCreate")
@@ -153,6 +164,14 @@ class Renderer {
         fullscreenQuadVertices.withUnsafeBytes {
             fullscreenQuadBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
         }
+        
+        self.videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
+                device: self.device,
+                mtlVertexDescriptor: self.mtlVertexDescriptor,
+                colorFormat: layerRenderer?.configuration.colorFormat ?? renderColorFormat,
+                depthFormat: layerRenderer?.configuration.depthFormat ?? renderDepthFormat,
+                viewCount: layerRenderer?.properties.viewCount ?? renderViewCount
+        )
 
         EventHandler.shared.handleRenderStarted()
         EventHandler.shared.renderStarted = true
@@ -166,29 +185,15 @@ class Renderer {
         encodingGamma = settings.video.encoderConfig.encodingGamma
             
         let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
-        videoFramePipelineState_YpCbCrBiPlanar = try! Renderer.buildRenderPipelineForVideoFrameWithDevice(
+        videoFramePipelineState_YpCbCrBiPlanar = try! buildRenderPipelineForVideoFrameWithDevice(
                             device: device,
-                            layerRenderer: layerRenderer,
                             mtlVertexDescriptor: mtlVertexDescriptor,
+                            colorFormat: layerRenderer?.configuration.colorFormat ?? renderColorFormat,
+                            depthFormat: layerRenderer?.configuration.depthFormat ?? renderDepthFormat,
+                            viewCount: layerRenderer?.properties.viewCount ?? renderViewCount,
                             foveationVars: foveationVars,
                             variantName: "YpCbCrBiPlanar"
         )
-    }
-    
-    func startRenderLoop() {
-        Task {
-            videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
-                    device: device,
-                    layerRenderer: layerRenderer,
-                    mtlVertexDescriptor: mtlVertexDescriptor
-            )
-            rebuildRenderPipelines()
-            let renderThread = Thread {
-                self.renderLoop()
-            }
-            renderThread.name = "Render Thread"
-            renderThread.start()
-        }
     }
 
     class func buildMetalVertexDescriptor() -> MTLVertexDescriptor {
@@ -217,14 +222,18 @@ class Renderer {
     }
 
     class func buildRenderPipelineWithDevice(device: MTLDevice,
-                                             layerRenderer: LayerRenderer,
-                                             mtlVertexDescriptor: MTLVertexDescriptor) throws -> MTLRenderPipelineState {
+                                             mtlVertexDescriptor: MTLVertexDescriptor,
+                                             colorFormat: MTLPixelFormat,
+                                             depthFormat: MTLPixelFormat,
+                                             viewCount: Int,
+                                             vertexShaderName: String,
+                                             fragmentShaderName: String) throws -> MTLRenderPipelineState {
         /// Build a render state pipeline object
 
         let library = device.makeDefaultLibrary()
 
-        let vertexFunction = library?.makeFunction(name: "vertexShader")
-        let fragmentFunction = library?.makeFunction(name: "fragmentShader")
+        let vertexFunction = library?.makeFunction(name: vertexShaderName)
+        let fragmentFunction = library?.makeFunction(name: fragmentShaderName)
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.label = "RenderPipeline"
@@ -232,7 +241,7 @@ class Renderer {
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
 
-        pipelineDescriptor.colorAttachments[0].pixelFormat = layerRenderer.configuration.colorFormat
+        pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
         pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
         pipelineDescriptor.colorAttachments[0].rgbBlendOperation = .add
         pipelineDescriptor.colorAttachments[0].alphaBlendOperation = .add
@@ -241,23 +250,24 @@ class Renderer {
         pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
         pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
         
-        pipelineDescriptor.depthAttachmentPixelFormat = layerRenderer.configuration.depthFormat
+        pipelineDescriptor.depthAttachmentPixelFormat = depthFormat
 
-        pipelineDescriptor.maxVertexAmplificationCount = layerRenderer.properties.viewCount
+        pipelineDescriptor.maxVertexAmplificationCount = viewCount
         
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
     
     // Depth-only renderer, for correcting after overlay render just so Apple's compositor isn't annoying about it
     class func buildRenderPipelineForVideoFrameDepthWithDevice(device: MTLDevice,
-                                                          layerRenderer: LayerRenderer,
-                                                          mtlVertexDescriptor: MTLVertexDescriptor) throws -> MTLRenderPipelineState {
+                                                          mtlVertexDescriptor: MTLVertexDescriptor,
+                                                          colorFormat: MTLPixelFormat,
+                                                          depthFormat: MTLPixelFormat,
+                                                          viewCount: Int) throws -> MTLRenderPipelineState {
         /// Build a render state pipeline object
 
         let library = device.makeDefaultLibrary()
 
         let vertexFunction = library?.makeFunction(name: "videoFrameVertexShader")
-         
         let fragmentFunction = library?.makeFunction(name: "videoFrameDepthFragmentShader")
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
@@ -266,26 +276,38 @@ class Renderer {
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
 
-        pipelineDescriptor.colorAttachments[0].pixelFormat = layerRenderer.configuration.colorFormat
-        pipelineDescriptor.depthAttachmentPixelFormat = layerRenderer.configuration.depthFormat
+        pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
+        pipelineDescriptor.depthAttachmentPixelFormat = depthFormat
 
-        pipelineDescriptor.maxVertexAmplificationCount = layerRenderer.properties.viewCount
+        pipelineDescriptor.maxVertexAmplificationCount = viewCount
         
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
     
-    class func buildRenderPipelineForVideoFrameWithDevice(device: MTLDevice,
-                                                          layerRenderer: LayerRenderer,
+    func buildRenderPipelineForVideoFrameWithDevice(device: MTLDevice,
                                                           mtlVertexDescriptor: MTLVertexDescriptor,
+                                                          colorFormat: MTLPixelFormat,
+                                                          depthFormat: MTLPixelFormat,
+                                                          viewCount: Int,
                                                           foveationVars: FoveationVars,
                                                           variantName: String) throws -> MTLRenderPipelineState {
-        /// Build a render state pipeline object
+        
 
         let library = device.makeDefaultLibrary()
-
         let vertexFunction = library?.makeFunction(name: "videoFrameVertexShader")
-         
         let fragmentConstants = FFR.makeFunctionConstants(foveationVars)
+        
+        if let settings = WorldTracker.shared.settings {
+            chromaKeyEnabled = settings.chromaKeyEnabled
+            chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
+            chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
+        }
+        var chromaKeyColorLinear = NonlinearToLinearRGB(chromaKeyColor)
+        fragmentConstants.setConstantValue(&chromaKeyEnabled, type: .bool, index: ALVRFunctionConstant.chromaKeyEnabled.rawValue)
+        fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
+        fragmentConstants.setConstantValue(&chromaKeyLerpDistRange, type: .float2, index: ALVRFunctionConstant.chromaKeyLerpDistRange.rawValue)
+        
+        
         let fragmentFunction = try library?.makeFunction(name: "videoFrameFragmentShader_" + variantName, constantValues: fragmentConstants)
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
@@ -294,56 +316,12 @@ class Renderer {
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
 
-        pipelineDescriptor.colorAttachments[0].pixelFormat = layerRenderer.configuration.colorFormat
-        pipelineDescriptor.depthAttachmentPixelFormat = layerRenderer.configuration.depthFormat
+        pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
+        pipelineDescriptor.depthAttachmentPixelFormat = depthFormat
 
-        pipelineDescriptor.maxVertexAmplificationCount = layerRenderer.properties.viewCount
+        pipelineDescriptor.maxVertexAmplificationCount = viewCount
         
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
-    }
-
-    class func buildMesh(device: MTLDevice,
-                         mtlVertexDescriptor: MTLVertexDescriptor) throws -> MTKMesh {
-        /// Create and condition mesh data to feed into a pipeline using the given vertex descriptor
-
-        let metalAllocator = MTKMeshBufferAllocator(device: device)
-
-        let mdlMesh = MDLMesh.newBox(withDimensions: SIMD3<Float>(4, 4, 4),
-                                     segments: SIMD3<UInt32>(2, 2, 2),
-                                     geometryType: MDLGeometryType.triangles,
-                                     inwardNormals:false,
-                                     allocator: metalAllocator)
-
-        let mdlVertexDescriptor = MTKModelIOVertexDescriptorFromMetal(mtlVertexDescriptor)
-
-        guard let attributes = mdlVertexDescriptor.attributes as? [MDLVertexAttribute] else {
-            throw RendererError.badVertexDescriptor
-        }
-        attributes[VertexAttribute.position.rawValue].name = MDLVertexAttributePosition
-        attributes[VertexAttribute.texcoord.rawValue].name = MDLVertexAttributeTextureCoordinate
-
-        mdlMesh.vertexDescriptor = mdlVertexDescriptor
-
-        return try MTKMesh(mesh:mdlMesh, device:device)
-    }
-
-    class func loadTexture(device: MTLDevice,
-                           textureName: String) throws -> MTLTexture {
-        /// Load texture data with optimal parameters for sampling
-
-        let textureLoader = MTKTextureLoader(device: device)
-
-        let textureLoaderOptions = [
-            MTKTextureLoader.Option.generateMipmaps: NSNumber(value: true),
-            MTKTextureLoader.Option.textureUsage: NSNumber(value: MTLTextureUsage.shaderRead.rawValue),
-            MTKTextureLoader.Option.textureStorageMode: NSNumber(value: MTLStorageMode.`private`.rawValue)
-        ]
-
-        return try textureLoader.newTexture(name: textureName,
-                                            scaleFactor: 1.0,
-                                            bundle: nil,
-                                            options: textureLoaderOptions)
-
     }
 
     private func updateDynamicBufferState() {
@@ -366,31 +344,53 @@ class Renderer {
         planeUniforms = UnsafeMutableRawPointer(dynamicPlaneUniformBuffer.contents() + planeUniformBufferOffset).bindMemory(to:PlaneUniform.self, capacity:1)
     }
 
-    private func updateGameStateForVideoFrame(drawable: LayerRenderer.Drawable, framePose: simd_float4x4) {
-        let simdDeviceAnchor = drawable.deviceAnchor != nil ? drawable.deviceAnchor!.originFromAnchorTransform : matrix_identity_float4x4
-        
+    private func updateGameStateForVideoFrame(_ whichIdx: Int, viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
-            let view = drawable.views[viewIndex]
+            let tangents = viewTangents[viewIndex]
             
             var framePoseNoTranslation = framePose
             var simdDeviceAnchorNoTranslation = simdDeviceAnchor
             framePoseNoTranslation.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
             simdDeviceAnchorNoTranslation.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
-            let viewMatrix = (simdDeviceAnchor * view.transform).inverse
+            let viewMatrix = (simdDeviceAnchor * viewTransforms[viewIndex]).inverse
             let viewMatrixFrame = (framePoseNoTranslation.inverse * simdDeviceAnchorNoTranslation).inverse
-            let projection = ProjectiveTransform3D(leftTangent: Double(view.tangents[0]),
-                                                   rightTangent: Double(view.tangents[1]),
-                                                   topTangent: Double(view.tangents[2]),
-                                                   bottomTangent: Double(view.tangents[3]),
-                                                   nearZ: Double(drawable.depthRange.y),
-                                                   farZ: Double(drawable.depthRange.x),
+            let projection = isRealityKit ? ProjectiveTransform3D(leftTangent: (Double(tangents[0]) + Double(tangents[1])) * 0.5,
+                                                   rightTangent: (Double(tangents[0]) + Double(tangents[1])) * 0.5,
+                                                   topTangent: (Double(tangents[2]) + Double(tangents[3])) * 0.5,
+                                                   bottomTangent: (Double(tangents[2]) + Double(tangents[3])) * 0.5,
+                                                   nearZ: renderZNear,
+                                                   farZ: renderZFar,
                                                    reverseZ: true)
-            return Uniforms(projectionMatrix: .init(projection), modelViewMatrixFrame: viewMatrixFrame, modelViewMatrix: viewMatrix, tangents: view.tangents)
+                                          : ProjectiveTransform3D(leftTangent: Double(tangents[0]),
+                                                   rightTangent: Double(tangents[1]),
+                                                   topTangent: Double(tangents[2]),
+                                                   bottomTangent: Double(tangents[3]),
+                                                   nearZ: nearZ,
+                                                   farZ: farZ,
+                                                   reverseZ: true)
+            return Uniforms(projectionMatrix: .init(projection), modelViewMatrixFrame: viewMatrixFrame, modelViewMatrix: viewMatrix, tangents: tangents, which: UInt32(whichIdx+viewIndex))
         }
         
         self.uniforms[0].uniforms.0 = uniforms(forViewIndex: 0)
-        if drawable.views.count > 1 {
+        if viewTransforms.count > 1 {
             self.uniforms[0].uniforms.1 = uniforms(forViewIndex: 1)
+        }
+    }
+    
+    // Checks if eye tracking was secretly added, maybe, hard to know really.
+    func checkEyes(drawable: LayerRenderer.Drawable) {
+        print(drawable.views[0].transform - EventHandler.shared.viewTransforms[0])
+        print(drawable.views[1].transform - EventHandler.shared.viewTransforms[1])
+        if let vrr = drawable.rasterizationRateMaps.first {
+            let eyeCenterX = Float(vrr.screenSize.width) / 2.0
+            let eyeCenterY = Float(vrr.screenSize.height) / 2.0
+            let physSizeL = vrr.physicalSize(layer: 0)
+            let physCoordsL = vrr.physicalCoordinates(screenCoordinates: MTLCoordinate2D(x: eyeCenterX, y: eyeCenterY), layer: 0)
+            
+            let physSizeR = vrr.physicalSize(layer: 1)
+            let physCoordsR = vrr.physicalCoordinates(screenCoordinates: MTLCoordinate2D(x: eyeCenterX, y: eyeCenterY), layer: 1)
+            
+            print(Float(physCoordsL.x) / Float(physSizeL.width), Float(physCoordsL.y) / Float(physSizeL.height), ":::", Float(physCoordsR.x) / Float(physSizeR.width), Float(physCoordsR.y) / Float(physSizeR.height))
         }
     }
 
@@ -405,7 +405,7 @@ class Renderer {
         
         var queuedFrame:QueuedFrame? = nil
         
-        guard let frame = layerRenderer.queryNextFrame() else { return }
+        guard let frame = layerRenderer!.queryNextFrame() else { return }
         guard let timing = frame.predictTiming() else { return }
         
         frame.startUpdate()
@@ -480,6 +480,7 @@ class Renderer {
                 }
                 else {
                     EventHandler.shared.framesRendered = 0
+                    lastReconfigureTime = CACurrentMediaTime()
                     
                     let rebuildThread = Thread {
                         self.rebuildRenderPipelines()
@@ -495,7 +496,20 @@ class Renderer {
                 EventHandler.shared.viewTransforms = [drawable.views[0].transform, drawable.views.count > 1 ? drawable.views[1].transform : drawable.views[0].transform]
                 EventHandler.shared.lastIpd = ipd
             }
+            
+            if let settings = WorldTracker.shared.settings {
+                if CACurrentMediaTime() - lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != chromaKeyEnabled || settings.chromaKeyColorR != chromaKeyColor.x || settings.chromaKeyColorG != chromaKeyColor.y || settings.chromaKeyColorB != chromaKeyColor.z || settings.chromaKeyDistRangeMin != chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != chromaKeyLerpDistRange.y) {
+                    lastReconfigureTime = CACurrentMediaTime()
+                    let rebuildThread = Thread {
+                        self.rebuildRenderPipelines()
+                    }
+                    rebuildThread.name = "Rebuild Render Pipelines Thread"
+                    rebuildThread.start()
+                }
+            }
         }
+        
+        //checkEyes(drawable: drawable)
         
         objc_sync_enter(EventHandler.shared.frameQueueLock)
         EventHandler.shared.framesSinceLastDecode += 1
@@ -513,29 +527,6 @@ class Renderer {
             // Since pupil swim is purely an axial thing, maybe we can just timewarp the view transforms as well idk
             let viewFovs = EventHandler.shared.viewFovs
             let viewTransforms = EventHandler.shared.viewTransforms
-        
-            //let nowTs = CACurrentMediaTime()
-            //let nowToVsync = vsyncTime - nowTs
-            
-            // Sometimes upload speeds can be less than optimal.
-            // To compensate, we will send 3 predictions at a fixed interval and hope that
-            // one of them is optimal enough to avoid a re-sent timestamp frame
-            // TODO: revisit this
-            //var interval = ((11.0 / 1000.0) / 3.0)
-#if !targetEnvironment(simulator)
-            //if queuedFrame != nil {
-            //    interval = roundTripRenderTime / 3.0
-            //}
-#endif
-            //let targetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            //let realTargetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            //let targetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            //let realTargetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            //let targetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            //let realTargetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
-            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
-            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
             
             let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
@@ -544,11 +535,6 @@ class Renderer {
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
         drawable.deviceAnchor = deviceAnchor
-        
-        /*if let queuedFrame = queuedFrame {
-            let test_ts = queuedFrame.timestamp
-            print("draw: \(test_ts)")
-        }*/
         
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             if EventHandler.shared.alvrInitialized && queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame?.timestamp {
@@ -582,9 +568,19 @@ class Renderer {
             currentYuvTransform = VideoHandler.getYUVTransformForVideoFormat(videoFormat)
         }
         
+        // TODO: check layerRenderer.configuration.layout == .layered ?
+        let viewports = drawable.views.map { $0.textureMap.viewport }
+        let rasterizationRateMap = drawable.rasterizationRateMaps.first
+        let viewTransforms = drawable.views.map { $0.transform }
+        let viewTangents = drawable.views.map { $0.tangents }
+        let nearZ =  Double(drawable.depthRange.y)
+        let farZ = Double(drawable.depthRange.x)
+        let simdDeviceAnchor = deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4
+        let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
+        
         if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
             //print("render")
-            renderStreamingFrame(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4)
+            renderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
             
             if isReprojected && useApplesReprojection {
                 LayerRenderer.Clock().wait(until: drawable.frameTiming.renderingDeadline)
@@ -604,17 +600,18 @@ class Renderer {
         {
             reprojectedFramesInARow = 0;
 
-            let noFramePose = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform
+            let noFramePose = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
             // TODO: draw a cool loading logo
-            // TODO: maybe also show the room in wireframe or something cool here
-            renderNothing(drawable: drawable, commandBuffer: commandBuffer, framePose: noFramePose ?? matrix_identity_float4x4)
+            renderNothing(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor)
             
             if EventHandler.shared.totalFramesRendered > 300 {
                 fadeInOverlayAlpha += 0.02
             }
             
-            renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
-            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
+            renderOverlay(commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor)
+            if !isRealityKit {
+                renderStreamingFrameDepth(commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame)
+            }
         }
         
         coolPulsingColorsTime += 0.005
@@ -720,20 +717,19 @@ class Renderer {
         }
     }
     
-    func renderStreamingFrameDepth(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?) {
+    func renderStreamingFrameDepth(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?) {
         let renderPassDescriptor = MTLRenderPassDescriptor()
-        renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
+        renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
         renderPassDescriptor.colorAttachments[0].loadAction = .load
         renderPassDescriptor.colorAttachments[0].storeAction = .dontCare
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
-        renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
+        renderPassDescriptor.depthAttachment.texture = renderTargetDepth
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
         renderPassDescriptor.depthAttachment.clearDepth = 0.000000001
-        renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
-        if layerRenderer.configuration.layout == .layered {
-            renderPassDescriptor.renderTargetArrayLength = drawable.views.count
-        }
+        renderPassDescriptor.rasterizationRateMap = rasterizationRateMap
+        
+        renderPassDescriptor.renderTargetArrayLength = viewports.count
         
         /// Final pass rendering code here
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
@@ -752,12 +748,10 @@ class Renderer {
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
         renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue) // unused
         
-        let viewports = drawable.views.map { $0.textureMap.viewport }
-        
         renderEncoder.setViewports(viewports)
         
-        if drawable.views.count > 1 {
-            var viewMappings = (0..<drawable.views.count).map {
+        if viewports.count > 1 {
+            var viewMappings = (0..<viewports.count).map {
                 MTLVertexAmplificationViewMapping(viewportArrayIndexOffset: UInt32($0),
                                                   renderTargetArrayIndexOffset: UInt32($0))
             }
@@ -770,8 +764,7 @@ class Renderer {
         }
         let pixelBuffer = queuedFrame.imageBuffer
         // https://cs.android.com/android/platform/superproject/main/+/main:external/webrtc/sdk/objc/components/renderer/metal/RTCMTLNV12Renderer.mm;l=108;drc=a81e9c82fc3fbc984f0f110407d1e44c9c01958a
-        // TODO(zhuowei): yolo
-        //TODO: prevailing wisdom on stackoverflow says that the CVMetalTextureRef has to be held until
+        // TODO: prevailing wisdom on stackoverflow says that the CVMetalTextureRef has to be held until
         // rendering is complete, or the MtlTexture will be invalid?
         
         for i in 0...1 {
@@ -796,8 +789,6 @@ class Renderer {
             }
             renderEncoder.setFragmentTexture(metalTexture, index: i)
         }
-        //let test = Unmanaged.passUnretained(pixelBuffer).toOpaque()
-        //print("draw buf: \(test)")
         
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
         renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
@@ -806,24 +797,24 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func renderNothing(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, framePose: simd_float4x4) {
+    func renderNothing(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
         self.updateDynamicBufferState()
         
-        self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose)
+        self.updateGameStateForVideoFrame(whichIdx, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
-        renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
-        renderPassDescriptor.colorAttachments[0].loadAction = .clear
+        renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
+        renderPassDescriptor.colorAttachments[0].loadAction = isRealityKit ? (whichIdx == 0 ? .clear : .load) : .clear
         renderPassDescriptor.colorAttachments[0].storeAction = .store
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
-        renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        renderPassDescriptor.depthAttachment.texture = renderTargetDepth
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
         renderPassDescriptor.depthAttachment.clearDepth = 0.0
-        renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
-        if layerRenderer.configuration.layout == .layered {
-            renderPassDescriptor.renderTargetArrayLength = drawable.views.count
-        }
+        renderPassDescriptor.rasterizationRateMap = rasterizationRateMap
+        
+        renderPassDescriptor.renderTargetArrayLength = viewports.count
+
         
         /// Final pass rendering code here
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
@@ -842,12 +833,10 @@ class Renderer {
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
         renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue) // unused
         
-        let viewports = drawable.views.map { $0.textureMap.viewport }
-        
         renderEncoder.setViewports(viewports)
         
-        if drawable.views.count > 1 {
-            var viewMappings = (0..<drawable.views.count).map {
+        if viewports.count > 1 {
+            var viewMappings = (0..<viewports.count).map {
                 MTLVertexAmplificationViewMapping(viewportArrayIndexOffset: UInt32($0),
                                                   renderTargetArrayIndexOffset: UInt32($0))
             }
@@ -861,24 +850,21 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func renderOverlay(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?, framePose: simd_float4x4)
+    func renderOverlay(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4)
     {
         // Toss out the depth buffer, keep colors
         let renderPassDescriptor = MTLRenderPassDescriptor()
-        renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
+        renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
         renderPassDescriptor.colorAttachments[0].loadAction = .load
         renderPassDescriptor.colorAttachments[0].storeAction = .store
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
-        renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
+        renderPassDescriptor.depthAttachment.texture = renderTargetDepth
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .dontCare
         renderPassDescriptor.depthAttachment.clearDepth = 0.0
-        renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
-        if layerRenderer.configuration.layout == .layered {
-            renderPassDescriptor.renderTargetArrayLength = drawable.views.count
-        }
+        renderPassDescriptor.rasterizationRateMap = rasterizationRateMap
         
-        let viewports = drawable.views.map { $0.textureMap.viewport }
+        renderPassDescriptor.renderTargetArrayLength = viewports.count
         
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             fatalError("Failed to create render encoder")
@@ -892,8 +878,8 @@ class Renderer {
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
         renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue) // unused
         
-        if drawable.views.count > 1 {
-            var viewMappings = (0..<drawable.views.count).map {
+        if viewports.count > 1 {
+            var viewMappings = (0..<viewports.count).map {
                 MTLVertexAmplificationViewMapping(viewportArrayIndexOffset: UInt32($0),
                                                   renderTargetArrayIndexOffset: UInt32($0))
             }
@@ -953,7 +939,7 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func renderStreamingFrame(drawable: LayerRenderer.Drawable, commandBuffer: MTLCommandBuffer, queuedFrame: QueuedFrame?, framePose: simd_float4x4) {
+    func renderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
         fadeInOverlayAlpha -= 0.01
         if fadeInOverlayAlpha < 0.0 {
             fadeInOverlayAlpha = 0.0
@@ -961,21 +947,20 @@ class Renderer {
     
         self.updateDynamicBufferState()
         
-        self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose)
+        self.updateGameStateForVideoFrame(whichIdx, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
-        renderPassDescriptor.colorAttachments[0].texture = drawable.colorTextures[0]
-        renderPassDescriptor.colorAttachments[0].loadAction = .clear
+        renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
+        renderPassDescriptor.colorAttachments[0].loadAction = whichIdx == 0 ? .clear : .load
         renderPassDescriptor.colorAttachments[0].storeAction = .store
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
-        renderPassDescriptor.depthAttachment.texture = drawable.depthTextures[0]
+        renderPassDescriptor.depthAttachment.texture = renderTargetDepth
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
         renderPassDescriptor.depthAttachment.clearDepth = 0.0
-        renderPassDescriptor.rasterizationRateMap = drawable.rasterizationRateMaps.first
-        if layerRenderer.configuration.layout == .layered {
-            renderPassDescriptor.renderTargetArrayLength = drawable.views.count
-        }
+        renderPassDescriptor.rasterizationRateMap = rasterizationRateMap
+        
+        renderPassDescriptor.renderTargetArrayLength = viewports.count
         
         /// Final pass rendering code here
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
@@ -983,15 +968,10 @@ class Renderer {
         }
         
         renderEncoder.label = "Primary Render Encoder"
-        
         renderEncoder.pushDebugGroup("Draw ALVR Frames")
-        
         renderEncoder.setCullMode(.back)
-        
         renderEncoder.setFrontFacing(.counterClockwise)
-        
         renderEncoder.setRenderPipelineState(videoFramePipelineState_YpCbCrBiPlanar)
-        
         renderEncoder.setDepthStencilState(depthStateAlways)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
@@ -1001,12 +981,10 @@ class Renderer {
         self.encodingUniforms[0].encodingGamma = encodingGamma
         renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue)
         
-        let viewports = drawable.views.map { $0.textureMap.viewport }
-        
         renderEncoder.setViewports(viewports)
         
-        if drawable.views.count > 1 {
-            var viewMappings = (0..<drawable.views.count).map {
+        if viewports.count > 1 {
+            var viewMappings = (0..<viewports.count).map {
                 MTLVertexAmplificationViewMapping(viewportArrayIndexOffset: UInt32($0),
                                                   renderTargetArrayIndexOffset: UInt32($0))
             }
@@ -1054,44 +1032,12 @@ class Renderer {
         renderEncoder.endEncoding()
         
         if fadeInOverlayAlpha > 0.0 {
-            let fullViewPose = drawable.deviceAnchor != nil ? drawable.deviceAnchor!.originFromAnchorTransform : framePose
             // Not super kosher--we need the depth to be correct for the video frame box, but we can't have the view
             // outside of the video frame box be 0.0 depth or it won't get rastered by the compositor at all.
             // So we re-render the frame depth.
-            renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePose)
-            renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
-        }
-    }
-    
-    func renderLoop() {
-    
-        layerRenderer.waitUntilRunning()
-        
-        EventHandler.shared.handleHeadsetRemovedOrReentry()
-        let timeSinceLastLoop = CACurrentMediaTime()
-        while EventHandler.shared.renderStarted {
-            if layerRenderer.state == .invalidated {
-                print("Layer is invalidated")
-                //EventHandler.shared.stop()
-                EventHandler.shared.handleHeadsetRemovedOrReentry()
-                EventHandler.shared.handleHeadsetRemoved()
-                WorldTracker.shared.resetPlayspace()
-                alvr_pause()
-
-                // visionOS sometimes sends these invalidated things really fkn late...
-                // But generally, we want to exit fully when the user exits.
-                if CACurrentMediaTime() - timeSinceLastLoop < 1.0 {
-                    exit(0)
-                }
-                break
-            } else if layerRenderer.state == .paused {
-                layerRenderer.waitUntilRunning()
-                //EventHandler.shared.handleHeadsetRemovedOrReentry()
-                continue
-            } else {
-                autoreleasepool {
-                    self.renderFrame()
-                }
+            renderOverlay(commandBuffer: commandBuffer, renderTargetColor: renderTargetColor, renderTargetDepth: renderTargetDepth, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+            if !isRealityKit {
+                renderStreamingFrameDepth(commandBuffer: commandBuffer, renderTargetColor: renderTargetColor, renderTargetDepth: renderTargetDepth, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame)
             }
         }
     }
