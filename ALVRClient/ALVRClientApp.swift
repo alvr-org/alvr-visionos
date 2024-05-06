@@ -28,11 +28,12 @@ struct MetalRendererApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var clientImmersionStyle: ImmersionStyle = .full
     @StateObject private var gStore = GlobalSettingsStore()
+    @State private var chromaKeyColor = Color(.sRGB, red: 0.98, green: 0.9, blue: 0.2)
 
     var body: some Scene {
         //Entry point, this is the default window chosen in Info.plist from UIApplicationPreferredDefaultSceneSessionRole
         WindowGroup(id: "Entry") {
-            Entry(settings: $gStore.settings) {
+            Entry(settings: $gStore.settings, chromaKeyColor: $chromaKeyColor) {
                 Task {
                     do {
                         try gStore.save(settings: gStore.settings)
@@ -52,6 +53,8 @@ struct MetalRendererApp: App {
                 EventHandler.shared.initializeAlvr()
                 await WorldTracker.shared.initializeAr(settings: gStore.settings)
                 EventHandler.shared.start()
+                
+                chromaKeyColor = Color(.sRGB, red: Double(gStore.settings.chromaKeyColorR), green: Double(gStore.settings.chromaKeyColorG), blue: Double(gStore.settings.chromaKeyColorB))
             }
             .environment(model)
             .environmentObject(EventHandler.shared)
