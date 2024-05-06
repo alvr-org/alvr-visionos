@@ -69,5 +69,6 @@ class GlobalSettingsStore: ObservableObject {
         let data = try JSONEncoder().encode(settings)
         let outfile = try Self.fileURL()
         try data.write(to: outfile)
+        print(settings.chromaKeyColorR * 255, settings.chromaKeyColorG * 255, settings.chromaKeyColorB * 255)
     }
 }

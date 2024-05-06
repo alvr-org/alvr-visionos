@@ -9,12 +9,11 @@ import UIKit
 struct Entry: View {
     @ObservedObject var eventHandler = EventHandler.shared
     @Binding var settings: GlobalSettings
+    @Binding var chromaKeyColor: Color
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.self) var environment
     let saveAction: ()->Void
     
-    @State private var chromaKeyColor = Color(.sRGB, red: 0.98, green: 0.9, blue: 0.2)
-
     let chromaFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -107,13 +106,11 @@ struct Entry: View {
                 }
                 
                 ColorPicker("Chroma Key Color", selection: $chromaKeyColor)
-                .onAppear() {
-                    chromaKeyColor = Color(.sRGB, red: Double(settings.chromaKeyColorR), green: Double(settings.chromaKeyColorG), blue: Double(settings.chromaKeyColorB))
-                }
                 .onChange(of: chromaKeyColor) {
                     settings.chromaKeyColorR = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[0])
                     settings.chromaKeyColorG = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[1])
                     settings.chromaKeyColorB = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[2])
+                    print(settings.chromaKeyColorR * 255, settings.chromaKeyColorG * 255, settings.chromaKeyColorB * 255)
                     WorldTracker.shared.settings = settings
                     saveAction()
                }
@@ -202,6 +199,6 @@ struct Entry: View {
 
 struct Entry_Previews: PreviewProvider {
     static var previews: some View {
-        Entry(settings: .constant(GlobalSettings.sampleData), saveAction: {})
+        Entry(settings: .constant(GlobalSettings.sampleData), chromaKeyColor: .constant(Color(.sRGB, red: 0.98, green: 0.9, blue: 0.2)), saveAction: {})
     }
 }
