@@ -24,6 +24,7 @@ class VisionPro: NSObject, ObservableObject {
     var nextFrameTime: TimeInterval = 0.0
 
     var vsyncDelta: Double = (1.0 / 90.0)
+    var vsyncLatency: Double = (1.0 / 90.0) * 2
     
     override init() {
         super.init()
@@ -37,7 +38,17 @@ class VisionPro: NSObject, ObservableObject {
     
     @objc func frame(displaylink: CADisplayLink) {
         let frameDuration = displaylink.targetTimestamp - displaylink.timestamp
-        nextFrameTime = displaylink.targetTimestamp + (frameDuration * 4)
+        
+        // The OS rounds up the frame time from the RealityKit render time (usually 14ms)
+        // to the nearest vsync interval. So for 90Hz this is usually 2 * vsync
+        var curVsyncLatency = 0.0
+        var rkRenderTime = 0.014
+        while rkRenderTime > 0.0 {
+            curVsyncLatency += frameDuration
+            rkRenderTime -= frameDuration
+        }
+        vsyncLatency = curVsyncLatency
+        nextFrameTime = displaylink.targetTimestamp + vsyncLatency
         vsyncDelta = frameDuration
         //print("vsync frame", frameDuration, displaylink.targetTimestamp - CACurrentMediaTime(), displaylink.timestamp - CACurrentMediaTime())
     }
@@ -340,9 +351,11 @@ class RealityKitClientSystem : System {
         //let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTime = visionPro.nextFrameTime
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
+        let vsyncTimeReported = visionPro.nextFrameTime //- (visionPro.vsyncDelta * 4)
+        let vsyncTimeReportedNs = UInt64(vsyncTimeReported * Double(NSEC_PER_SEC))
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
-        //var deviceAnchor = framePreviouslyPredictedPose ?? matrix_identity_float4x4
-        let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
+        let deviceAnchor = framePreviouslyPredictedPose ?? matrix_identity_float4x4
+        //let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized {
@@ -374,7 +387,8 @@ class RealityKitClientSystem : System {
             //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
             //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
             
-            let targetTimestamp = vsyncTime //+ (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let rkLatencyLimit = WorldTracker.maxPredictionRK //UInt64(Double(visionPro.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
+            let targetTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
             WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, delay: 0.0)
         }
@@ -395,7 +409,7 @@ class RealityKitClientSystem : System {
                 //print("Finished:", queuedFrame!.timestamp)
                 //print((vsyncTime - CACurrentMediaTime()) * 1000.0)
                 //print((CACurrentMediaTime() - submitTime) * 1000.0)
-                alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
+                alvr_report_submit(queuedFrame!.timestamp, vsyncTimeReportedNs &- currentTimeNs)
                 EventHandler.shared.lastSubmittedTimestamp = queuedFrame!.timestamp
             }
             else {

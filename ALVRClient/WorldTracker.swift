@@ -49,6 +49,7 @@ class WorldTracker {
     var rightEngine: CHHapticEngine? = nil
     
     static let maxPrediction = 30 * NSEC_PER_MSEC
+    static let maxPredictionRK = 70 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
     static let deviceIdLeftHand = alvr_path_string_to_id("/user/hand/left")
     static let deviceIdRightHand = alvr_path_string_to_id("/user/hand/right")
