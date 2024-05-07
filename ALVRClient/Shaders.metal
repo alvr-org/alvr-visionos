@@ -208,16 +208,40 @@ float3 EncodingNonlinearToLinearRGB(float3 color, float gamma) {
     return ret;
 }
 
-//compute color distance in the UV (CbCr, PbPr) plane
-float colorclose(float3 yuv, float3 keyYuv, float2 tol)
+float colorclose_hsv(float3 hsv, float3 keyHsv, float2 tol)
 {
-    float tmp = sqrt(pow(keyYuv.g - yuv.g, 2.0) + pow(keyYuv.b - yuv.b, 2.0));
+    float3 weights = float3(4., 1., 2.);
+    float tmp = length(weights * (keyHsv - hsv));
     if (tmp < tol.x)
       return 0.0;
    	else if (tmp < tol.y)
       return (tmp - tol.x)/(tol.y - tol.x);
    	else
       return 1.0;
+}
+
+float3 rgb2hsv(float3 rgb) {
+    float Cmax = max(rgb.r, max(rgb.g, rgb.b));
+    float Cmin = min(rgb.r, min(rgb.g, rgb.b));
+    float delta = Cmax - Cmin;
+    float3 hsv = float3(0., 0., Cmax);
+
+    if(Cmax > Cmin) {
+        hsv.y = delta / Cmax;
+
+        if(rgb.r == Cmax) {
+            hsv.x = (rgb.g - rgb.b) / delta;
+        } else {
+            if (rgb.g == Cmax) {
+                hsv.x = 2. + (rgb.b - rgb.r) / delta;
+            } else {
+                hsv.x = 4. + (rgb.r - rgb.g) / delta;
+            }
+        }
+        hsv.x = fract(hsv.x / 6.);
+    }
+    
+    return hsv;
 }
 
 fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
@@ -254,16 +278,11 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
     //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
     //color = linearToDisplayP3 * color;
     
-    // TODO: use inverse of encodingUniform.yuvTransform instead to save one matmul
     if (CHROMAKEY_ENABLED) {
-        const matrix_float4x4 RGBtoYUV = matrix_float4x4(0.257,  0.439, -0.148, 0.0,
-                         0.504, -0.368, -0.291, 0.0,
-                         0.098, -0.071,  0.439, 0.0,
-                         0.0625, 0.500,  0.500, 1.0);
-        float4 chromaKeyYCbCr = RGBtoYUV * float4(CHROMAKEY_COLOR, 1.0);
-        float4 newYCbCr = RGBtoYUV * float4(color.rgb, 1.0);
-        float mask = colorclose(newYCbCr.rgb, chromaKeyYCbCr.rgb, CHROMAKEY_LERP_DIST_RANGE);
-
+        float4 chromaKeyHSV = float4(rgb2hsv(CHROMAKEY_COLOR), 1.0);
+        float4 newHSV = float4(rgb2hsv(color.rgb), 1.0);
+        float mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, CHROMAKEY_LERP_DIST_RANGE);
+        
         return float4(color.rgb, mask);
     }
     else {

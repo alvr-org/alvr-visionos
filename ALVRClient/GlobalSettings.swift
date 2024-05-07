@@ -11,13 +11,13 @@ struct GlobalSettings: Codable {
     var setDisplayTo96Hz: Bool = false
     var experimental40ppd: Bool = false
     var chromaKeyEnabled: Bool = false
-    var chromaKeyDistRangeMin: Float = 0.005
-    var chromaKeyDistRangeMax: Float = 0.1
-    var chromaKeyColorR: Float = 0.0
-    var chromaKeyColorG: Float = 1.0
-    var chromaKeyColorB: Float = 0.0
+    var chromaKeyDistRangeMin: Float = 0.35
+    var chromaKeyDistRangeMax: Float = 0.7
+    var chromaKeyColorR: Float = 16.0 / 255.0
+    var chromaKeyColorG: Float = 124.0 / 255.0
+    var chromaKeyColorB: Float = 16.0 / 255.0
     var dismissWindowOnEnter: Bool = true
-    var realityKitRenderScale: Float = 2.0
+    var realityKitRenderScale: Float = 1.75
     
     init() {}
     
