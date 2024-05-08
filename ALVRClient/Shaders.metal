@@ -147,14 +147,18 @@ float2 decompressAxisAlignedCoord(float2 uv) {
 
 // VERTEX_SHADER
 
-ColorInOut videoFrameVertexShaderCommon(Vertex in [[stage_in]],
+ColorInOut videoFrameVertexShaderCommon(uint vertexID [[vertex_id]],
                                 int which,
                                matrix_float4x4 projectionMatrix,
                                matrix_float4x4 modelViewMatrixFrame,
                                simd_float4 tangents)
 {
     ColorInOut out;
-    float4 position = float4(in.position, 1.0);
+    
+    float2 uv = float2(float((vertexID << uint(1)) & 2u) * 0.5, 1.0 - (float(vertexID & 2u) * 0.5));
+    float4 position = float4((uv * float2(2.0, -2.0)) + float2(-1.0, 1.0), -1.0, 1.0);
+    //out.uv = uv;
+    
     if (position.x < 1.0) {
         position.x *= tangents[0];
     }
@@ -169,23 +173,23 @@ ColorInOut videoFrameVertexShaderCommon(Vertex in [[stage_in]],
     }
     out.position = projectionMatrix * modelViewMatrixFrame * position;
     if (which == 0) {
-        out.texCoord = in.texCoord;
+        out.texCoord = float2((uv.x * 0.5), uv.y);
     } else {
-        out.texCoord = float2(in.texCoord.x + 0.5, in.texCoord.y);
+        out.texCoord = float2((uv.x * 0.5) + 0.5,  uv.y);
     }
     out.color = float4(1.0, 1.0, 1.0, 1.0);
 
     return out;
 }
 
-vertex ColorInOut videoFrameVertexShader(Vertex in [[stage_in]],
+vertex ColorInOut videoFrameVertexShader(uint vertexID [[vertex_id]],
                                ushort amp_id [[amplification_id]],
                                constant UniformsArray & uniformsArray [[ buffer(BufferIndexUniforms) ]])
 {
 
     Uniforms uniforms = uniformsArray.uniforms[amp_id];
     
-    return videoFrameVertexShaderCommon(in, uniforms.which, uniforms.projectionMatrix, uniforms.modelViewMatrixFrame, uniforms.tangents);
+    return videoFrameVertexShaderCommon(vertexID, uniforms.which, uniforms.projectionMatrix, uniforms.modelViewMatrixFrame, uniforms.tangents);
 }
 
 float3 NonlinearToLinearRGB(float3 color) {
@@ -292,4 +296,38 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
 
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
     return float4(0.0, 0.0, 0.0, 0.0);
+}
+
+struct CopyVertexIn {
+    float4 position [[attribute(0)]];
+};
+
+struct CopyVertexOut {
+    float4 position [[position]];
+    float2 uv;
+};
+
+vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]]) {
+    CopyVertexOut out;
+    float2 uv = float2(float((vertexID << uint(1)) & 2u), float(vertexID & 2u));
+    out.position = float4((uv * float2(2.0, -2.0)) + float2(-1.0, 1.0), 0.0, 1.0);
+    out.uv = uv;
+    return out;
+}
+
+struct CopyFragmentOut {
+    float4 color [[color(0)]];
+};
+
+fragment CopyFragmentOut copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<float> in_tex) {
+    CopyFragmentOut out;
+    
+    constexpr sampler colorSampler(coord::normalized,
+                    address::clamp_to_edge,
+                    filter::linear);
+    
+    float2 uv = in.uv;
+    out.color = in_tex.sample(colorSampler, uv);
+    //out.color = float4(uv.x, uv.y, 0.0, 1.0);
+    return out;
 }
