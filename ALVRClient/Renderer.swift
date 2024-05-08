@@ -94,6 +94,9 @@ class Renderer {
     
     // More readable helper var than layerRenderer == nil
     var isRealityKit = false
+    var hdrEnabled = false
+    var currentRenderColorFormat = renderColorFormatSDR
+    var currentDrawableRenderColorFormat = renderColorFormatDrawableSDR
     
     //
     // Chroma keying shader vars
@@ -113,6 +116,22 @@ class Renderer {
         if layerRenderer == nil {
             isRealityKit = true
         }
+        
+        guard let settings = Settings.getAlvrSettings() else {
+            fatalError("streaming started: failed to retrieve alvr settings")
+        }
+            
+        encodingGamma = settings.video.encoderConfig.encodingGamma
+        hdrEnabled = settings.video.encoderConfig.enableHdr
+        if hdrEnabled {
+            currentRenderColorFormat = renderColorFormatHDR
+            currentDrawableRenderColorFormat = renderColorFormatDrawableHDR
+        }
+        else {
+            currentRenderColorFormat = renderColorFormatSDR
+            currentDrawableRenderColorFormat = renderColorFormatSDR
+        }
+        
         self.device = layerRenderer?.device ?? MTLCreateSystemDefaultDevice()!
         self.commandQueue = self.device.makeCommandQueue()!
 
@@ -139,7 +158,7 @@ class Renderer {
         do {
             pipelineState = try Renderer.buildRenderPipelineWithDevice(device: device,
                                                                        mtlVertexDescriptor: mtlVertexDescriptor,
-                                                                       colorFormat: layerRenderer?.configuration.colorFormat ?? renderColorFormat,
+                                                                       colorFormat: layerRenderer?.configuration.colorFormat ?? currentRenderColorFormat,
                                                                        depthFormat: layerRenderer?.configuration.depthFormat ?? renderDepthFormat,
                                                                        viewCount: layerRenderer?.properties.viewCount ?? renderViewCount,
                                                                        vertexShaderName: "vertexShader",
@@ -168,10 +187,12 @@ class Renderer {
         self.videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
                 device: self.device,
                 mtlVertexDescriptor: self.mtlVertexDescriptor,
-                colorFormat: layerRenderer?.configuration.colorFormat ?? renderColorFormat,
+                colorFormat: layerRenderer?.configuration.colorFormat ?? currentRenderColorFormat,
                 depthFormat: layerRenderer?.configuration.depthFormat ?? renderDepthFormat,
                 viewCount: layerRenderer?.properties.viewCount ?? renderViewCount
         )
+        
+        rebuildRenderPipelines()
 
         EventHandler.shared.handleRenderStarted()
         EventHandler.shared.renderStarted = true
@@ -181,18 +202,48 @@ class Renderer {
         guard let settings = Settings.getAlvrSettings() else {
             fatalError("streaming started: failed to retrieve alvr settings")
         }
+        print("rebuildRenderPipelines")
             
         encodingGamma = settings.video.encoderConfig.encodingGamma
+        hdrEnabled = settings.video.encoderConfig.enableHdr
+        if hdrEnabled {
+            currentRenderColorFormat = renderColorFormatHDR
+            currentDrawableRenderColorFormat = renderColorFormatDrawableHDR
+        }
+        else {
+            currentRenderColorFormat = renderColorFormatSDR
+            currentDrawableRenderColorFormat = renderColorFormatSDR
+        }
             
         let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
         videoFramePipelineState_YpCbCrBiPlanar = try! buildRenderPipelineForVideoFrameWithDevice(
                             device: device,
                             mtlVertexDescriptor: mtlVertexDescriptor,
-                            colorFormat: layerRenderer?.configuration.colorFormat ?? renderColorFormat,
+                            colorFormat: layerRenderer?.configuration.colorFormat ?? currentRenderColorFormat,
                             depthFormat: layerRenderer?.configuration.depthFormat ?? renderDepthFormat,
                             viewCount: layerRenderer?.properties.viewCount ?? renderViewCount,
                             foveationVars: foveationVars,
                             variantName: "YpCbCrBiPlanar"
+        )
+        
+        do {
+            pipelineState = try Renderer.buildRenderPipelineWithDevice(device: device,
+                                                                       mtlVertexDescriptor: mtlVertexDescriptor,
+                                                                       colorFormat: layerRenderer?.configuration.colorFormat ?? currentRenderColorFormat,
+                                                                       depthFormat: layerRenderer?.configuration.depthFormat ?? renderDepthFormat,
+                                                                       viewCount: layerRenderer?.properties.viewCount ?? renderViewCount,
+                                                                       vertexShaderName: "vertexShader",
+                                                                       fragmentShaderName: "fragmentShader")
+        } catch {
+            fatalError("Unable to compile render pipeline state.  Error info: \(error)")
+        }
+        
+        self.videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
+                device: self.device,
+                mtlVertexDescriptor: self.mtlVertexDescriptor,
+                colorFormat: layerRenderer?.configuration.colorFormat ?? currentRenderColorFormat,
+                depthFormat: layerRenderer?.configuration.depthFormat ?? renderDepthFormat,
+                viewCount: layerRenderer?.properties.viewCount ?? renderViewCount
         )
     }
 
@@ -257,6 +308,28 @@ class Renderer {
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
     
+    class func buildCopyPipelineWithDevice(device: MTLDevice,
+                                             colorFormat: MTLPixelFormat) throws -> MTLRenderPipelineState {
+        /// Build a render state pipeline object
+
+        let library = device.makeDefaultLibrary()
+
+        let vertexFunction = library?.makeFunction(name: "copyVertexShader")
+        let fragmentFunction = library?.makeFunction(name: "copyFragmentShader")
+
+        let pipelineDescriptor = MTLRenderPipelineDescriptor()
+        pipelineDescriptor.label = "RenderPipeline"
+        pipelineDescriptor.vertexFunction = vertexFunction
+        pipelineDescriptor.fragmentFunction = fragmentFunction
+
+        pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
+        pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
+
+        pipelineDescriptor.maxVertexAmplificationCount = 1
+        
+        return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+    }
+    
     // Depth-only renderer, for correcting after overlay render just so Apple's compositor isn't annoying about it
     class func buildRenderPipelineForVideoFrameDepthWithDevice(device: MTLDevice,
                                                           mtlVertexDescriptor: MTLVertexDescriptor,
@@ -274,7 +347,7 @@ class Renderer {
         pipelineDescriptor.label = "VideoFrameDepthRenderPipeline"
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
-        pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
+        //pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
 
         pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
         pipelineDescriptor.depthAttachmentPixelFormat = depthFormat
@@ -314,7 +387,7 @@ class Renderer {
         pipelineDescriptor.label = "VideoFrameRenderPipeline_" + variantName
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
-        pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
+        //pipelineDescriptor.vertexDescriptor = mtlVertexDescriptor
 
         pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
         pipelineDescriptor.depthAttachmentPixelFormat = depthFormat
@@ -718,6 +791,10 @@ class Renderer {
     }
     
     func renderStreamingFrameDepth(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?) {
+        if currentRenderColorFormat != renderTargetColor.pixelFormat {
+            return
+        }
+
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
         renderPassDescriptor.colorAttachments[0].loadAction = .load
@@ -790,14 +867,15 @@ class Renderer {
             renderEncoder.setFragmentTexture(metalTexture, index: i)
         }
         
-        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
-        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
     }
     
     func renderNothing(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
+        if currentRenderColorFormat != renderTargetColor.pixelFormat {
+            return
+        }
         self.updateDynamicBufferState()
         
         self.updateGameStateForVideoFrame(whichIdx, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
@@ -852,6 +930,9 @@ class Renderer {
     
     func renderOverlay(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4)
     {
+        if currentRenderColorFormat != renderTargetColor.pixelFormat {
+            return
+        }
         // Toss out the depth buffer, keep colors
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
@@ -940,6 +1021,10 @@ class Renderer {
     }
     
     func renderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
+        if currentRenderColorFormat != renderTargetColor.pixelFormat {
+            return
+        }
+
         fadeInOverlayAlpha -= 0.01
         if fadeInOverlayAlpha < 0.0 {
             fadeInOverlayAlpha = 0.0
@@ -1025,8 +1110,6 @@ class Renderer {
             renderEncoder.setFragmentTexture(metalTexture, index: i)
         }
         
-        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
-        renderEncoder.setVertexBuffer(fullscreenQuadBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()

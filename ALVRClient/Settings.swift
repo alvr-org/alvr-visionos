@@ -43,9 +43,11 @@ struct SettingsCodables {
     
     struct EncoderConfig: Codable {
         var encodingGamma: Float = 1.0
+        var enableHdr: Bool = false
 
         enum CodingKeys: String, CodingKey {
             case encodingGamma = "encoding_gamma"
+            case enableHdr = "enable_hdr"
         }
     }
 
