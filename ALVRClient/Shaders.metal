@@ -30,7 +30,6 @@ typedef struct
 typedef struct
 {
     float4 position [[position]];
-    float4 color;
     float2 texCoord;
 } ColorInOut;
 
@@ -157,8 +156,7 @@ ColorInOut videoFrameVertexShaderCommon(uint vertexID [[vertex_id]],
     
     float2 uv = float2(float((vertexID << uint(1)) & 2u) * 0.5, 1.0 - (float(vertexID & 2u) * 0.5));
     float4 position = float4((uv * float2(2.0, -2.0)) + float2(-1.0, 1.0), -1.0, 1.0);
-    //out.uv = uv;
-    
+
     if (position.x < 1.0) {
         position.x *= tangents[0];
     }
@@ -177,7 +175,6 @@ ColorInOut videoFrameVertexShaderCommon(uint vertexID [[vertex_id]],
     } else {
         out.texCoord = float2((uv.x * 0.5) + 0.5,  uv.y);
     }
-    out.color = float4(1.0, 1.0, 1.0, 1.0);
 
     return out;
 }
@@ -328,6 +325,5 @@ fragment CopyFragmentOut copyFragmentShader(CopyVertexOut in [[stage_in]], textu
     
     float2 uv = in.uv;
     out.color = in_tex.sample(colorSampler, uv);
-    //out.color = float4(uv.x, uv.y, 0.0, 1.0);
     return out;
 }
