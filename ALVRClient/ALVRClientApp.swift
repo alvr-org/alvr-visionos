@@ -58,9 +58,10 @@ struct MetalRendererApp: App {
             }
             .environment(model)
             .environmentObject(EventHandler.shared)
+            .fixedSize()
         }
-        .defaultSize(width: 650, height: 850)
         .windowStyle(.plain)
+        .windowResizability(.contentSize)
         .onChange(of: scenePhase) {
             switch scenePhase {
             case .background:

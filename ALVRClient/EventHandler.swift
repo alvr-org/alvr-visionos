@@ -23,6 +23,7 @@ class EventHandler: ObservableObject {
     @Published var connectionState: ConnectionState = .disconnected
     @Published var hostname: String = ""
     @Published var IP: String = ""
+    @Published var alvrVersion: String = ""
     
     var renderStarted = false
     
@@ -581,6 +582,13 @@ class EventHandler: ObservableObject {
     func parseMessage(_ message: String) {
         let lines = message.components(separatedBy: "\n")
         for line in lines {
+            if line.starts(with: "ALVR") {
+                let split = line.split(separator: " ")
+                if split.count == 2 {
+                    updateVersion(split[1].trimmingCharacters(in: .whitespaces))
+                    continue
+                }
+            }
             let keyValuePair = line.split(separator: ":")
             if keyValuePair.count == 2 {
                 let key = keyValuePair[0].trimmingCharacters(in: .whitespaces)
@@ -607,6 +615,11 @@ class EventHandler: ObservableObject {
         }
     }
 
+    func updateVersion(_ newVersion: String) {
+        DispatchQueue.main.async {
+            self.alvrVersion = newVersion
+        }
+    }
 }
 
 enum ConnectionState {
