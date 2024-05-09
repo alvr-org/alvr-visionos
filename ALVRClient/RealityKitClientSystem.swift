@@ -15,13 +15,17 @@ let renderWidth = Int(1920)
 let renderHeight = Int(1840)
 let renderScale = 1.75
 let renderColorFormatSDR = MTLPixelFormat.bgra8Unorm_srgb // rgba8Unorm, rgba8Unorm_srgb, bgra8Unorm, bgra8Unorm_srgb, rgba16Float
-let renderColorFormatHDR = MTLPixelFormat.rgba16Float // bgr10_xr_srgb? rg11b10Float? rgb9e5? probably not renderable.
+let renderColorFormatHDR = MTLPixelFormat.rgba16Float // bgr10_xr_srgb? rg11b10Float? rgb9e5?--rgb9e5 is probably not renderable.
 let renderColorFormatDrawableSDR = renderColorFormatSDR
 let renderColorFormatDrawableHDR = MTLPixelFormat.rgba16Float
 let renderDepthFormat = MTLPixelFormat.depth16Unorm
 let renderViewCount = 1
 let renderZNear = 0.001
 let renderZFar = 100.0
+
+// Focal depth of the timewarp panel, ideally would be adjusted based on the depth
+// of what the user is looking at.
+let rk_panel_depth: Float = 100
 
 class VisionPro: NSObject, ObservableObject {
     var nextFrameTime: TimeInterval = 0.0
@@ -69,10 +73,6 @@ class VisionPro: NSObject, ObservableObject {
     }
 }
 
-// Focal depth of the timewarp panel, ideally would be adjusted based on the depth
-// of what the user is looking at.
-let rk_panel_depth: Float = 100
-
 struct RKQueuedFrame {
     let texture: MTLTexture
     let depthTexture: MTLTexture
@@ -94,7 +94,6 @@ class RealityKitClientSystem : System {
     let commandQueue: MTLCommandQueue
     var renderViewports: [MTLViewport] = [MTLViewport(originX: 0, originY: 0, width: 1.0, height: 1.0, znear: 0.1, zfar: 10.0), MTLViewport(originX: 0, originY: 0, width: 1.0, height: 1.0, znear: 0.1, zfar: 10.0)]
     
-    //var renderTangents: [simd_float4] = [simd_float4(-1.0471973, 0.7853982, 0.7853982, -0.8726632), simd_float4(-0.7853982, 1.0471973, 0.7853982, -0.8726632)]
     var fullscreenQuadBuffer:MTLBuffer!
     var lastTexture: MTLTexture? = nil
     
@@ -133,11 +132,11 @@ class RealityKitClientSystem : System {
         currentDrawableRenderColorFormat = renderer.currentDrawableRenderColorFormat
         lastRenderColorFormat = currentRenderColorFormat
 
-        //visionPro.createDisplayLink()
         let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget, .shaderRead, .shaderWrite], mipmapsMode: .none)
         self.drawableQueue = try? TextureResource.DrawableQueue(desc)
         self.drawableQueue!.allowsNextDrawableTimeout = true
         
+        // Dummy texture
         let data = Data([0x00, 0x00, 0x00, 0xFF])
         self.textureResource = try! TextureResource(
             dimensions: .dimensions(width: 1, height: 1),
@@ -148,25 +147,14 @@ class RealityKitClientSystem : System {
                 ]
             )
         )
-        
-        
+
         self.device = MTLCreateSystemDefaultDevice()!
         self.commandQueue = self.device.makeCommandQueue()!
         
-        // Create a render pipeline state
+        // Copy texture pipelines
         self.passthroughPipelineState = try! Renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatSDR)
         self.passthroughPipelineStateHDR = try! Renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR)
 
-        
-        // Create depth texture descriptor
-        /*let depthTextureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: renderDepthFormat,
-                                                                              width: currentRenderWidth,
-                                                                              height: currentRenderHeight*2,
-                                                                              mipmapped: false)
-        depthTextureDescriptor.usage = [.renderTarget, .shaderRead]
-        depthTextureDescriptor.storageMode = .private
-        self.depthTexture = device.makeTexture(descriptor: depthTextureDescriptor)!*/
-        
         renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentRenderHeight), width: Double(currentRenderWidth), height: Double(currentRenderHeight), znear: renderZNear, zfar: renderZFar)
         renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentRenderWidth), height: Double(currentRenderHeight), znear: renderZNear, zfar: renderZFar)
         
@@ -193,7 +181,6 @@ class RealityKitClientSystem : System {
     func recreateFramePool() {
         print("recreate frame pool")
         objc_sync_enter(rkFramePoolLock)
-        //rkFramePool.removeAll()
         let cnt = rkFramePool.count
         for _ in 0..<cnt {
             let (texture, depthTexture) = self.rkFramePool.removeFirst()
@@ -230,7 +217,6 @@ class RealityKitClientSystem : System {
     }
     
     func rkVsyncCallback(nextFrameTime: Double, vsyncLatency: Double) {
-        //let renderThread = Thread {
         Task {
             objc_sync_enter(self.rkFramePoolLock)
             if self.rkFramePool.isEmpty {
@@ -239,29 +225,18 @@ class RealityKitClientSystem : System {
             }
             let (texture, depthTexture) = self.rkFramePool.removeFirst()
             objc_sync_exit(self.rkFramePoolLock)
-            if let (timestamp, transform) = self.renderFrame(drawableTexture: texture, depthTexture: depthTexture) {
-                /*let queuedFrame = RKQueuedFrame(texture: texture, depthTexture: depthTexture, timestamp: timestamp, transform: transform, vsyncTime: self.visionPro.nextFrameTime)
-                if timestamp >= self.rkFrameQueue.last?.timestamp ?? timestamp {
-                    self.rkFrameQueue.append(queuedFrame)
-                }*/
-            }
-            else {
+            if self.renderFrame(drawableTexture: texture, depthTexture: depthTexture) == nil {
                 objc_sync_enter(self.rkFramePoolLock)
                 self.rkFramePool.append((texture, depthTexture))
                 objc_sync_exit(self.rkFramePoolLock)
             }
         }
-        /*}
-        renderThread.name = "Render Thread"
-        renderThread.start()*/
     }
 
     func update(context: SceneUpdateContext) {
         // RealityKit automatically calls this every frame for every scene.
         let plane = context.scene.findEntity(named: "video_plane") as? ModelEntity
         if let plane = plane {
-            //print("frame", plane.id)
-            
             do {
                 if dynamicallyAdjustRenderScale && CACurrentMediaTime() - lastSubmit > 0.02 && lastSubmit - lastLastSubmit > 0.02 && CACurrentMediaTime() - lastFbChangeTime > 0.25 {
                     currentRenderScale -= 0.25
@@ -311,7 +286,6 @@ class RealityKitClientSystem : System {
                     EventHandler.shared.kickAlvr() // HACK: RealityKit kills the audio :/
                 }
                 
-                /*if var (timestamp, planeTransform) = renderFrame(drawableTexture: drawable!.texture) {*/
                 if !rkFrameQueue.isEmpty {
                     while rkFrameQueue.count > 1 {
                         let pop = rkFrameQueue.removeFirst()
@@ -319,10 +293,6 @@ class RealityKitClientSystem : System {
                             objc_sync_enter(self.rkFramePoolLock)
                             rkFramePool.append((pop.texture, pop.depthTexture))
                             objc_sync_exit(self.rkFramePoolLock)
-                        }
-                        else {
-                            //pop.texture.setPurgeableState(.volatile)
-                            //pop.depthTexture.setPurgeableState(.volatile)
                         }
                     }
         
@@ -342,16 +312,6 @@ class RealityKitClientSystem : System {
                     scale *= rk_panel_depth
                     let orientation = simd_quatf(planeTransform) * simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
                     let position = simd_float3(planeTransform.columns.3.x, planeTransform.columns.3.y, planeTransform.columns.3.z)
-                    
-                    /*guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-                        fatalError("Failed to create command buffer")
-                    }
-                    guard let blitEncoder = commandBuffer.makeBlitCommandEncoder() else {
-                        fatalError("Failed to create blit command encoder")
-                    }
-                    blitEncoder.copy(from: texture,
-                                      to: drawable!.texture)
-                    blitEncoder.endEncoding()*/
                     
                     guard let commandBuffer = commandQueue.makeCommandBuffer() else {
                         fatalError("Failed to create command buffer")
@@ -377,9 +337,6 @@ class RealityKitClientSystem : System {
                     let submitTime = CACurrentMediaTime()
                     commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
                         if EventHandler.shared.alvrInitialized && EventHandler.shared.lastSubmittedTimestamp != timestamp {
-                            /*while vsyncTime < CACurrentMediaTime() {
-                                vsyncTime += self.visionPro.vsyncDelta
-                            }*/
                             vsyncTime = self.visionPro.nextFrameTime
                             
                             let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
@@ -413,10 +370,6 @@ class RealityKitClientSystem : System {
                     if texture.pixelFormat == currentRenderColorFormat && texture.width == currentRenderWidth && rkFramePool.count < 4 {
                         rkFramePool.append((texture, depthTexture))
                     }
-                    else {
-                        //texture.setPurgeableState(.volatile)
-                        //depthTexture.setPurgeableState(.volatile)
-                    }
                     objc_sync_exit(rkFramePoolLock)
                 }
             }
@@ -428,7 +381,6 @@ class RealityKitClientSystem : System {
     
     // TODO: Share this with Renderer somehow
     func renderFrame(drawableTexture: MTLTexture, depthTexture: MTLTexture) -> (UInt64, simd_float4x4)? {
-        //print("renderFrame", roundTripRenderTime)
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
         EventHandler.shared.totalFramesRendered += 1
@@ -483,13 +435,6 @@ class RealityKitClientSystem : System {
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             fatalError("Failed to create command buffer")
         }
-        
-        /*guard let drawable = frame.queryDrawable() else {
-            if queuedFrame != nil {
-                EventHandler.shared.lastQueuedFrame = queuedFrame
-            }
-            return
-        }*/
         
         if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
             alvr_report_compositor_start(queuedFrame!.timestamp)
@@ -555,19 +500,11 @@ class RealityKitClientSystem : System {
             return nil
         }
         
-        //checkEyes(drawable: drawable)
-        
         objc_sync_enter(EventHandler.shared.frameQueueLock)
         EventHandler.shared.framesSinceLastDecode += 1
         objc_sync_exit(EventHandler.shared.frameQueueLock)
         
-        
-        
-        //let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTime = visionPro.nextFrameTime
-        let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
-        let vsyncTimeReported = visionPro.nextFrameTime //- (visionPro.vsyncDelta * 4)
-        let vsyncTimeReportedNs = UInt64(vsyncTimeReported * Double(NSEC_PER_SEC))
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
         //let deviceAnchor = framePreviouslyPredictedPose ?? matrix_identity_float4x4
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
@@ -578,29 +515,6 @@ class RealityKitClientSystem : System {
             // Since pupil swim is purely an axial thing, maybe we can just timewarp the view transforms as well idk
             let viewFovs = EventHandler.shared.viewFovs
             let viewTransforms = EventHandler.shared.viewTransforms
-        
-            //let nowTs = CACurrentMediaTime()
-            //let nowToVsync = vsyncTime - nowTs
-            
-            // Sometimes upload speeds can be less than optimal.
-            // To compensate, we will send 3 predictions at a fixed interval and hope that
-            // one of them is optimal enough to avoid a re-sent timestamp frame
-            // TODO: revisit this
-            //var interval = ((11.0 / 1000.0) / 3.0)
-#if !targetEnvironment(simulator)
-            //if queuedFrame != nil {
-            //    interval = roundTripRenderTime / 3.0
-            //}
-#endif
-            //let targetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            //let realTargetTimestampA = nowTs + ((nowToVsync / 3.0)*1.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            //let targetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            //let realTargetTimestampB = nowTs + ((nowToVsync / 3.0)*2.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            //let targetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
-            //let realTargetTimestampC = nowTs + ((nowToVsync / 3.0)*3.0) + (Double(alvr_get_head_prediction_offset_ns()) / Double(NSEC_PER_SEC))
-            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampA, realTargetTimestamp: realTargetTimestampA, delay: 0.0)
-            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampB, realTargetTimestamp: realTargetTimestampB, delay: interval)
-            //WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestampC, realTargetTimestamp: realTargetTimestampC, delay: interval*2.0)
             
             let rkLatencyLimit = WorldTracker.maxPredictionRK //UInt64(Double(visionPro.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
             let targetTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
@@ -611,16 +525,6 @@ class RealityKitClientSystem : System {
         let planeTransform = deviceAnchor
         
         let submitTime = CACurrentMediaTime()
-        /*commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
-            if EventHandler.shared.alvrInitialized && queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame?.timestamp {
-                let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
-                //print("Finished:", queuedFrame!.timestamp)
-                //print((vsyncTime - CACurrentMediaTime()) * 1000.0)
-                //print((CACurrentMediaTime() - submitTime) * 1000.0)
-                alvr_report_submit(queuedFrame!.timestamp, vsyncTimeReportedNs &- currentTimeNs)
-                EventHandler.shared.lastSubmittedTimestamp = queuedFrame!.timestamp
-            }
-        }*/
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             //print((CACurrentMediaTime() - submitTime) * 1000.0)
             let timestamp = queuedFrame?.timestamp ?? 0
@@ -632,7 +536,6 @@ class RealityKitClientSystem : System {
         
         // List of reasons to not display a frame
         var frameIsSuitableForDisplaying = true
-        //print(EventHandler.shared.lastIpd, WorldTracker.shared.worldTrackingAddedOriginAnchor, EventHandler.shared.framesRendered)
         if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 90 {
             // Don't show frame if we haven't sent the view config and received frames
             // with that config applied.
@@ -653,16 +556,8 @@ class RealityKitClientSystem : System {
             renderer.currentYuvTransform = VideoHandler.getYUVTransformForVideoFormat(videoFormat)
         }
         
-        /*if isReprojected {
-            return nil
-        }*/
-        
         if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
-            //print("render")
             for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
-                //renderOverlay(eyeIdx: i, colorTexture: drawableTexture, commandBuffer: commandBuffer, framePose: matrix_identity_float4x4, simdDeviceAnchor: simdDeviceAnchor)
-                //renderStreamingFrame(eyeIdx: i, colorTexture: drawableTexture, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: framePreviouslyPredictedPose ?? matrix_identity_float4x4, simdDeviceAnchor: deviceAnchor)
-
                 let viewports = [renderViewports[i]]
                 let viewTransforms = [DummyMetalRenderer.renderViewTransforms[i]]
                 let viewTangents = [DummyMetalRenderer.renderTangents[i]]
@@ -673,11 +568,7 @@ class RealityKitClientSystem : System {
                 let rasterizationRateMap: MTLRasterizationRateMap? = nil
                 renderer.renderStreamingFrame(i, commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
             }
-            
-            
-            /*if isReprojected && useApplesReprojection {
-                LayerRenderer.Clock().wait(until: drawable.frameTiming.renderingDeadline)
-            }*/
+
             if isReprojected {
                 reprojectedFramesInARow += 1
                 if reprojectedFramesInARow > 90 {
@@ -697,14 +588,11 @@ class RealityKitClientSystem : System {
             // TODO: draw a cool loading logo
             // TODO: maybe also show the room in wireframe or something cool here
             
-            
             if EventHandler.shared.totalFramesRendered > 300 {
                 renderer.fadeInOverlayAlpha += 0.02
             }
             
             for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
-                //renderOverlay(eyeIdx: i, colorTexture: drawable.texture, commandBuffer: commandBuffer, framePose: matrix_identity_float4x4, simdDeviceAnchor: deviceAnchor)
-                
                 let viewports = [renderViewports[i]]
                 let viewTransforms = [DummyMetalRenderer.renderViewTransforms[i]]
                 let viewTangents = [DummyMetalRenderer.renderTangents[i]]
@@ -716,18 +604,9 @@ class RealityKitClientSystem : System {
                 
                 renderer.renderNothing(i, commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor)
                 
-                
                 renderer.renderOverlay(commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
-                //renderOverlay(eyeIdx: i, colorTexture: drawable.texture, commandBuffer: commandBuffer, framePose: matrix_identity_float4x4, simdDeviceAnchor: deviceAnchor)
             }
-            
-            //renderOverlay(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame, framePose: noFramePose ?? matrix_identity_float4x4)
-            //renderStreamingFrameDepth(drawable: drawable, commandBuffer: commandBuffer, queuedFrame: queuedFrame)
         }
-        
-        /*for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
-            renderOverlay(eyeIdx: i, colorTexture: drawable.texture, commandBuffer: commandBuffer, framePose: matrix_identity_float4x4, simdDeviceAnchor: deviceAnchor)
-        }*/
         
         renderer.coolPulsingColorsTime += 0.005
         if renderer.coolPulsingColorsTime > 4.0 {
@@ -744,12 +623,8 @@ class RealityKitClientSystem : System {
         EventHandler.shared.lastQueuedFrame = queuedFrame
         EventHandler.shared.lastQueuedFramePose = framePreviouslyPredictedPose
         
-        //commandBuffer.present(drawable)
         commandBuffer.commit()
-        //commandBuffer.waitUntilCompleted() // this is a load-bearing wait
         
-        
-        //print(CACurrentMediaTime() - lastSubmit)
         lastLastSubmit = lastSubmit
         lastSubmit = submitTime
         
