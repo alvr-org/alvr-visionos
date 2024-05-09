@@ -393,7 +393,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
 				DEVELOPMENT_TEAM = A2R992S5N3;
 				ENABLE_PREVIEWS = YES;
@@ -401,6 +401,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ALVR;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "For connecting to ALVR server on local network.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used for in game voice chat";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -432,7 +433,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
 				DEVELOPMENT_TEAM = A2R992S5N3;
 				ENABLE_PREVIEWS = YES;
@@ -440,6 +441,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ALVR;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "For connecting to ALVR server on local network.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used for in game voice chat";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
