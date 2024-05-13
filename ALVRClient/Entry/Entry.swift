@@ -117,7 +117,18 @@ struct Entry: View {
                            applyRangeSettings()
                        }
                        .frame(width: 100)
-                   }
+                    }
+                    
+                    Toggle(isOn: $settings.metalFxEnabled) {
+                        Text("Upscale stream to experimental render scale with MetalFX*")
+                        Text("*Only works with 40PPD renderer. Not recommended, thermal throttles quickly.")
+                        .font(.system(size: 10))
+                    }
+                    .toggleStyle(.switch)
+                    .onChange(of: settings.chromaKeyEnabled) {
+                        WorldTracker.shared.settings = settings
+                        saveAction()
+                    }
                     
                     Toggle(isOn: $settings.chromaKeyEnabled) {
                         Text("Enable Chroma Keyed Passthrough*")

@@ -62,6 +62,9 @@ class EventHandler: ObservableObject {
     var numberOfEventThreadRestarts: Int = 0
     var mdnsListener: NWListener? = nil
     
+    var viewWidth = 1920*2
+    var viewHeight = 1824*2
+    
     init() {}
     
     func initializeAlvr() {

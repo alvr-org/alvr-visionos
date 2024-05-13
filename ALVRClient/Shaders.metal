@@ -87,6 +87,7 @@ constant float2 EDGE_RATIO [[ function_constant(ALVRFunctionConstantFfrCommonSha
 constant bool CHROMAKEY_ENABLED [[ function_constant(ALVRFunctionConstantChromaKeyEnabled) ]];
 constant float3 CHROMAKEY_COLOR [[ function_constant(ALVRFunctionConstantChromaKeyColor) ]];
 constant float2 CHROMAKEY_LERP_DIST_RANGE [[ function_constant(ALVRFunctionConstantChromaKeyLerpDistRange) ]];
+constant bool REALITYKIT_ENABLED [[ function_constant(ALVRFunctionConstantRealityKitEnabled) ]];
 
 float2 TextureToEyeUV(float2 textureUV, bool isRightEye) {
     // flip distortion horizontally for right eye
@@ -279,16 +280,7 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
     //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
     //color = linearToDisplayP3 * color;
     
-    if (CHROMAKEY_ENABLED) {
-        float4 chromaKeyHSV = float4(rgb2hsv(CHROMAKEY_COLOR), 1.0);
-        float4 newHSV = float4(rgb2hsv(color.rgb), 1.0);
-        float mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, CHROMAKEY_LERP_DIST_RANGE);
-        
-        return float4(color.rgb, mask);
-    }
-    else {
-        return float4(color.rgb, 1.0);
-    }
+    return float4(color.rgb, 1.0);
 }
 
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
@@ -312,18 +304,43 @@ vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]]) {
     return out;
 }
 
-struct CopyFragmentOut {
-    float4 color [[color(0)]];
-};
-
-fragment CopyFragmentOut copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<float> in_tex) {
-    CopyFragmentOut out;
-    
+fragment float4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<float> in_tex) {
     constexpr sampler colorSampler(coord::normalized,
                     address::clamp_to_edge,
                     filter::linear);
     
     float2 uv = in.uv;
-    out.color = in_tex.sample(colorSampler, uv);
-    return out;
+    /*if (uv.y < 0.5) {
+        discard_fragment();
+    }*/
+    
+    float4 color = in_tex.sample(colorSampler, uv);
+    if (CHROMAKEY_ENABLED) {
+        float4 chromaKeyHSV = float4(rgb2hsv(CHROMAKEY_COLOR), 1.0);
+        float4 newHSV = float4(rgb2hsv(color.rgb), 1.0);
+        float mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, CHROMAKEY_LERP_DIST_RANGE);
+        
+        color = float4((color.rgb * mask) - (CHROMAKEY_COLOR * (1.0 - mask)), color.a * mask);
+        return color;
+        //return float4(color.rgb, mask);
+    }
+    else {
+        return color;
+    }
+}
+
+fragment float4 copyFragmentShaderWithAlphaCopy(CopyVertexOut in [[stage_in]], texture2d<float> in_tex, texture2d<float> in_tex_a) {
+    constexpr sampler colorSampler(coord::normalized,
+                    address::clamp_to_edge,
+                    filter::linear);
+    
+    float2 uv = in.uv;
+
+    // Make right eye non-MetalFX for A/B testing
+    /*if (uv.y < 0.5) {
+        //discard_fragment();
+        return in_tex_a.sample(colorSampler, uv);
+    }*/
+    
+    return float4(in_tex.sample(colorSampler, uv).rgb, in_tex_a.sample(colorSampler, uv).a);
 }

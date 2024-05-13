@@ -101,7 +101,7 @@ class Renderer {
     //
     // Chroma keying shader vars
     //
-    var chromaKeyEnabled = false // TODO
+    var chromaKeyEnabled = false
     var chromaKeyColor = simd_float3(0.0, 1.0, 0.0); // green
     
     //chromaKeyLerpDistRange is used to decide the amount of color to be used from either foreground or background
@@ -308,14 +308,28 @@ class Renderer {
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
     
-    class func buildCopyPipelineWithDevice(device: MTLDevice,
-                                             colorFormat: MTLPixelFormat) throws -> MTLRenderPipelineState {
+    func buildCopyPipelineWithDevice(device: MTLDevice,
+                                             colorFormat: MTLPixelFormat,
+                                             vertexShaderName: String,
+                                             fragmentShaderName: String) throws -> MTLRenderPipelineState {
         /// Build a render state pipeline object
 
         let library = device.makeDefaultLibrary()
+        
+        let fragmentConstants = MTLFunctionConstantValues()
+        if let settings = WorldTracker.shared.settings {
+            chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
+            chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
+            chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
+        }
+        var chromaKeyColorLinear = NonlinearToLinearRGB(chromaKeyColor)
+        fragmentConstants.setConstantValue(&chromaKeyEnabled, type: .bool, index: ALVRFunctionConstant.chromaKeyEnabled.rawValue)
+        fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
+        fragmentConstants.setConstantValue(&chromaKeyLerpDistRange, type: .float2, index: ALVRFunctionConstant.chromaKeyLerpDistRange.rawValue)
+        fragmentConstants.setConstantValue(&isRealityKit, type: .bool, index: ALVRFunctionConstant.realityKitEnabled.rawValue)
 
-        let vertexFunction = library?.makeFunction(name: "copyVertexShader")
-        let fragmentFunction = library?.makeFunction(name: "copyFragmentShader")
+        let vertexFunction = library?.makeFunction(name: vertexShaderName)
+        let fragmentFunction = try! library?.makeFunction(name: fragmentShaderName, constantValues: fragmentConstants)
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.label = "RenderPipeline"
@@ -371,7 +385,7 @@ class Renderer {
         let fragmentConstants = FFR.makeFunctionConstants(foveationVars)
         
         if let settings = WorldTracker.shared.settings {
-            chromaKeyEnabled = settings.chromaKeyEnabled
+            chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
             chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
             chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
         }
@@ -379,7 +393,7 @@ class Renderer {
         fragmentConstants.setConstantValue(&chromaKeyEnabled, type: .bool, index: ALVRFunctionConstant.chromaKeyEnabled.rawValue)
         fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
         fragmentConstants.setConstantValue(&chromaKeyLerpDistRange, type: .float2, index: ALVRFunctionConstant.chromaKeyLerpDistRange.rawValue)
-        
+        fragmentConstants.setConstantValue(&isRealityKit, type: .bool, index: ALVRFunctionConstant.realityKitEnabled.rawValue)
         
         let fragmentFunction = try library?.makeFunction(name: "videoFrameFragmentShader_" + variantName, constantValues: fragmentConstants)
 
@@ -791,7 +805,7 @@ class Renderer {
     }
     
     func renderStreamingFrameDepth(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?) {
-        if currentRenderColorFormat != renderTargetColor.pixelFormat {
+        if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return
         }
 
@@ -873,7 +887,7 @@ class Renderer {
     }
     
     func renderNothing(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
-        if currentRenderColorFormat != renderTargetColor.pixelFormat {
+        if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return
         }
         self.updateDynamicBufferState()
@@ -930,7 +944,7 @@ class Renderer {
     
     func renderOverlay(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4)
     {
-        if currentRenderColorFormat != renderTargetColor.pixelFormat {
+        if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return
         }
         // Toss out the depth buffer, keep colors
@@ -1021,7 +1035,7 @@ class Renderer {
     }
     
     func renderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
-        if currentRenderColorFormat != renderTargetColor.pixelFormat {
+        if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return
         }
 
