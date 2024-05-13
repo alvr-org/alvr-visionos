@@ -10,9 +10,12 @@ import Metal
 import MetalKit
 import Spatial
 import AVFoundation
+//#if !targetEnvironment(simulator)
+import MetalFX
+//#endif
 
 let renderWidth = Int(1920)
-let renderHeight = Int(1840)
+let renderHeight = Int(1824)
 let renderScale = 1.75
 let renderColorFormatSDR = MTLPixelFormat.bgra8Unorm_srgb // rgba8Unorm, rgba8Unorm_srgb, bgra8Unorm, bgra8Unorm_srgb, rgba16Float
 let renderColorFormatHDR = MTLPixelFormat.rgba16Float // bgr10_xr_srgb? rg11b10Float? rgb9e5?--rgb9e5 is probably not renderable.
@@ -22,6 +25,7 @@ let renderDepthFormat = MTLPixelFormat.depth16Unorm
 let renderViewCount = 1
 let renderZNear = 0.001
 let renderZFar = 100.0
+let rkFramesInFlight = 4
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
@@ -75,6 +79,7 @@ class VisionPro: NSObject, ObservableObject {
 
 struct RKQueuedFrame {
     let texture: MTLTexture
+    let upscaleTexture: MTLTexture
     let depthTexture: MTLTexture
     let timestamp: UInt64
     let transform: simd_float4x4
@@ -87,8 +92,10 @@ class RealityKitClientSystem : System {
     var drawableQueue: TextureResource.DrawableQueue? = nil
     private(set) var surfaceMaterial: ShaderGraphMaterial? = nil
     private var textureResource: TextureResource?
-    let passthroughPipelineState: MTLRenderPipelineState
-    let passthroughPipelineStateHDR: MTLRenderPipelineState
+    var passthroughPipelineState: MTLRenderPipelineState? = nil
+    var passthroughPipelineStateHDR: MTLRenderPipelineState? = nil
+    var passthroughPipelineStateWithAlpha: MTLRenderPipelineState? = nil
+    var passthroughPipelineStateWithAlphaHDR: MTLRenderPipelineState? = nil
     
     public let device: MTLDevice
     let commandQueue: MTLCommandQueue
@@ -98,6 +105,13 @@ class RealityKitClientSystem : System {
     var lastTexture: MTLTexture? = nil
     
     var frameIdx: Int = 0
+    
+    var currentOffscreenRenderWidth: Int = Int(Double(renderWidth) * renderScale)
+    var currentOffscreenRenderHeight: Int = Int(Double(renderHeight) * renderScale)
+    var currentOffscreenRenderScale: Float = Float(renderScale)
+    var lastOffscreenRenderScale: Float = Float(renderScale)
+    var metalFxScaler: MTLFXSpatialScaler? = nil
+    var metalFxEnabled = false
     
     var currentRenderWidth: Int = Int(Double(renderWidth) * renderScale)
     var currentRenderHeight: Int = Int(Double(renderHeight) * renderScale)
@@ -111,7 +125,7 @@ class RealityKitClientSystem : System {
     var lockOutRaising: Bool = false
     var dynamicallyAdjustRenderScale: Bool = false
     
-    var rkFramePool = [(MTLTexture, MTLTexture)]()
+    var rkFramePool = [(MTLTexture, MTLTexture, MTLTexture)]()
     var rkFrameQueue = [RKQueuedFrame]()
     var rkFramePoolLock = NSObject()
     
@@ -128,9 +142,44 @@ class RealityKitClientSystem : System {
     required init(scene: RealityKit.Scene) {
         self.renderer = Renderer(nil)
         renderer.rebuildRenderPipelines()
+        if let settings = WorldTracker.shared.settings {
+            metalFxEnabled = settings.metalFxEnabled
+
+            currentSetRenderScale = settings.realityKitRenderScale
+            if settings.realityKitRenderScale <= 0.0 {
+                currentRenderScale = Float(renderScale)
+                dynamicallyAdjustRenderScale = true
+            }
+            else {
+                currentRenderScale = currentSetRenderScale
+                dynamicallyAdjustRenderScale = false
+            }
+        }
+        
+        // TODO: SSAA after moving foveation out of frag shader?
+        if metalFxEnabled {
+            if let event = EventHandler.shared.streamEvent?.STREAMING_STARTED {
+                currentOffscreenRenderScale = Float(event.view_width) / Float(renderWidth)
+                
+                currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
+                currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
+            }
+        }
+        else {
+            currentOffscreenRenderScale = currentRenderScale
+            
+            currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
+            currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
+        }
+        
+        currentRenderWidth = Int(Double(renderWidth) * Double(currentRenderScale))
+        currentRenderHeight = Int(Double(renderHeight) * Double(currentRenderScale))
+        
         currentRenderColorFormat = renderer.currentRenderColorFormat
         currentDrawableRenderColorFormat = renderer.currentDrawableRenderColorFormat
         lastRenderColorFormat = currentRenderColorFormat
+        lastRenderScale = currentRenderScale
+        lastOffscreenRenderScale = currentOffscreenRenderScale
 
         let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget, .shaderRead, .shaderWrite], mipmapsMode: .none)
         self.drawableQueue = try? TextureResource.DrawableQueue(desc)
@@ -150,13 +199,9 @@ class RealityKitClientSystem : System {
 
         self.device = MTLCreateSystemDefaultDevice()!
         self.commandQueue = self.device.makeCommandQueue()!
-        
-        // Copy texture pipelines
-        self.passthroughPipelineState = try! Renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatSDR)
-        self.passthroughPipelineStateHDR = try! Renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR)
 
-        renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentRenderHeight), width: Double(currentRenderWidth), height: Double(currentRenderHeight), znear: renderZNear, zfar: renderZFar)
-        renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentRenderWidth), height: Double(currentRenderHeight), znear: renderZNear, zfar: renderZFar)
+        renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
+        renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
         
         Task {
             self.surfaceMaterial = try! await ShaderGraphMaterial(
@@ -173,45 +218,97 @@ class RealityKitClientSystem : System {
         self.visionPro.vsyncCallback = rkVsyncCallback
         
         recreateFramePool()
+        createMetalFXUpscaler()
+        createCopyShaderPipelines()
+        
+        print("Offscreen render res:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
+        print("RK render res:", currentRenderWidth, "x", currentRenderHeight, "(", currentRenderScale, ")")
 
         EventHandler.shared.handleRenderStarted()
         EventHandler.shared.renderStarted = true
     }
     
+    func createCopyShaderPipelines()
+    {
+        self.passthroughPipelineState = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatSDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader")
+        self.passthroughPipelineStateHDR = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader")
+        
+        self.passthroughPipelineStateWithAlpha = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatSDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShaderWithAlphaCopy")
+        self.passthroughPipelineStateWithAlphaHDR = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShaderWithAlphaCopy")
+    }
+    
+    func createMetalFXUpscaler()
+    {
+        let desc = MTLFXSpatialScalerDescriptor()
+        desc.inputWidth = currentOffscreenRenderWidth
+        desc.inputHeight = currentOffscreenRenderHeight*2
+        desc.outputWidth = currentRenderWidth
+        desc.outputHeight = currentRenderHeight*2
+        desc.colorTextureFormat = currentRenderColorFormat
+        desc.outputTextureFormat = currentDrawableRenderColorFormat
+        desc.colorProcessingMode = currentRenderColorFormat == renderColorFormatSDR ? .perceptual : .hdr
+        
+        metalFxScaler = desc.makeSpatialScaler(device: device)
+    }
+    
     func recreateFramePool() {
-        print("recreate frame pool")
+        createMetalFXUpscaler()
+        
         objc_sync_enter(rkFramePoolLock)
         let cnt = rkFramePool.count
         for _ in 0..<cnt {
-            let (texture, depthTexture) = self.rkFramePool.removeFirst()
-            if texture.width == currentRenderWidth && texture.pixelFormat == currentRenderColorFormat {
-                rkFramePool.append((texture, depthTexture))
+            let (texture, upscaleTexture, depthTexture) = self.rkFramePool.removeFirst()
+            if texture.width == currentOffscreenRenderWidth && upscaleTexture.width == currentRenderWidth && texture.pixelFormat == currentRenderColorFormat {
+                rkFramePool.append((texture, upscaleTexture, depthTexture))
             }
         }
         
-        while rkFramePool.count > 4 {
-            self.rkFramePool.removeFirst()
+        while rkFramePool.count > rkFramesInFlight {
+            let (a, b, c) = self.rkFramePool.removeFirst()
+            a.setPurgeableState(.volatile)
+            b.setPurgeableState(.volatile)
+            c.setPurgeableState(.volatile)
         }
 
-        for _ in rkFramePool.count..<4 {
+        for _ in rkFramePool.count..<rkFramesInFlight {
+            let upscaleTextureDesc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: currentDrawableRenderColorFormat,
+                                                                                  width: metalFxEnabled ? currentRenderWidth : 1,
+                                                                                  height: metalFxEnabled ? currentRenderHeight*2 : 1,
+                                                                                  mipmapped: false)
+            upscaleTextureDesc.usage = [.renderTarget, .shaderRead]
+            upscaleTextureDesc.storageMode = .private
+            let upscaleTexture = device.makeTexture(descriptor: upscaleTextureDesc)!
+            
+            // This is dumb, but for some reason we're memory constrainted randomly, so let's just
+            // steal memory from Apple's processes instead.
+            /*var upscaleTexture: MTLTexture? = nil
+            let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: metalFxEnabled ? currentRenderWidth : 1, height: metalFxEnabled ? currentRenderHeight*2 : 1, usage: [.renderTarget, .shaderRead], mipmapsMode: .none)
+            let dq = try? TextureResource.DrawableQueue(desc)
+            dq?.allowsNextDrawableTimeout = false
+            let d = try! dq?.nextDrawable()
+            if let d = d {
+                upscaleTexture = d.texture
+            }*/
+        
             let textureDesc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: currentRenderColorFormat,
-                                                                                  width: currentRenderWidth,
-                                                                                  height: currentRenderHeight*2,
+                                                                                  width: currentOffscreenRenderWidth,
+                                                                                  height: currentOffscreenRenderHeight*2,
                                                                                   mipmapped: false)
             textureDesc.usage = [.renderTarget, .shaderRead]
-            textureDesc.storageMode = .private
-            
+            textureDesc.storageMode = .shared
             let texture = device.makeTexture(descriptor: textureDesc)!
             
+            
+            
             let depthTextureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: renderDepthFormat,
-                                                                              width: currentRenderWidth,
-                                                                              height: currentRenderHeight*2,
+                                                                              width: currentOffscreenRenderWidth,
+                                                                              height: currentOffscreenRenderHeight*2,
                                                                               mipmapped: false)
             depthTextureDescriptor.usage = [.renderTarget, .shaderRead]
-            depthTextureDescriptor.storageMode = .private
+            depthTextureDescriptor.storageMode = .shared
             let depthTexture = device.makeTexture(descriptor: depthTextureDescriptor)!
         
-            rkFramePool.append((texture, depthTexture))
+            rkFramePool.append((texture, upscaleTexture, depthTexture))
         }
         objc_sync_exit(rkFramePoolLock)
     }
@@ -223,16 +320,80 @@ class RealityKitClientSystem : System {
                 objc_sync_exit(self.rkFramePoolLock)
                 return
             }
-            let (texture, depthTexture) = self.rkFramePool.removeFirst()
+            let (texture, upscaleTexture, depthTexture) = self.rkFramePool.removeFirst()
             objc_sync_exit(self.rkFramePoolLock)
-            if self.renderFrame(drawableTexture: texture, depthTexture: depthTexture) == nil {
+            if self.renderFrame(drawableTexture: texture, upscaleTexture: upscaleTexture, depthTexture: depthTexture) == nil {
                 objc_sync_enter(self.rkFramePoolLock)
-                self.rkFramePool.append((texture, depthTexture))
+                self.rkFramePool.append((texture, upscaleTexture, depthTexture))
                 objc_sync_exit(self.rkFramePoolLock)
             }
         }
     }
+    
+    func copyTextureToTexture(_ commandBuffer: MTLCommandBuffer, _ from: MTLTexture, _ to: MTLTexture) {
+            // Create a render pass descriptor
+            let renderPassDescriptor = MTLRenderPassDescriptor()
 
+            // Configure the render pass descriptor
+            renderPassDescriptor.colorAttachments[0].texture = to // Set the destination texture as the render target
+            renderPassDescriptor.colorAttachments[0].loadAction = .load
+            renderPassDescriptor.colorAttachments[0].storeAction = .store // Store the render target after rendering
+
+            // Create a render command encoder
+            guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+                fatalError("Failed to create render command encoder")
+            }
+            renderEncoder.setRenderPipelineState(to.pixelFormat == renderColorFormatDrawableHDR ? passthroughPipelineStateHDR! : passthroughPipelineState!)
+            renderEncoder.setFragmentTexture(from, index: 0)
+            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            renderEncoder.endEncoding()
+    }
+    
+    func copyTextureToTextureAndAlpha(_ commandBuffer: MTLCommandBuffer, _ from: MTLTexture, _ fromAlpha: MTLTexture, _ to: MTLTexture) {
+            // Create a render pass descriptor
+            let renderPassDescriptor = MTLRenderPassDescriptor()
+
+            // Configure the render pass descriptor
+            renderPassDescriptor.colorAttachments[0].texture = to // Set the destination texture as the render target
+            renderPassDescriptor.colorAttachments[0].loadAction = .load
+            renderPassDescriptor.colorAttachments[0].storeAction = .store // Store the render target after rendering
+
+            // Create a render command encoder
+            guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+                fatalError("Failed to create render command encoder")
+            }
+            renderEncoder.setRenderPipelineState(to.pixelFormat == renderColorFormatDrawableHDR ? passthroughPipelineStateWithAlphaHDR! : passthroughPipelineStateWithAlpha!)
+            renderEncoder.setFragmentTexture(from, index: 0)
+            renderEncoder.setFragmentTexture(fromAlpha, index: 1)
+            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            renderEncoder.endEncoding()
+    }
+    
+    func upscaleTextureToTexture(_ commandBuffer: MTLCommandBuffer, _ from: MTLTexture, _ to: MTLTexture)
+    {
+        /*if (from.width >= to.width && from.height >= to.height) || !metalFxEnabled {
+            copyTextureToTexture(commandBuffer, from, to)
+            return
+        }*/
+        
+        if to.width != currentRenderWidth || from.width != currentOffscreenRenderWidth || to.height != currentRenderHeight*2 || from.height != currentOffscreenRenderHeight*2 || to.pixelFormat != currentDrawableRenderColorFormat || from.pixelFormat != currentRenderColorFormat {
+            //copyTextureToTexture(commandBuffer, from, to)
+            return
+        }
+        
+        if let metalFxScaler = metalFxScaler {
+            metalFxScaler.colorTexture = from
+            metalFxScaler.outputTexture = to
+            metalFxScaler.encode(commandBuffer: commandBuffer)
+            //copyTextureToTexture(commandBuffer, from, to)
+            //copyTextureToTextureAndAlpha(commandBuffer, to, from, to)
+        }
+        else {
+            copyTextureToTexture(commandBuffer, from, to)
+        }
+    }
+
+    var rkFillUp = 2
     func update(context: SceneUpdateContext) {
         // RealityKit automatically calls this every frame for every scene.
         let plane = context.scene.findEntity(named: "video_plane") as? ModelEntity
@@ -242,10 +403,18 @@ class RealityKitClientSystem : System {
                     currentRenderScale -= 0.25
                 }
                 
-                // TODO: for some reason color format changes causes fps to drop to 45? 
-                if lastRenderScale != currentRenderScale || lastRenderColorFormat != currentRenderColorFormat {
+                // TODO: for some reason color format changes causes fps to drop to 45?
+                if lastRenderScale != currentRenderScale || lastOffscreenRenderScale != currentOffscreenRenderScale || lastRenderColorFormat != currentRenderColorFormat {
                     currentRenderWidth = Int(Double(renderWidth) * Double(currentRenderScale))
                     currentRenderHeight = Int(Double(renderHeight) * Double(currentRenderScale))
+                    
+                    // TODO: SSAA after moving foveation out of frag shader?
+                    if !metalFxEnabled {
+                        currentOffscreenRenderScale = currentRenderScale
+                    }
+                    
+                    currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
+                    currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
                 
                     // Recreate framebuffer
                     let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget, .shaderRead], mipmapsMode: .none)
@@ -253,18 +422,30 @@ class RealityKitClientSystem : System {
                     self.drawableQueue!.allowsNextDrawableTimeout = true
                     self.textureResource!.replace(withDrawables: self.drawableQueue!)
                     
-                    renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentRenderHeight), width: Double(currentRenderWidth), height: Double(currentRenderHeight), znear: renderZNear, zfar: renderZFar)
-                    renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentRenderWidth), height: Double(currentRenderHeight), znear: renderZNear, zfar: renderZFar)
+                    renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
+                    renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
                     self.lastFbChangeTime = CACurrentMediaTime()
                     
-                    print("Resolution changed to:", currentRenderWidth, "x", currentRenderHeight, "(", currentRenderScale, ")")
+                    print("Resolution changed!")
+                    print("Offscreen render res:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
+                    print("RK render res:", currentRenderWidth, "x", currentRenderHeight, "(", currentRenderScale, ")")
                     
                     self.recreateFramePool()
                 }
                 lastRenderScale = currentRenderScale
+                lastOffscreenRenderScale = currentOffscreenRenderScale
                 lastRenderColorFormat = currentRenderColorFormat
                 
+                if rkFillUp > 0 {
+                    rkFillUp -= 1
+                    if rkFillUp <= 0 {
+                        rkFillUp = 0
+                        return
+                    }
+                }
+
                 if rkFrameQueue.isEmpty {
+                    rkFillUp = 2
                     return
                 }
             
@@ -289,10 +470,15 @@ class RealityKitClientSystem : System {
                 if !rkFrameQueue.isEmpty {
                     while rkFrameQueue.count > 1 {
                         let pop = rkFrameQueue.removeFirst()
-                        if pop.texture.pixelFormat == currentRenderColorFormat && pop.texture.width == currentRenderWidth && rkFramePool.count < 4 {
+                        if pop.texture.pixelFormat == currentRenderColorFormat && pop.texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
                             objc_sync_enter(self.rkFramePoolLock)
-                            rkFramePool.append((pop.texture, pop.depthTexture))
+                            rkFramePool.append((pop.texture, pop.upscaleTexture, pop.depthTexture))
                             objc_sync_exit(self.rkFramePoolLock)
+                        }
+                        else  {
+                            pop.texture.setPurgeableState(.volatile)
+                            pop.upscaleTexture.setPurgeableState(.volatile)
+                            pop.depthTexture.setPurgeableState(.volatile)
                         }
                     }
         
@@ -300,12 +486,16 @@ class RealityKitClientSystem : System {
                     var planeTransform = frame.transform
                     let timestamp = frame.timestamp
                     let texture = frame.texture
+                    let upscaleTexture = frame.upscaleTexture
                     let depthTexture = frame.depthTexture
                     var vsyncTime = frame.vsyncTime
                     
-                    if frame.texture.width != drawable!.texture.width {
+                    /*if frame.texture.width != drawable!.texture.width {
+                        objc_sync_enter(self.rkFramePoolLock)
+                        rkFramePool.append((texture, depthTexture))
+                        objc_sync_exit(self.rkFramePoolLock)
                         return
-                    }
+                    }*/
                     
                     planeTransform.columns.3 -= planeTransform.columns.2 * rk_panel_depth
                     var scale = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
@@ -316,23 +506,9 @@ class RealityKitClientSystem : System {
                     guard let commandBuffer = commandQueue.makeCommandBuffer() else {
                         fatalError("Failed to create command buffer")
                     }
-
-                    // Create a render pass descriptor
-                    let renderPassDescriptor = MTLRenderPassDescriptor()
-
-                    // Configure the render pass descriptor
-                    renderPassDescriptor.colorAttachments[0].texture = drawable!.texture // Set the destination texture as the render target
-                    renderPassDescriptor.colorAttachments[0].loadAction = .clear // Clear the render target
-                    renderPassDescriptor.colorAttachments[0].storeAction = .store // Store the render target after rendering
-
-                    // Create a render command encoder
-                    guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-                        fatalError("Failed to create render command encoder")
-                    }
-                    renderEncoder.setRenderPipelineState(drawable!.texture.pixelFormat == renderColorFormatDrawableHDR ? passthroughPipelineStateHDR : passthroughPipelineState)
-                    renderEncoder.setFragmentTexture(texture, index: 0)
-                    renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-                    renderEncoder.endEncoding()
+                    
+                    //upscaleTextureToTexture(commandBuffer, texture, drawable!.texture)
+                    copyTextureToTexture(commandBuffer, metalFxEnabled ? upscaleTexture : texture, drawable!.texture)
 
                     let submitTime = CACurrentMediaTime()
                     commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
@@ -367,8 +543,13 @@ class RealityKitClientSystem : System {
                     
                     objc_sync_enter(rkFramePoolLock)
                     //print(texture.width, currentRenderWidth)
-                    if texture.pixelFormat == currentRenderColorFormat && texture.width == currentRenderWidth && rkFramePool.count < 4 {
-                        rkFramePool.append((texture, depthTexture))
+                    if texture.pixelFormat == currentRenderColorFormat && texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
+                        rkFramePool.append((texture, upscaleTexture, depthTexture))
+                    }
+                    else  {
+                        texture.setPurgeableState(.volatile)
+                        upscaleTexture.setPurgeableState(.volatile)
+                        depthTexture.setPurgeableState(.volatile)
                     }
                     objc_sync_exit(rkFramePoolLock)
                 }
@@ -380,7 +561,7 @@ class RealityKitClientSystem : System {
     }
     
     // TODO: Share this with Renderer somehow
-    func renderFrame(drawableTexture: MTLTexture, depthTexture: MTLTexture) -> (UInt64, simd_float4x4)? {
+    func renderFrame(drawableTexture: MTLTexture, upscaleTexture: MTLTexture, depthTexture: MTLTexture) -> (UInt64, simd_float4x4)? {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
         EventHandler.shared.totalFramesRendered += 1
@@ -397,14 +578,14 @@ class RealityKitClientSystem : System {
             sched_yield()
             
             // If visionOS skipped our last frame, let the queue fill up a bit
-            if EventHandler.shared.lastQueuedFrame != nil {
+            /*if EventHandler.shared.lastQueuedFrame != nil {
                 if EventHandler.shared.lastQueuedFrame!.timestamp != EventHandler.shared.lastSubmittedTimestamp && EventHandler.shared.frameQueue.count < 2 {
                     queuedFrame = EventHandler.shared.lastQueuedFrame
                     EventHandler.shared.framesRendered -= 1
                     isReprojected = false
                     break
                 }
-            }
+            }*/
             
             objc_sync_enter(EventHandler.shared.frameQueueLock)
             queuedFrame = EventHandler.shared.frameQueue.count > 0 ? EventHandler.shared.frameQueue.removeFirst() : nil
@@ -455,6 +636,7 @@ class RealityKitClientSystem : System {
                         self.renderer.rebuildRenderPipelines()
                         self.currentRenderColorFormat = self.renderer.currentRenderColorFormat
                         self.currentDrawableRenderColorFormat = self.renderer.currentDrawableRenderColorFormat
+                        createCopyShaderPipelines()
                         self.recreateFramePool()
                     //}
                     //rebuildThread.name = "Rebuild Render Pipelines Thread"
@@ -470,6 +652,28 @@ class RealityKitClientSystem : System {
             }
             
             if let settings = WorldTracker.shared.settings {
+                if metalFxEnabled != settings.metalFxEnabled {
+                    metalFxEnabled = settings.metalFxEnabled
+                    
+                    // TODO: SSAA after moving foveation out of frag shader?
+                    if metalFxEnabled {
+                        if let event = EventHandler.shared.streamEvent?.STREAMING_STARTED {
+                            currentOffscreenRenderScale = Float(event.view_width) / Float(renderWidth)
+                            
+                            currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
+                            currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
+                        }
+                    }
+                    else {
+                        currentOffscreenRenderScale = currentRenderScale
+                            
+                        currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
+                        currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
+                    }
+                    
+                    self.recreateFramePool()
+                }
+
                 if currentSetRenderScale != settings.realityKitRenderScale {
                     currentSetRenderScale = settings.realityKitRenderScale
                     if settings.realityKitRenderScale <= 0.0 {
@@ -488,6 +692,7 @@ class RealityKitClientSystem : System {
                         self.renderer.rebuildRenderPipelines()
                         self.currentRenderColorFormat = self.renderer.currentRenderColorFormat
                         self.currentDrawableRenderColorFormat = self.renderer.currentDrawableRenderColorFormat
+                        createCopyShaderPipelines()
                         self.recreateFramePool()
                     //}
                     //rebuildThread.name = "Rebuild Render Pipelines Thread"
@@ -523,16 +728,6 @@ class RealityKitClientSystem : System {
         }
         
         let planeTransform = deviceAnchor
-        
-        let submitTime = CACurrentMediaTime()
-        commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
-            //print((CACurrentMediaTime() - submitTime) * 1000.0)
-            let timestamp = queuedFrame?.timestamp ?? 0
-            let queuedFrame = RKQueuedFrame(texture: drawableTexture, depthTexture: depthTexture, timestamp: timestamp, transform: planeTransform, vsyncTime: self.visionPro.nextFrameTime)
-            if timestamp >= self.rkFrameQueue.last?.timestamp ?? timestamp {
-                self.rkFrameQueue.append(queuedFrame)
-            }
-        }
         
         // List of reasons to not display a frame
         var frameIsSuitableForDisplaying = true
@@ -623,6 +818,19 @@ class RealityKitClientSystem : System {
         EventHandler.shared.lastQueuedFrame = queuedFrame
         EventHandler.shared.lastQueuedFramePose = framePreviouslyPredictedPose
         
+        if metalFxEnabled {
+            upscaleTextureToTexture(commandBuffer, drawableTexture, upscaleTexture)
+        }
+        
+        let submitTime = CACurrentMediaTime()
+        commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
+            //print((CACurrentMediaTime() - submitTime) * 1000.0)
+            let timestamp = queuedFrame?.timestamp ?? 0
+            let queuedFrame = RKQueuedFrame(texture: drawableTexture, upscaleTexture: upscaleTexture, depthTexture: depthTexture, timestamp: timestamp, transform: planeTransform, vsyncTime: self.visionPro.nextFrameTime)
+            if timestamp >= self.rkFrameQueue.last?.timestamp ?? timestamp {
+                self.rkFrameQueue.append(queuedFrame)
+            }
+        }
         commandBuffer.commit()
         
         lastLastSubmit = lastSubmit

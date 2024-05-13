@@ -18,6 +18,7 @@ struct GlobalSettings: Codable {
     var chromaKeyColorB: Float = 16.0 / 255.0
     var dismissWindowOnEnter: Bool = true
     var realityKitRenderScale: Float = 1.75
+    var metalFxEnabled: Bool = false
     
     init() {}
     
@@ -36,6 +37,7 @@ struct GlobalSettings: Codable {
         self.chromaKeyColorB = try container.decodeIfPresent(Float.self, forKey: .chromaKeyColorB) ?? self.chromaKeyColorB
         self.dismissWindowOnEnter = try container.decodeIfPresent(Bool.self, forKey: .dismissWindowOnEnter) ?? self.dismissWindowOnEnter
         self.realityKitRenderScale = try container.decodeIfPresent(Float.self, forKey: .realityKitRenderScale) ?? self.realityKitRenderScale
+        self.metalFxEnabled = try container.decodeIfPresent(Bool.self, forKey: .metalFxEnabled) ?? self.metalFxEnabled
     }
 }
 
