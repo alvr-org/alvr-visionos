@@ -295,7 +295,7 @@ class RealityKitClientSystem : System {
                                                                                   height: currentOffscreenRenderHeight*2,
                                                                                   mipmapped: false)
             textureDesc.usage = [.renderTarget, .shaderRead]
-            textureDesc.storageMode = .shared
+            textureDesc.storageMode = .private
             let texture = device.makeTexture(descriptor: textureDesc)!
             
             
@@ -305,7 +305,7 @@ class RealityKitClientSystem : System {
                                                                               height: currentOffscreenRenderHeight*2,
                                                                               mipmapped: false)
             depthTextureDescriptor.usage = [.renderTarget, .shaderRead]
-            depthTextureDescriptor.storageMode = .shared
+            depthTextureDescriptor.storageMode = .private
             let depthTexture = device.makeTexture(descriptor: depthTextureDescriptor)!
         
             rkFramePool.append((texture, upscaleTexture, depthTexture))
@@ -336,16 +336,19 @@ class RealityKitClientSystem : System {
 
             // Configure the render pass descriptor
             renderPassDescriptor.colorAttachments[0].texture = to // Set the destination texture as the render target
-            renderPassDescriptor.colorAttachments[0].loadAction = .load
+            renderPassDescriptor.colorAttachments[0].loadAction = .dontCare // .load for partial copy
             renderPassDescriptor.colorAttachments[0].storeAction = .store // Store the render target after rendering
 
             // Create a render command encoder
             guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
                 fatalError("Failed to create render command encoder")
             }
+            renderEncoder.label = "Copy Texture to Texture"
+            renderEncoder.pushDebugGroup("Copy Texture to Texture")
             renderEncoder.setRenderPipelineState(to.pixelFormat == renderColorFormatDrawableHDR ? passthroughPipelineStateHDR! : passthroughPipelineState!)
             renderEncoder.setFragmentTexture(from, index: 0)
             renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            renderEncoder.popDebugGroup()
             renderEncoder.endEncoding()
     }
     
@@ -355,17 +358,20 @@ class RealityKitClientSystem : System {
 
             // Configure the render pass descriptor
             renderPassDescriptor.colorAttachments[0].texture = to // Set the destination texture as the render target
-            renderPassDescriptor.colorAttachments[0].loadAction = .load
+            renderPassDescriptor.colorAttachments[0].loadAction = .dontCare // .load for partial copy
             renderPassDescriptor.colorAttachments[0].storeAction = .store // Store the render target after rendering
 
             // Create a render command encoder
             guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
                 fatalError("Failed to create render command encoder")
             }
+            renderEncoder.label = "Copy Texture and Alpha to Texture"
+            renderEncoder.pushDebugGroup("Copy Texture and Alpha to Texture")
             renderEncoder.setRenderPipelineState(to.pixelFormat == renderColorFormatDrawableHDR ? passthroughPipelineStateWithAlphaHDR! : passthroughPipelineStateWithAlpha!)
             renderEncoder.setFragmentTexture(from, index: 0)
             renderEncoder.setFragmentTexture(fromAlpha, index: 1)
             renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            renderEncoder.popDebugGroup()
             renderEncoder.endEncoding()
     }
     
@@ -752,16 +758,33 @@ class RealityKitClientSystem : System {
         }
         
         if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
+            let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
+            let simdDeviceAnchor = deviceAnchor
+            let nearZ = renderZNear
+            let farZ = renderZFar
+            
+            let allViewports = renderViewports
+            let allViewTransforms = DummyMetalRenderer.renderViewTransforms
+            let allViewTangents = DummyMetalRenderer.renderTangents
+            let rasterizationRateMap: MTLRasterizationRateMap? = nil
+
+            if let encoder = renderer.beginRenderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: allViewports, viewTransforms: allViewTransforms, viewTangents: allViewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor) {
+                for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
+                    let viewports = [renderViewports[i]]
+                    let viewTransforms = [DummyMetalRenderer.renderViewTransforms[i]]
+                    let viewTangents = [DummyMetalRenderer.renderTangents[i]]
+                    
+                    
+                    renderer.renderStreamingFrame(i, commandBuffer: commandBuffer, renderEncoder: encoder, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+                }
+                renderer.endRenderStreamingFrame(renderEncoder: encoder)
+            }
+            
             for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
-                let viewports = [renderViewports[i]]
-                let viewTransforms = [DummyMetalRenderer.renderViewTransforms[i]]
-                let viewTangents = [DummyMetalRenderer.renderTangents[i]]
-                let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
-                let simdDeviceAnchor = deviceAnchor
-                let nearZ = renderZNear
-                let farZ = renderZFar
-                let rasterizationRateMap: MTLRasterizationRateMap? = nil
-                renderer.renderStreamingFrame(i, commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+                    let viewports = [renderViewports[i]]
+                    let viewTransforms = [DummyMetalRenderer.renderViewTransforms[i]]
+                    let viewTangents = [DummyMetalRenderer.renderTangents[i]]
+                    renderer.renderStreamingFrameOverlays(i, commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
             }
 
             if isReprojected {

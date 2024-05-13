@@ -44,7 +44,6 @@ typedef struct
     matrix_float4x4 modelViewMatrixFrame;
     matrix_float4x4 modelViewMatrix;
     simd_float4 tangents;
-    uint32_t which;
 } Uniforms;
 
 typedef struct
