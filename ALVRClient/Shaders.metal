@@ -148,13 +148,13 @@ float2 decompressAxisAlignedCoord(float2 uv) {
 // VERTEX_SHADER
 
 ColorInOut videoFrameVertexShaderCommon(uint vertexID [[vertex_id]],
-                                int which,
+                               int which,
                                matrix_float4x4 projectionMatrix,
                                matrix_float4x4 modelViewMatrixFrame,
                                simd_float4 tangents)
 {
     ColorInOut out;
-    
+
     float2 uv = float2(float((vertexID << uint(1)) & 2u) * 0.5, 1.0 - (float(vertexID & 2u) * 0.5));
     float4 position = float4((uv * float2(2.0, -2.0)) + float2(-1.0, 1.0), -1.0, 1.0);
 
@@ -184,10 +184,10 @@ vertex ColorInOut videoFrameVertexShader(uint vertexID [[vertex_id]],
                                ushort amp_id [[amplification_id]],
                                constant UniformsArray & uniformsArray [[ buffer(BufferIndexUniforms) ]])
 {
-
-    Uniforms uniforms = uniformsArray.uniforms[amp_id];
+    int which = (vertexID >= 4 ? 1 : 0) + amp_id;
+    Uniforms uniforms = uniformsArray.uniforms[which];
     
-    return videoFrameVertexShaderCommon(vertexID, uniforms.which, uniforms.projectionMatrix, uniforms.modelViewMatrixFrame, uniforms.tangents);
+    return videoFrameVertexShaderCommon(vertexID, which, uniforms.projectionMatrix, uniforms.modelViewMatrixFrame, uniforms.tangents);
 }
 
 float3 NonlinearToLinearRGB(float3 color) {
