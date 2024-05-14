@@ -88,6 +88,7 @@ constant bool CHROMAKEY_ENABLED [[ function_constant(ALVRFunctionConstantChromaK
 constant float3 CHROMAKEY_COLOR [[ function_constant(ALVRFunctionConstantChromaKeyColor) ]];
 constant float2 CHROMAKEY_LERP_DIST_RANGE [[ function_constant(ALVRFunctionConstantChromaKeyLerpDistRange) ]];
 constant bool REALITYKIT_ENABLED [[ function_constant(ALVRFunctionConstantRealityKitEnabled) ]];
+constant bool METALFX_ENABLED [[ function_constant(ALVRFunctionConstantMetalFXEnabled) ]];
 
 float2 TextureToEyeUV(float2 textureUV, bool isRightEye) {
     // flip distortion horizontally for right eye
@@ -210,10 +211,30 @@ float3 EncodingNonlinearToLinearRGB(float3 color, float gamma) {
     return ret;
 }
 
-float colorclose_hsv(float3 hsv, float3 keyHsv, float2 tol)
+half3 NonlinearToLinearRGB_half(half3 color) {
+    const half DIV12 = 1. / 12.92;
+    const half DIV1 = 1. / 1.055;
+    const half THRESHOLD = 0.04045;
+    const half3 GAMMA = half3(2.4);
+        
+    half3 condition = half3(color.r < THRESHOLD, color.g < THRESHOLD, color.b < THRESHOLD);
+    half3 lowValues = color * DIV12;
+    half3 highValues = pow((color + 0.055) * DIV1, GAMMA);
+    return condition * lowValues + (1.0 - condition) * highValues;
+}
+
+half3 EncodingNonlinearToLinearRGB_half(half3 color, half gamma) {
+    half3 ret;
+    ret.r = color.r < 0.0 ? color.r : pow(color.r, gamma);
+    ret.g = color.g < 0.0 ? color.g : pow(color.g, gamma);
+    ret.b = color.b < 0.0 ? color.b : pow(color.b, gamma);
+    return ret;
+}
+
+half colorclose_hsv(half3 hsv, half3 keyHsv, half2 tol)
 {
-    float3 weights = float3(4., 1., 2.);
-    float tmp = length(weights * (keyHsv - hsv));
+    half3 weights = half3(4., 1., 2.);
+    half tmp = length(weights * (keyHsv - hsv));
     if (tmp < tol.x)
       return 0.0;
    	else if (tmp < tol.y)
@@ -222,11 +243,11 @@ float colorclose_hsv(float3 hsv, float3 keyHsv, float2 tol)
       return 1.0;
 }
 
-float3 rgb2hsv(float3 rgb) {
-    float Cmax = max(rgb.r, max(rgb.g, rgb.b));
-    float Cmin = min(rgb.r, min(rgb.g, rgb.b));
-    float delta = Cmax - Cmin;
-    float3 hsv = float3(0., 0., Cmax);
+half3 rgb2hsv(half3 rgb) {
+    half Cmax = max(rgb.r, max(rgb.g, rgb.b));
+    half Cmin = min(rgb.r, min(rgb.g, rgb.b));
+    half delta = Cmax - Cmin;
+    half3 hsv = half3(0., 0., Cmax);
 
     if(Cmax > Cmin) {
         hsv.y = delta / Cmax;
@@ -246,7 +267,7 @@ float3 rgb2hsv(float3 rgb) {
     return hsv;
 }
 
-fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
+fragment half4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<half> in_tex_y, texture2d<half> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
 // https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
     
     float2 sampleCoord;
@@ -259,14 +280,14 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
     constexpr sampler colorSampler(mip_filter::linear,
                                    mag_filter::linear,
                                    min_filter::linear);
-    float4 ySample = in_tex_y.sample(colorSampler, sampleCoord);
-    float4 uvSample = in_tex_uv.sample(colorSampler, sampleCoord);
-    float4 ycbcr = float4(ySample.r, uvSample.rg, 1.0f);
+    half4 ySample = in_tex_y.sample(colorSampler, sampleCoord);
+    half4 uvSample = in_tex_uv.sample(colorSampler, sampleCoord);
+    half4 ycbcr = half4(ySample.r, uvSample.rg, 1.0f);
     
-    float3 rgb_uncorrect = (encodingUniform.yuvTransform * ycbcr).rgb;
+    half3 rgb_uncorrect = half3((matrix_half4x4(encodingUniform.yuvTransform) * ycbcr).rgb);
     
-    float3 color = NonlinearToLinearRGB(rgb_uncorrect);
-    color = EncodingNonlinearToLinearRGB(color, encodingUniform.encodingGamma);
+    half3 color = NonlinearToLinearRGB_half(rgb_uncorrect);
+    color = EncodingNonlinearToLinearRGB_half(color, encodingUniform.encodingGamma);
     
     // Brighten the scene to examine blocking artifacts/smearing
     //color = pow(color, 1.0 / 2.4);
@@ -276,11 +297,11 @@ fragment float4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in
         float3(-0.2247, 1.0419, -0.0786),
         float3(0.0, 0.0, 1.0979),
     };
-
+    
     //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
     //color = linearToDisplayP3 * color;
     
-    return float4(color.rgb, 1.0);
+    return half4(half3(color.rgb), 1.0);
 }
 
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
@@ -304,7 +325,7 @@ vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]]) {
     return out;
 }
 
-fragment float4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<float> in_tex) {
+fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<half> in_tex) {
     constexpr sampler colorSampler(coord::normalized,
                     address::clamp_to_edge,
                     filter::linear);
@@ -314,13 +335,19 @@ fragment float4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<floa
         discard_fragment();
     }*/
     
-    float4 color = in_tex.sample(colorSampler, uv);
+    half4 color = in_tex.sample(colorSampler, uv);
+    if (color.a <= 0.0) {
+        discard_fragment();
+    }
     if (CHROMAKEY_ENABLED) {
-        float4 chromaKeyHSV = float4(rgb2hsv(CHROMAKEY_COLOR), 1.0);
-        float4 newHSV = float4(rgb2hsv(color.rgb), 1.0);
-        float mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, CHROMAKEY_LERP_DIST_RANGE);
+        half4 chromaKeyHSV = half4(rgb2hsv(half3(CHROMAKEY_COLOR)), 1.0);
+        half4 newHSV = half4(rgb2hsv(color.rgb), 1.0);
+        half mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, half2(CHROMAKEY_LERP_DIST_RANGE));
+        if (mask <= 0.0) {
+            discard_fragment();
+        }
         
-        color = float4((color.rgb * mask) - (CHROMAKEY_COLOR * (1.0 - mask)), color.a * mask);
+        color = half4((color.rgb * mask) - (half3(CHROMAKEY_COLOR) * (1.0 - mask)), color.a * mask);
         return color;
         //return float4(color.rgb, mask);
     }
@@ -329,7 +356,7 @@ fragment float4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<floa
     }
 }
 
-fragment float4 copyFragmentShaderWithAlphaCopy(CopyVertexOut in [[stage_in]], texture2d<float> in_tex, texture2d<float> in_tex_a) {
+fragment half4 copyFragmentShaderWithAlphaCopy(CopyVertexOut in [[stage_in]], texture2d<half> in_tex, texture2d<half> in_tex_a) {
     constexpr sampler colorSampler(coord::normalized,
                     address::clamp_to_edge,
                     filter::linear);
@@ -342,5 +369,5 @@ fragment float4 copyFragmentShaderWithAlphaCopy(CopyVertexOut in [[stage_in]], t
         return in_tex_a.sample(colorSampler, uv);
     }*/
     
-    return float4(in_tex.sample(colorSampler, uv).rgb, in_tex_a.sample(colorSampler, uv).a);
+    return half4(in_tex.sample(colorSampler, uv).rgb, in_tex_a.sample(colorSampler, uv).a);
 }
