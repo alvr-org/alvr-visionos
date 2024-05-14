@@ -26,6 +26,7 @@ let renderViewCount = 1
 let renderZNear = 0.001
 let renderZFar = 100.0
 let rkFramesInFlight = 4
+let renderDoStreamSSAA = true
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
@@ -157,7 +158,7 @@ class RealityKitClientSystem : System {
         }
         
         // TODO: SSAA after moving foveation out of frag shader?
-        if metalFxEnabled {
+        if metalFxEnabled || renderDoStreamSSAA {
             if let event = EventHandler.shared.streamEvent?.STREAMING_STARTED {
                 currentOffscreenRenderScale = Float(event.view_width) / Float(renderWidth)
                 
@@ -181,7 +182,7 @@ class RealityKitClientSystem : System {
         lastRenderScale = currentRenderScale
         lastOffscreenRenderScale = currentOffscreenRenderScale
 
-        let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget, .shaderRead, .shaderWrite], mipmapsMode: .none)
+        let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], mipmapsMode: .none)
         self.drawableQueue = try? TextureResource.DrawableQueue(desc)
         self.drawableQueue!.allowsNextDrawableTimeout = true
         
@@ -278,18 +279,8 @@ class RealityKitClientSystem : System {
             upscaleTextureDesc.usage = [.renderTarget, .shaderRead]
             upscaleTextureDesc.storageMode = .private
             let upscaleTexture = device.makeTexture(descriptor: upscaleTextureDesc)!
-            
-            // This is dumb, but for some reason we're memory constrainted randomly, so let's just
-            // steal memory from Apple's processes instead.
-            /*var upscaleTexture: MTLTexture? = nil
-            let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: metalFxEnabled ? currentRenderWidth : 1, height: metalFxEnabled ? currentRenderHeight*2 : 1, usage: [.renderTarget, .shaderRead], mipmapsMode: .none)
-            let dq = try? TextureResource.DrawableQueue(desc)
-            dq?.allowsNextDrawableTimeout = false
-            let d = try! dq?.nextDrawable()
-            if let d = d {
-                upscaleTexture = d.texture
-            }*/
-        
+
+            // TODO: VRR the edges when FFR is enabled (or always)
             let textureDesc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: currentRenderColorFormat,
                                                                                   width: currentOffscreenRenderWidth,
                                                                                   height: currentOffscreenRenderHeight*2,
@@ -336,8 +327,9 @@ class RealityKitClientSystem : System {
 
             // Configure the render pass descriptor
             renderPassDescriptor.colorAttachments[0].texture = to // Set the destination texture as the render target
-            renderPassDescriptor.colorAttachments[0].loadAction = .dontCare // .load for partial copy
+            renderPassDescriptor.colorAttachments[0].loadAction = .clear // .load for partial copy
             renderPassDescriptor.colorAttachments[0].storeAction = .store // Store the render target after rendering
+            renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
 
             // Create a render command encoder
             guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
@@ -415,7 +407,7 @@ class RealityKitClientSystem : System {
                     currentRenderHeight = Int(Double(renderHeight) * Double(currentRenderScale))
                     
                     // TODO: SSAA after moving foveation out of frag shader?
-                    if !metalFxEnabled {
+                    if !metalFxEnabled && !renderDoStreamSSAA {
                         currentOffscreenRenderScale = currentRenderScale
                     }
                     
@@ -423,7 +415,7 @@ class RealityKitClientSystem : System {
                     currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
                 
                     // Recreate framebuffer
-                    let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget, .shaderRead], mipmapsMode: .none)
+                    let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], mipmapsMode: .none)
                     self.drawableQueue = try? TextureResource.DrawableQueue(desc)
                     self.drawableQueue!.allowsNextDrawableTimeout = true
                     self.textureResource!.replace(withDrawables: self.drawableQueue!)
@@ -584,14 +576,14 @@ class RealityKitClientSystem : System {
             sched_yield()
             
             // If visionOS skipped our last frame, let the queue fill up a bit
-            /*if EventHandler.shared.lastQueuedFrame != nil {
+            if EventHandler.shared.lastQueuedFrame != nil {
                 if EventHandler.shared.lastQueuedFrame!.timestamp != EventHandler.shared.lastSubmittedTimestamp && EventHandler.shared.frameQueue.count < 2 {
                     queuedFrame = EventHandler.shared.lastQueuedFrame
                     EventHandler.shared.framesRendered -= 1
                     isReprojected = false
                     break
                 }
-            }*/
+            }
             
             objc_sync_enter(EventHandler.shared.frameQueueLock)
             queuedFrame = EventHandler.shared.frameQueue.count > 0 ? EventHandler.shared.frameQueue.removeFirst() : nil
@@ -619,16 +611,14 @@ class RealityKitClientSystem : System {
         }
         let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
-        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-            fatalError("Failed to create command buffer")
-        }
-        
         if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
             alvr_report_compositor_start(queuedFrame!.timestamp)
         }
 
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
             let ipd = DummyMetalRenderer.renderViewTransforms.count > 1 ? simd_length(DummyMetalRenderer.renderViewTransforms[0].columns.3 - DummyMetalRenderer.renderViewTransforms[1].columns.3) : 0.063
+            
+            var needsPipelineRebuild = false
             if abs(EventHandler.shared.lastIpd - ipd) > 0.001 {
                 print("Send view config")
                 if EventHandler.shared.lastIpd != -1 {
@@ -638,15 +628,7 @@ class RealityKitClientSystem : System {
                     EventHandler.shared.framesRendered = 0
                     renderer.lastReconfigureTime = CACurrentMediaTime()
                     
-                    //let rebuildThread = Thread {
-                        self.renderer.rebuildRenderPipelines()
-                        self.currentRenderColorFormat = self.renderer.currentRenderColorFormat
-                        self.currentDrawableRenderColorFormat = self.renderer.currentDrawableRenderColorFormat
-                        createCopyShaderPipelines()
-                        self.recreateFramePool()
-                    //}
-                    //rebuildThread.name = "Rebuild Render Pipelines Thread"
-                    //rebuildThread.start()
+                    needsPipelineRebuild = true
                 }
                 let leftAngles = atan(DummyMetalRenderer.renderTangents[0])
                 let rightAngles = DummyMetalRenderer.renderViewTransforms.count > 1 ? atan(DummyMetalRenderer.renderTangents[1]) : leftAngles
@@ -660,9 +642,10 @@ class RealityKitClientSystem : System {
             if let settings = WorldTracker.shared.settings {
                 if metalFxEnabled != settings.metalFxEnabled {
                     metalFxEnabled = settings.metalFxEnabled
+                    renderer.isUsingMetalFX = metalFxEnabled
                     
                     // TODO: SSAA after moving foveation out of frag shader?
-                    if metalFxEnabled {
+                    if metalFxEnabled || renderDoStreamSSAA {
                         if let event = EventHandler.shared.streamEvent?.STREAMING_STARTED {
                             currentOffscreenRenderScale = Float(event.view_width) / Float(renderWidth)
                             
@@ -677,7 +660,7 @@ class RealityKitClientSystem : System {
                         currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
                     }
                     
-                    self.recreateFramePool()
+                    needsPipelineRebuild = true
                 }
 
                 if currentSetRenderScale != settings.realityKitRenderScale {
@@ -694,21 +677,17 @@ class RealityKitClientSystem : System {
 
                 if CACurrentMediaTime() - renderer.lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != renderer.chromaKeyEnabled || settings.chromaKeyColorR != renderer.chromaKeyColor.x || settings.chromaKeyColorG != renderer.chromaKeyColor.y || settings.chromaKeyColorB != renderer.chromaKeyColor.z || settings.chromaKeyDistRangeMin != renderer.chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != renderer.chromaKeyLerpDistRange.y) {
                     renderer.lastReconfigureTime = CACurrentMediaTime()
-                    //let rebuildThread = Thread {
-                        self.renderer.rebuildRenderPipelines()
-                        self.currentRenderColorFormat = self.renderer.currentRenderColorFormat
-                        self.currentDrawableRenderColorFormat = self.renderer.currentDrawableRenderColorFormat
-                        createCopyShaderPipelines()
-                        self.recreateFramePool()
-                    //}
-                    //rebuildThread.name = "Rebuild Render Pipelines Thread"
-                    //rebuildThread.start()
+                    needsPipelineRebuild = true
                 }
             }
-        }
-        
-        if currentRenderColorFormat != lastRenderColorFormat {
-            return nil
+            
+            if needsPipelineRebuild {
+                self.renderer.rebuildRenderPipelines()
+                self.currentRenderColorFormat = self.renderer.currentRenderColorFormat
+                self.currentDrawableRenderColorFormat = self.renderer.currentDrawableRenderColorFormat
+                createCopyShaderPipelines()
+                self.recreateFramePool()
+            }
         }
         
         objc_sync_enter(EventHandler.shared.frameQueueLock)
@@ -717,8 +696,10 @@ class RealityKitClientSystem : System {
         
         let vsyncTime = visionPro.nextFrameTime
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
-        //let deviceAnchor = framePreviouslyPredictedPose ?? matrix_identity_float4x4
-        let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
+        var deviceAnchor = framePreviouslyPredictedPose ?? matrix_identity_float4x4
+        if renderer.fadeInOverlayAlpha > 0.0 {
+            deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
+        }
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized {
@@ -731,6 +712,14 @@ class RealityKitClientSystem : System {
             let targetTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
             WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, delay: 0.0)
+        }
+        
+        if currentRenderColorFormat != lastRenderColorFormat {
+            return nil
+        }
+        
+        if isReprojected && renderer.fadeInOverlayAlpha <= 0.0 {
+            return nil
         }
         
         let planeTransform = deviceAnchor
@@ -755,6 +744,10 @@ class RealityKitClientSystem : System {
         
         if let videoFormat = EventHandler.shared.videoFormat {
             renderer.currentYuvTransform = VideoHandler.getYUVTransformForVideoFormat(videoFormat)
+        }
+        
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create command buffer")
         }
         
         if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
@@ -855,6 +848,8 @@ class RealityKitClientSystem : System {
             }
         }
         commandBuffer.commit()
+        
+        //print(submitTime - lastSubmit)
         
         lastLastSubmit = lastSubmit
         lastSubmit = submitTime

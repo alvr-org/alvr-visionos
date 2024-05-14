@@ -94,6 +94,7 @@ class Renderer {
     
     // More readable helper var than layerRenderer == nil
     var isRealityKit = false
+    var isUsingMetalFX = false
     var hdrEnabled = false
     var currentRenderColorFormat = renderColorFormatSDR
     var currentDrawableRenderColorFormat = renderColorFormatDrawableSDR
@@ -326,6 +327,7 @@ class Renderer {
         fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
         fragmentConstants.setConstantValue(&chromaKeyLerpDistRange, type: .float2, index: ALVRFunctionConstant.chromaKeyLerpDistRange.rawValue)
         fragmentConstants.setConstantValue(&isRealityKit, type: .bool, index: ALVRFunctionConstant.realityKitEnabled.rawValue)
+        fragmentConstants.setConstantValue(&isUsingMetalFX, type: .bool, index: ALVRFunctionConstant.metalFXEnabled.rawValue)
 
         let vertexFunction = library?.makeFunction(name: vertexShaderName)
         let fragmentFunction = try! library?.makeFunction(name: fragmentShaderName, constantValues: fragmentConstants)
@@ -392,6 +394,7 @@ class Renderer {
         fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
         fragmentConstants.setConstantValue(&chromaKeyLerpDistRange, type: .float2, index: ALVRFunctionConstant.chromaKeyLerpDistRange.rawValue)
         fragmentConstants.setConstantValue(&isRealityKit, type: .bool, index: ALVRFunctionConstant.realityKitEnabled.rawValue)
+        fragmentConstants.setConstantValue(&isUsingMetalFX, type: .bool, index: ALVRFunctionConstant.metalFXEnabled.rawValue)
         
         let fragmentFunction = try library?.makeFunction(name: "videoFrameFragmentShader_" + variantName, constantValues: fragmentConstants)
 
