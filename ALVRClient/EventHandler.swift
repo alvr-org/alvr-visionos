@@ -318,7 +318,7 @@ class EventHandler: ObservableObject {
 
                     objc_sync_enter(frameQueueLock)
                     framesSinceLastDecode = 0
-                    if frameQueueLastTimestamp != timestamp
+                    if frameQueueLastTimestamp != timestamp || true
                     {
                         alvr_report_frame_decoded(timestamp)
 
