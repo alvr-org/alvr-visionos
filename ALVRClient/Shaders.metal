@@ -277,7 +277,7 @@ fragment half4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]
         sampleCoord = in.texCoord;
     }
     
-    constexpr sampler colorSampler(mip_filter::linear,
+    constexpr sampler colorSampler(mip_filter::none,
                                    mag_filter::linear,
                                    min_filter::linear);
     half4 ySample = in_tex_y.sample(colorSampler, sampleCoord);
@@ -328,7 +328,7 @@ vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]]) {
 fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<half> in_tex) {
     constexpr sampler colorSampler(coord::normalized,
                     address::clamp_to_edge,
-                    filter::linear);
+                    filter::bicubic);
     
     float2 uv = in.uv;
     /*if (uv.y < 0.5) {
@@ -357,9 +357,9 @@ fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<half>
 }
 
 fragment half4 copyFragmentShaderWithAlphaCopy(CopyVertexOut in [[stage_in]], texture2d<half> in_tex, texture2d<half> in_tex_a) {
-    constexpr sampler colorSampler(coord::normalized,
-                    address::clamp_to_edge,
-                    filter::linear);
+    constexpr sampler colorSampler(mip_filter::none,
+                                   mag_filter::bicubic,
+                                   min_filter::bicubic);
     
     float2 uv = in.uv;
 

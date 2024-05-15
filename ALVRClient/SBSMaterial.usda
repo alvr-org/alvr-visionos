@@ -69,7 +69,7 @@ def Xform "Root"
             uniform token info:id = "ND_tiledimage_color4"
             color4f inputs:default
             asset inputs:file.connect = </Root/SBSMaterial.inputs:texture>
-            string inputs:filtertype
+            string inputs:filtertype = "cubic"
             float2 inputs:realworldimagesize
             float2 inputs:realworldtilesize
             float2 inputs:texcoord
@@ -78,7 +78,7 @@ def Xform "Root"
             color4f outputs:out
             float2 ui:nodegraph:node:pos = (-441.85236, -42.11212)
             float2 ui:nodegraph:node:size = (158.5, 235)
-            int ui:nodegraph:node:stackingOrder = 617
+            int ui:nodegraph:node:stackingOrder = 622
         }
 
         def Shader "Right"
@@ -86,7 +86,7 @@ def Xform "Root"
             uniform token info:id = "ND_tiledimage_color4"
             color4f inputs:default
             asset inputs:file.connect = </Root/SBSMaterial.inputs:texture>
-            string inputs:filtertype
+            string inputs:filtertype = "cubic"
             float2 inputs:realworldimagesize
             float2 inputs:realworldtilesize
             float2 inputs:texcoord
@@ -95,7 +95,7 @@ def Xform "Root"
             color4f outputs:out
             float2 ui:nodegraph:node:pos = (-450.0672, 220.97772)
             float2 ui:nodegraph:node:size = (158.5, 235)
-            int ui:nodegraph:node:stackingOrder = 616
+            int ui:nodegraph:node:stackingOrder = 621
         }
 
         def Shader "UnlitSurface"
