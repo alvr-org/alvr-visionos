@@ -84,6 +84,11 @@ struct Entry: View {
                         .font(.system(size: 10))
                     }
                     .toggleStyle(.switch)
+                    
+                    Toggle(isOn: $settings.emulatedPinchInteractions) {
+                        Text("Emulate pinch interactions as controller inputs")
+                    }
+                    .toggleStyle(.switch)
                 }
                 .frame(minWidth: 450)
                 .padding()

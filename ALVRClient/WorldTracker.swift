@@ -83,6 +83,11 @@ extension simd_float4
     {
         return (self.x, self.y, self.z)
     }
+    
+    func asFloat3() -> simd_float3
+    {
+        return simd_float3(self.x, self.y, self.z)
+    }
 }
 
 extension simd_quatd
@@ -91,6 +96,19 @@ extension simd_quatd
     {
         return simd_quatf(ix: Float(self.vector.x), iy: Float(self.vector.y), iz: Float(self.vector.z), r: Float(self.vector.w))
     }
+}
+
+func simd_look(at: SIMD3<Float>, up: SIMD3<Float> = SIMD3<Float>(0, 1, 0)) -> simd_float4x4 {
+    let zAxis = normalize(at)
+    let xAxis = normalize(cross(up, zAxis))
+    let yAxis = normalize(cross(zAxis, xAxis))
+    
+    return simd_float4x4(
+        simd_float4(xAxis, 0),
+        simd_float4(yAxis, 0),
+        simd_float4(zAxis, 0),
+        simd_float4(0, 0, 0, 1)
+    )
 }
 
 class WorldTracker {
@@ -216,6 +234,25 @@ class WorldTracker {
     static let leftForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
     static let rightForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(1.0, 0.0, 0.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(1.0, 0.0, 0.0))
     var testPosition = simd_float3(0.0, 0.0, 0.0)
+    
+    // Gaze rays -> controller emulation state
+    var leftSelectionRayId = -1
+    var leftSelectionRayOrigin = simd_float3(0.0, 0.0, 0.0)
+    var leftSelectionRayDirection = simd_float3(0.0, 0.0, 0.0)
+    var leftPinchStartPosition = simd_float3(0.0, 0.0, 0.0)
+    var leftPinchCurrentPosition = simd_float3(0.0, 0.0, 0.0)
+    var leftIsPinching = false
+    var lastLeftIsPinching = false
+    var leftPinchTrigger: Float = 0.0
+    
+    var rightSelectionRayId = -1
+    var rightSelectionRayOrigin = simd_float3(0.0, 0.0, 0.0)
+    var rightSelectionRayDirection = simd_float3(0.0, 0.0, 0.0)
+    var rightPinchStartPosition = simd_float3(0.0, 0.0, 0.0)
+    var rightPinchCurrentPosition = simd_float3(0.0, 0.0, 0.0)
+    var rightIsPinching = false
+    var lastRightIsPinching = false
+    var rightPinchTrigger: Float = 0.0
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -492,6 +529,40 @@ class WorldTracker {
         }
         
         return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (dp.0 / dt, dp.1 / dt, dp.2 / dt), angular_velocity: (0, 0, 0))
+    }
+    
+    func pinchToAlvrDeviceMotion(_ chirality: HandAnchor.Chirality) -> AlvrDeviceMotion {
+        let isLeft = chirality == .left
+        let device_id = isLeft ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
+        
+        let appleOrigin = isLeft ? leftSelectionRayOrigin : rightSelectionRayOrigin
+        let appleDirection = isLeft ? leftSelectionRayDirection : rightSelectionRayDirection
+        
+        let origin = convertApplePositionToSteamVR(appleOrigin)
+        let direction = simd_normalize(convertApplePositionToSteamVR(appleOrigin + appleDirection) - origin)
+        let orient = simd_look(at: -direction)
+        
+        //let val = sin(Float(CACurrentMediaTime() * 0.0125)) + 1.0
+        //let val2 = sin(Float(CACurrentMediaTime()))
+        //let val3 = (((sin(Float(CACurrentMediaTime() * 0.025)) + 1.0) * 0.5) * 0.015)
+        
+        var pinchOffset = isLeft ? (leftPinchCurrentPosition - leftPinchStartPosition) : (rightPinchCurrentPosition - rightPinchStartPosition)
+        
+        // Gathered these by oscillating the controller along the gaze ray, and then adjusting the
+        // angles slightly with pinchOffset.y until the pointer stopped moving left/right and up/down.
+        // Then I adjusted the positional offset with pinchOffset.xyz.
+        let adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7389288)))
+        let adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3(0.06772318, 0.0, 1.0)))
+        let adjPosition = simd_float3(0.0007324219, -0.094070435, -0.006164551) // -0.095443726
+        let q = simd_quatf(orient) * adjLeftRight * adjUpDown
+        
+        /*pinchOffset.x = 0.0
+        pinchOffset.y = 0.0
+        pinchOffset.z = 0.0*/
+        
+        let pose: AlvrPose = AlvrPose(q, convertApplePositionToSteamVR(appleOrigin + (appleDirection * -0.5) + pinchOffset + adjPosition))
+        
+        return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (0,0,0), angular_velocity: (0, 0, 0))
     }
     
     func handAnchorToSkeleton(_ hand: HandAnchor) -> [AlvrPose]? {
@@ -956,13 +1027,13 @@ class WorldTracker {
         
         let handPoses = handTracking.latestAnchors
         if let leftHand = handPoses.leftHand {
-            if leftHand.isTracked /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+            if leftHand.isTracked && !(settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 trackingMotions.append(handAnchorToAlvrDeviceMotion(leftHand))
                 skeletonLeft = handAnchorToSkeleton(leftHand)
             }
         }
         if let rightHand = handPoses.rightHand {
-            if rightHand.isTracked /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+            if rightHand.isTracked && !(settings.emulatedPinchInteractions && (rightIsPinching || rightPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 trackingMotions.append(handAnchorToAlvrDeviceMotion(rightHand))
                 skeletonRight = handAnchorToSkeleton(rightHand)
             }
@@ -988,6 +1059,70 @@ class WorldTracker {
                 trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdRightForearm, pose: skeletonRight[SteamVRJoints.forearmWrist.rawValue], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
                 trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdRightElbow, pose: skeletonRight[SteamVRJoints.forearmArm.rawValue], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
             }
+        }
+        
+        func boolVal(_ val: Bool) -> AlvrButtonValue {
+            return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_BINARY, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field0(binary: val)))
+        }
+        
+        func scalarVal(_ val: Float) -> AlvrButtonValue {
+            return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_SCALAR, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field1(scalar: val)))
+        }
+        
+        if settings.emulatedPinchInteractions {
+            // Menu press with two pinches
+            // (have to override triggers to prevent screenshot send)
+            if (rightIsPinching && leftIsPinching) {
+                alvr_send_button(WorldTracker.leftMenuClick, boolVal(true))
+                alvr_send_button(WorldTracker.leftTriggerClick, boolVal(false))
+                alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(0.0))
+                alvr_send_button(WorldTracker.rightTriggerClick, boolVal(false))
+                alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(0.0))
+                
+                trackingMotions.append(pinchToAlvrDeviceMotion(.left))
+                trackingMotions.append(pinchToAlvrDeviceMotion(.right))
+            }
+            else {
+                if leftIsPinching {
+                    trackingMotions.append(pinchToAlvrDeviceMotion(.left))
+                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
+                    leftPinchTrigger += 0.1
+                    if leftPinchTrigger > 1.0 {
+                        leftPinchTrigger = 1.0
+                    }
+                }
+                else if !leftIsPinching && leftPinchTrigger > 0.0 {
+                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
+                    leftPinchTrigger -= 0.1
+                    if leftPinchTrigger < 0.0 {
+                        leftPinchTrigger = 0.0
+                    }
+                }
+                
+                if rightIsPinching {
+                    trackingMotions.append(pinchToAlvrDeviceMotion(.right))
+                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
+                    rightPinchTrigger += 0.1
+                    if rightPinchTrigger > 1.0 {
+                        rightPinchTrigger = 1.0
+                    }
+                }
+                else if !rightIsPinching && rightPinchTrigger > 0.0 {
+                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
+                    rightPinchTrigger -= 0.1
+                    if rightPinchTrigger < 0.0 {
+                        rightPinchTrigger = 0.0
+                    }
+                }
+                alvr_send_button(WorldTracker.leftMenuClick, boolVal(false))
+            }
+            
+            lastLeftIsPinching = leftIsPinching
+            lastRightIsPinching = rightIsPinching
         }
         
         // selection ray tests, replaces left forearm
@@ -1044,5 +1179,12 @@ class WorldTracker {
         leftTransform = worldTrackingSteamVRTransform * leftTransform
         
         return leftTransform
+    }
+    
+    func convertApplePositionToSteamVR(_ p: simd_float3) -> simd_float3 {
+        var t = matrix_identity_float4x4
+        t.columns.3 = simd_float4(p.x, p.y, p.z, 1.0)
+        t = self.worldTrackingSteamVRTransform.inverse * t
+        return simd_float3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
     }
 }
