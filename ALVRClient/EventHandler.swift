@@ -9,6 +9,7 @@ import Combine
 import AVKit
 import Foundation
 import Network
+import UIKit
 
 class EventHandler: ObservableObject {
     static let shared = EventHandler()
@@ -64,6 +65,11 @@ class EventHandler: ObservableObject {
     
     var viewWidth = 1920*2
     var viewHeight = 1824*2
+    
+    var stutterSampleStart = 0.0
+    var stutterEventsCounted = 0
+    var lastStutterTime = 0.0
+    var awdlAlertPresented = false
     
     init() {}
     
@@ -287,6 +293,38 @@ class EventHandler: ObservableObject {
             // to prevent a cascade of needless decoding lag
             let ns_diff_from_last_req_ts = lastRequestedTimestamp > timestamp ? lastRequestedTimestamp &- timestamp : 0
             let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*600 && framesSinceLastIDR > 90*2)
+            
+            if CACurrentMediaTime() - stutterSampleStart >= 60.0 {
+                print("Stuttter events in the last minute:", stutterEventsCounted)
+                stutterSampleStart = CACurrentMediaTime()
+                
+                if stutterEventsCounted >= 50 {
+                    print("AWDL detected!")
+                    if ALVRClientApp.gStore.settings.dontShowAWDLAlertAgain {
+                        print("User doesn't want to see the alert.")
+                    }
+                    else {
+                        DispatchQueue.main.async {
+                            if self.awdlAlertPresented {
+                                return
+                            }
+                            self.awdlAlertPresented = true
+                            
+                            // Not super kosher but I don't see another way.
+                            ALVRClientApp.shared.openWindow(id: "AWDLAlert")
+                        }
+                    }
+                }
+                
+                stutterEventsCounted = 0
+            }
+            if ns_diff_from_last_req_ts > 1000*1000*40 {
+                if (CACurrentMediaTime() - lastStutterTime > 0.25 && CACurrentMediaTime() - lastStutterTime < 10.0) || ns_diff_from_last_req_ts > 1000*1000*100 {
+                    stutterEventsCounted += 1
+                    //print(ns_diff_from_last_req_ts, CACurrentMediaTime() - lastStutterTime)
+                }
+                lastStutterTime = CACurrentMediaTime()
+            }
             // TODO: adjustable framerate
             // TODO: maybe also call this if we fail to decode for too long.
             if lastRequestedTimestamp != 0 && (lagSpiked || framesSinceLastDecode > 90*2) {
@@ -549,11 +587,11 @@ class EventHandler: ObservableObject {
                    //let val = (nal[4] & 0x7E) >> 1
                    if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
                        // here we go!
-                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS, setDisplayTo96Hz: WorldTracker.shared.settings.setDisplayTo96Hz)
+                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS, setDisplayTo96Hz: ALVRClientApp.gStore.settings.setDisplayTo96Hz)
                        break
                    } else if (nal[3] == 0x01 && (nal[4] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) || (nal[2] == 0x01 && (nal[3] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) {
                         // The NAL unit type is 32 (VPS)
-                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: HEVC_NAL_TYPE_VPS, setDisplayTo96Hz: WorldTracker.shared.settings.setDisplayTo96Hz)
+                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: HEVC_NAL_TYPE_VPS, setDisplayTo96Hz: ALVRClientApp.gStore.settings.setDisplayTo96Hz)
                        break
                    }
                 }

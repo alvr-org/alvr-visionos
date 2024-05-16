@@ -113,7 +113,6 @@ func simd_look(at: SIMD3<Float>, up: SIMD3<Float> = SIMD3<Float>(0, 1, 0)) -> si
 
 class WorldTracker {
     static let shared = WorldTracker()
-    var settings: GlobalSettings!
     
     let arSession: ARKitSession!
     let worldTracking: WorldTrackingProvider!
@@ -286,8 +285,7 @@ class WorldTracker {
         self.sentPoses = 0
     }
     
-    func initializeAr(settings: GlobalSettings) async  {
-        self.settings = settings
+    func initializeAr() async  {
         resetPlayspace()
         
         let authStatus = await arSession.requestAuthorization(for: [.handTracking, .worldSensing])
@@ -380,7 +378,7 @@ class WorldTracker {
                     }
 
                     let anchorTransform = update.anchor.originFromAnchorTransform
-                    if settings.keepSteamVRCenter {
+                    if ALVRClientApp.gStore.settings.keepSteamVRCenter {
                         self.worldTrackingSteamVRTransform = anchorTransform
                     }
                     
@@ -414,7 +412,7 @@ class WorldTracker {
                     
                             self.worldOriginAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
                             self.worldTrackingAddedOriginAnchor = true
-                            if settings.keepSteamVRCenter {
+                            if ALVRClientApp.gStore.settings.keepSteamVRCenter {
                                 self.worldTrackingSteamVRTransform = anchorTransform
                             }
                             
@@ -1027,13 +1025,13 @@ class WorldTracker {
         
         let handPoses = handTracking.latestAnchors
         if let leftHand = handPoses.leftHand {
-            if leftHand.isTracked && !(settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+            if leftHand.isTracked && !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 trackingMotions.append(handAnchorToAlvrDeviceMotion(leftHand))
                 skeletonLeft = handAnchorToSkeleton(leftHand)
             }
         }
         if let rightHand = handPoses.rightHand {
-            if rightHand.isTracked && !(settings.emulatedPinchInteractions && (rightIsPinching || rightPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+            if rightHand.isTracked && !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (rightIsPinching || rightPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 trackingMotions.append(handAnchorToAlvrDeviceMotion(rightHand))
                 skeletonRight = handAnchorToSkeleton(rightHand)
             }
@@ -1069,7 +1067,7 @@ class WorldTracker {
             return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_SCALAR, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field1(scalar: val)))
         }
         
-        if settings.emulatedPinchInteractions {
+        if ALVRClientApp.gStore.settings.emulatedPinchInteractions {
             // Menu press with two pinches
             // (have to override triggers to prevent screenshot send)
             if (rightIsPinching && leftIsPinching) {

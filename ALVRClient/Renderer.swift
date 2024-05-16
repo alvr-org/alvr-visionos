@@ -317,11 +317,11 @@ class Renderer {
         let library = device.makeDefaultLibrary()
         
         let fragmentConstants = MTLFunctionConstantValues()
-        if let settings = WorldTracker.shared.settings {
-            chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
-            chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
-            chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
-        }
+        let settings = ALVRClientApp.gStore.settings
+        chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
+        chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
+        chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
+
         var chromaKeyColorLinear = NonlinearToLinearRGB(chromaKeyColor)
         fragmentConstants.setConstantValue(&chromaKeyEnabled, type: .bool, index: ALVRFunctionConstant.chromaKeyEnabled.rawValue)
         fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
@@ -384,11 +384,11 @@ class Renderer {
         let vertexFunction = library?.makeFunction(name: "videoFrameVertexShader")
         let fragmentConstants = FFR.makeFunctionConstants(foveationVars)
         
-        if let settings = WorldTracker.shared.settings {
-            chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
-            chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
-            chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
-        }
+        let settings = ALVRClientApp.gStore.settings
+        chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
+        chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
+        chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
+
         var chromaKeyColorLinear = NonlinearToLinearRGB(chromaKeyColor)
         fragmentConstants.setConstantValue(&chromaKeyEnabled, type: .bool, index: ALVRFunctionConstant.chromaKeyEnabled.rawValue)
         fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
@@ -584,15 +584,14 @@ class Renderer {
                 EventHandler.shared.lastIpd = ipd
             }
             
-            if let settings = WorldTracker.shared.settings {
-                if CACurrentMediaTime() - lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != chromaKeyEnabled || settings.chromaKeyColorR != chromaKeyColor.x || settings.chromaKeyColorG != chromaKeyColor.y || settings.chromaKeyColorB != chromaKeyColor.z || settings.chromaKeyDistRangeMin != chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != chromaKeyLerpDistRange.y) {
-                    lastReconfigureTime = CACurrentMediaTime()
-                    let rebuildThread = Thread {
-                        self.rebuildRenderPipelines()
-                    }
-                    rebuildThread.name = "Rebuild Render Pipelines Thread"
-                    rebuildThread.start()
+            let settings = ALVRClientApp.gStore.settings
+            if CACurrentMediaTime() - lastReconfigureTime > 1.0 && (/*settings.chromaKeyEnabled != chromaKeyEnabled ||*/ settings.chromaKeyColorR != chromaKeyColor.x || settings.chromaKeyColorG != chromaKeyColor.y || settings.chromaKeyColorB != chromaKeyColor.z || settings.chromaKeyDistRangeMin != chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != chromaKeyLerpDistRange.y) {
+                lastReconfigureTime = CACurrentMediaTime()
+                let rebuildThread = Thread {
+                    self.rebuildRenderPipelines()
                 }
+                rebuildThread.name = "Rebuild Render Pipelines Thread"
+                rebuildThread.start()
             }
         }
         

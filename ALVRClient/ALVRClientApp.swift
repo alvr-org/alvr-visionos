@@ -22,42 +22,92 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
     }
 }
 
+struct AWDLAlertView: View {
+    @Environment(\.dismissWindow) var dismissWindow
+    @State private var showAlert = false
+    let saveAction: ()->Void
+
+    var body: some View {
+        VStack {
+            Text("Network Instability Detected")
+            Text("(You should be seeing an alert box)")
+            //Text("\nSignificant stuttering was detected within the last minute.\n\nMake sure your PC is directly connected to your router and that the headset is in the line of sight of the router.\n\nMake sure you have AirDrop and Handoff disabled in Settings > General > AirDrop/Handoff.\n\nAlternatively, ensure your router is set to Channel 149 (NA) or 44 (EU).")
+        }
+        .frame(minWidth: 650, maxWidth: 650, minHeight: 900, maxHeight: 900)
+        .onAppear() {
+            showAlert = true
+        }
+        .alert(isPresented: $showAlert) {
+            Alert(
+                title: Text("Network Instability Detected"),
+                message: Text("Significant stuttering was detected within the last minute.\n\nMake sure your PC is directly connected to your router and that the headset is in the line of sight of the router.\n\nMake sure you have AirDrop and Handoff disabled in Settings > General > AirDrop/Handoff.\n\nAlternatively, ensure your router is set to Channel 149 (NA) or 44 (EU)."),
+                primaryButton: .default(
+                    Text("OK"),
+                    action: {
+                        dismissWindow(id: "AWDLAlert")
+                    }
+                ),
+                secondaryButton: .destructive(
+                    Text("Don't Show Again"),
+                    action: {
+                        ALVRClientApp.gStore.settings.dontShowAWDLAlertAgain = true
+                        saveAction()
+                        dismissWindow(id: "AWDLAlert")
+                    }
+                )
+            )
+        }
+    }
+}
+
 @main
-struct MetalRendererApp: App {
+struct ALVRClientApp: App {
     @State private var model = ViewModel()
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openWindow) var openWindow
+    @Environment(\.dismissWindow) var dismissWindow
     @State private var clientImmersionStyle: ImmersionStyle = .full
-    @StateObject private var gStore = GlobalSettingsStore()
+    
+    static var gStore = GlobalSettingsStore()
     @State private var chromaKeyColor = Color(.sRGB, red: 0.98, green: 0.9, blue: 0.2)
+    
+    static let shared = ALVRClientApp()
+    
+    func saveSettings() {
+        do {
+            try ALVRClientApp.gStore.save(settings: ALVRClientApp.gStore.settings)
+        } catch {
+            fatalError(error.localizedDescription)
+        }
+    }
+    
+    func loadSettings() {
+        do {
+            try ALVRClientApp.gStore.load()
+        } catch {
+            fatalError(error.localizedDescription)
+        }
+        chromaKeyColor = Color(.sRGB, red: Double(ALVRClientApp.gStore.settings.chromaKeyColorR), green: Double(ALVRClientApp.gStore.settings.chromaKeyColorG), blue: Double(ALVRClientApp.gStore.settings.chromaKeyColorB))
+    }
 
     var body: some Scene {
         //Entry point, this is the default window chosen in Info.plist from UIApplicationPreferredDefaultSceneSessionRole
         WindowGroup(id: "Entry") {
-            Entry(settings: $gStore.settings, chromaKeyColor: $chromaKeyColor) {
+            Entry(chromaKeyColor: $chromaKeyColor) {
                 Task {
-                    do {
-                        try gStore.save(settings: gStore.settings)
-                    } catch {
-                        fatalError(error.localizedDescription)
-                    }
-                    WorldTracker.shared.settings = gStore.settings // Hack: actually sync settings. We should probably rethink this.
+                    saveSettings()
                 }
             }
             .task {
-                do {
-                    try gStore.load()
-                } catch {
-                    fatalError(error.localizedDescription)
-                }
+                loadSettings()
                 model.isShowingClient = false
                 EventHandler.shared.initializeAlvr()
-                await WorldTracker.shared.initializeAr(settings: gStore.settings)
+                await WorldTracker.shared.initializeAr()
                 EventHandler.shared.start()
-                
-                chromaKeyColor = Color(.sRGB, red: Double(gStore.settings.chromaKeyColorR), green: Double(gStore.settings.chromaKeyColorG), blue: Double(gStore.settings.chromaKeyColorB))
             }
             .environment(model)
             .environmentObject(EventHandler.shared)
+            .environmentObject(ALVRClientApp.gStore)
             .fixedSize()
         }
         .windowStyle(.plain)
@@ -98,6 +148,19 @@ struct MetalRendererApp: App {
                 break
             }
         }
+        
+        // Alert if AWDL-like stuttering behavior is detected
+        WindowGroup(id: "AWDLAlert") {
+            AWDLAlertView() {
+                Task {
+                    saveSettings()
+                }
+            }
+            .persistentSystemOverlays(.hidden)
+            .environmentObject(ALVRClientApp.gStore)
+        }
+        .windowStyle(.plain)
+        .windowResizability(.contentMinSize)
         
         ImmersiveSpace(id: "DummyImmersiveSpace") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in

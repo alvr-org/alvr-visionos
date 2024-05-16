@@ -12,7 +12,7 @@ struct EntryControls: View {
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.dismissWindow) private var dismissWindow
     @ObservedObject var eventHandler = EventHandler.shared
-    @Binding var settings: GlobalSettings
+    @EnvironmentObject var gStore: GlobalSettingsStore
     
     @State private var showImmersiveSpace = false
     @State private var immersiveSpaceIsShown = false
@@ -44,11 +44,10 @@ struct EntryControls: View {
         .onChange(of: model.isShowingClient) { _, isShowing in
             Task {
                 if isShowing {
-                    WorldTracker.shared.settings = settings
 
                     saveAction()
                     print("Opening Immersive Space")
-                    if settings.experimental40ppd {
+                    if gStore.settings.experimental40ppd {
                         if !DummyMetalRenderer.haveRenderInfo {
                             var dummySpaceIsOpened = false
                             while !dummySpaceIsOpened {
@@ -79,7 +78,7 @@ struct EntryControls: View {
                         print("Open real immersive space")
                         
                         var id = "RealityKitClientWithHands"
-                        if settings.showHandsOverlaid {
+                        if gStore.settings.showHandsOverlaid {
                             id = "RealityKitClientWithHands"
                         }
                         else {
@@ -96,13 +95,13 @@ struct EntryControls: View {
                             showImmersiveSpace = false
                         }
                     }
-                    else if settings.showHandsOverlaid {
+                    else if gStore.settings.showHandsOverlaid {
                         await openImmersiveSpace(id: "MetalClientWithHands")
                     }
                     else {
                         await openImmersiveSpace(id: "MetalClientNoHands")
                     }
-                    if settings.dismissWindowOnEnter {
+                    if gStore.settings.dismissWindowOnEnter {
                         dismissWindow(id: "Entry")
                     }
                 }
@@ -110,10 +109,4 @@ struct EntryControls: View {
         }
 
     }
-}
-
-
-#Preview {
-    EntryControls(settings: .constant(GlobalSettings.sampleData), saveAction: {})
-        .environment(ViewModel())
 }
