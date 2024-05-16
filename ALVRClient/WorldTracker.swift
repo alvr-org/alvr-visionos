@@ -7,6 +7,91 @@ import ARKit
 import CompositorServices
 import GameController
 import CoreHaptics
+import Spatial
+
+enum SteamVRJoints : Int {
+    case root = 0                                  //eBone_Root
+    case wrist = 1                                 //eBone_Wrist
+    case thumbKnuckle = 2                          //eBone_Thumb0
+    case thumbIntermediateBase = 3                 //eBone_Thumb1
+    case thumbIntermediateTip = 4                  //eBone_Thumb2
+    case thumbTip = 5                              //eBone_Thumb3
+    case indexFingerMetacarpal = 6                 //eBone_IndexFinger0
+    case indexFingerKnuckle = 7                    //eBone_IndexFinger1
+    case indexFingerIntermediateBase = 8           //eBone_IndexFinger2
+    case indexFingerIntermediateTip = 9            //eBone_IndexFinger3
+    case indexFingerTip = 10                       //eBone_IndexFinger4
+    case middleFingerMetacarpal = 11               //eBone_MiddleFinger0
+    case middleFingerKnuckle = 12                  //eBone_MiddleFinger1
+    case middleFingerIntermediateBase = 13         //eBone_MiddleFinger2
+    case middleFingerIntermediateTip = 14          //eBone_MiddleFinger3
+    case middleFingerTip = 15                      //eBone_MiddleFinger4
+    case ringFingerMetacarpal = 16                 //eBone_RingFinger0
+    case ringFingerKnuckle = 17                    //eBone_RingFinger1
+    case ringFingerIntermediateBase = 18           //eBone_RingFinger2
+    case ringFingerIntermediateTip = 19            //eBone_RingFinger3
+    case ringFingerTip = 20                        //eBone_RingFinger4
+    case littleFingerMetacarpal = 21               //eBone_PinkyFinger0
+    case littleFingerKnuckle = 22                  //eBone_PinkyFinger1
+    case littleFingerIntermediateBase = 23         //eBone_PinkyFinger2
+    case littleFingerIntermediateTip = 24          //eBone_PinkyFinger3
+    case littleFingerTip = 25                      //eBone_PinkyFinger4
+
+    // SteamVR's 26-30 are aux bones and are done by ALVR
+        
+    // Special case: we want to stash these
+    case forearmWrist = 26
+    case forearmArm = 27
+    
+    case numberOfJoints = 28
+}
+
+extension AlvrQuat
+{
+	init(_ q: simd_quatf)
+	{
+		self.init(x: q.vector.x, y: q.vector.y, z: q.vector.z, w: q.vector.w)
+	}
+}
+
+extension AlvrPose
+{
+    init() {
+        self.init(simd_quatf(), simd_float3())
+    }
+
+    init(_ q: simd_quatf, _ p: simd_float3) {
+        self.init(orientation: AlvrQuat(q), position: p.asArray3())
+    }
+    
+    init(_ q: simd_quatf, _ p: simd_float4) {
+        self.init(orientation: AlvrQuat(q), position: p.asArray3())
+    }
+}
+
+extension simd_float3
+{
+    func asArray3() -> (Float, Float, Float)
+    {
+        return (self.x, self.y, self.z)
+    }
+}
+
+extension simd_float4
+{
+    func asArray3() -> (Float, Float, Float)
+    {
+        return (self.x, self.y, self.z)
+    }
+}
+
+extension simd_quatd
+{
+    func toQuatf() -> simd_quatf
+    {
+        return simd_quatf(ix: Float(self.vector.x), iy: Float(self.vector.y), iz: Float(self.vector.z), r: Float(self.vector.w))
+    }
+}
 
 class WorldTracker {
     static let shared = WorldTracker()
@@ -129,7 +214,7 @@ class WorldTracker {
     static let leftHandOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(-1.0, 0.0, 0.0)) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, -1.0))
     static let rightHandOrientationCorrection = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_float3(0.0, 0.0, -1.0)) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
     static let leftForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
-    static let rightForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+    static let rightForearmOrientationCorrection = simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(1.0, 0.0, 0.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(1.0, 0.0, 0.0))
     var testPosition = simd_float3(0.0, 0.0, 0.0)
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
@@ -423,10 +508,13 @@ class WorldTracker {
             ret.append(rootPose)
         }
         
+        var wristOrientation = simd_quatf()
+        var wristTransform = matrix_identity_float4x4
+        
         // Apple has two additional joints: forearmWrist and forearmArm
         for joint in skeleton.allJoints {
             let steamVrIdx = WorldTracker.appleHandToSteamVRIndex[joint.name.description, default:-1]
-            if steamVrIdx == -1 || steamVrIdx >= 28 {
+            if steamVrIdx == -1 || steamVrIdx >= SteamVRJoints.numberOfJoints.rawValue {
                 continue
             }
             let transformRaw = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform * joint.anchorFromJointTransform
@@ -439,16 +527,9 @@ class WorldTracker {
             else {
                 orientation = orientation * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(-1.0, 0.0, 0.0))
             }
-            
-            // HACK: Apple's elbows currently have the same orientation as their wrists, which VRChat's IK really doesn't like.
-            // Ideally, the elbows would be some lerp based on the wrists, where the mapping goes from the wrist rotation 0-270deg
-            // to the elbow mapping 0-90deg.
-            if steamVrIdx == 27 {
-                orientation = simd_quatf(ix: 0.0, iy: 0.0, iz: 0.0, r: 1.0)
-            }
-            
+
             // Make wrist/elbow trackers face outward
-            if steamVrIdx == 26 || steamVrIdx == 27 {
+            if steamVrIdx == SteamVRJoints.forearmWrist.rawValue || steamVrIdx == SteamVRJoints.forearmArm.rawValue {
                 if hand.chirality == .right {
                     orientation = orientation * WorldTracker.rightForearmOrientationCorrection
                 }
@@ -456,14 +537,70 @@ class WorldTracker {
                     orientation = orientation * WorldTracker.leftForearmOrientationCorrection
                 }
             }
+            
+            if steamVrIdx == SteamVRJoints.forearmWrist.rawValue {
+                wristOrientation = orientation
+                wristTransform = transform
+            }
+            
+            // HACK: Apple's elbows currently have the same orientation as their wrists, which VRChat's IK really doesn't like.
+            if steamVrIdx == SteamVRJoints.forearmArm.rawValue {
+                orientation = simd_quatf(ix: 0.0, iy: 0.0, iz: 0.0, r: 1.0)
+            }
+            
+            // Lerp the elbows based on the wrists, with a mapping that goes from the wrist rotation 0-270deg
+            // to the elbow 0-90deg.
+            // (I'll be honest a lot of this math was trial and error, but it's very solid)
+            /*if steamVrIdx == SteamVRJoints.forearmArm.rawValue {
+                orientation = simd_quaternion(wristTransform)
+                
+                if hand.chirality == .right {
+                    //orientation = orientation * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+                }
+                else {
+                    orientation = orientation * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+                }
+                
+                let rot = Rotation3D(orientation)
+                let twistAxis = simd_float3(1.0, 0.0, 0.0)
+                
+                
+                let (swing, twist) = rot.swingTwist(twistAxis: RotationAxis3D.init(x: twistAxis.x, y: twistAxis.y, z: twistAxis.z))
+                
+                var swingQuat = swing.quaternion.toQuatf()
+                if hand.chirality == .right {
+                    //swingQuat = swingQuat * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+                }
+                else {
+                    swingQuat = swingQuat * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+                }
+                
+                let twistEuler = twist.eulerAngles(order: .xyz).angles
+                
+                
+                let val = (sin(Float(CACurrentMediaTime() * 1.5)) + 1.0) * 0.5
+                if twistEuler.x < -Double.pi/2.0 /*|| twistEuler.x > (3.0*(Double.pi/4.0))*/ {
+                    orientation = simd_slerp_longest(swingQuat, orientation, 0.333)
+                }
+                else {
+                    orientation = simd_slerp(swingQuat, orientation, 0.333)
+                }
+                
+                orientation = orientation * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0)) * simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
+                
+                /*if hand.chirality == .left {
+                    print(hand.chirality == .right ? "right" : "left", twistEuler, val)
+                }*/
+            }*/
 
             var position = transform.columns.3
             // Move wrist/elbow slightly outward so that they appear to be on the surface of the arm,
             // instead of inside it.
-            if steamVrIdx == 26 || steamVrIdx == 27 {
+            if steamVrIdx == SteamVRJoints.forearmWrist.rawValue || steamVrIdx == SteamVRJoints.forearmArm.rawValue {
                 position += transform.columns.1 * (0.025 * (hand.chirality == .right ? 1.0 : -1.0))
             }
-            let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+            
+            let pose = AlvrPose(orientation, position)
             
             ret[steamVrIdx] = pose
         }
@@ -805,10 +942,10 @@ class WorldTracker {
         
         let leftOrientation = simd_quaternion(leftTransform)
         let leftPosition = leftTransform.columns.3
-        let leftPose = AlvrPose(orientation: AlvrQuat(x: leftOrientation.vector.x, y: leftOrientation.vector.y, z: leftOrientation.vector.z, w: leftOrientation.vector.w), position: (leftPosition.x, leftPosition.y, leftPosition.z))
+        let leftPose = AlvrPose(leftOrientation, leftPosition)
         let rightOrientation = simd_quaternion(rightTransform)
         let rightPosition = rightTransform.columns.3
-        let rightPose = AlvrPose(orientation: AlvrQuat(x: rightOrientation.vector.x, y: rightOrientation.vector.y, z: rightOrientation.vector.z, w: rightOrientation.vector.w), position: (rightPosition.x, rightPosition.y, rightPosition.z))
+        let rightPose = AlvrPose(rightOrientation, rightPosition)
         
         var trackingMotions:[AlvrDeviceMotion] = []
         var skeletonLeft:[AlvrPose]? = nil
@@ -831,25 +968,25 @@ class WorldTracker {
             }
         }
         if let skeletonLeft = skeletonLeft {
-            if skeletonLeft.count >= 28 {
+            if skeletonLeft.count >= SteamVRJoints.numberOfJoints.rawValue {
                 skeletonLeftPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 26)
                 for i in 0...25 {
                     skeletonLeftPtr![i] = skeletonLeft[i]
                 }
                 
-                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftForearm, pose: skeletonLeft[26], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
-                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftElbow, pose: skeletonLeft[27], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftForearm, pose: skeletonLeft[SteamVRJoints.forearmWrist.rawValue], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftElbow, pose: skeletonLeft[SteamVRJoints.forearmArm.rawValue], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
             }
         }
         if let skeletonRight = skeletonRight {
-            if skeletonRight.count >= 28 {
+            if skeletonRight.count >= SteamVRJoints.numberOfJoints.rawValue {
                 skeletonRightPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 26)
                 for i in 0...25 {
                     skeletonRightPtr![i] = skeletonRight[i]
                 }
                 
-                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdRightForearm, pose: skeletonRight[26], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
-                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdRightElbow, pose: skeletonRight[27], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdRightForearm, pose: skeletonRight[SteamVRJoints.forearmWrist.rawValue], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+                trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdRightElbow, pose: skeletonRight[SteamVRJoints.forearmArm.rawValue], linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
             }
         }
         
@@ -885,7 +1022,7 @@ class WorldTracker {
     // We want video frames ASAP, so we send a fake view pose/FOVs to keep the frames coming
     // until we have access to real values
     func sendFakeTracking(viewFovs: [AlvrFov], targetTimestamp: Double) {
-        let dummyPose = AlvrPose(orientation: AlvrQuat(x: 0.0, y: 0.0, z: 0.0, w: 1.0), position: (0.0, 0.0, 0.0))
+        let dummyPose = AlvrPose()
         let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         
         let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
