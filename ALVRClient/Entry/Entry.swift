@@ -8,7 +8,7 @@ import UIKit
 
 struct Entry: View {
     @ObservedObject var eventHandler = EventHandler.shared
-    @Binding var settings: GlobalSettings
+    @EnvironmentObject var gStore: GlobalSettingsStore
     @Binding var chromaKeyColor: Color
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.self) var environment
@@ -22,24 +22,23 @@ struct Entry: View {
     
     @State private var chromaRangeMaximum: Float = 1.0
     func applyRangeSettings() {
-        if settings.chromaKeyDistRangeMax < 0.001 {
-            settings.chromaKeyDistRangeMax = 0.001
+        if gStore.settings.chromaKeyDistRangeMax < 0.001 {
+            gStore.settings.chromaKeyDistRangeMax = 0.001
         }
-        if settings.chromaKeyDistRangeMax > 1.0 {
-            settings.chromaKeyDistRangeMax = 1.0
+        if gStore.settings.chromaKeyDistRangeMax > 1.0 {
+            gStore.settings.chromaKeyDistRangeMax = 1.0
         }
-        if settings.chromaKeyDistRangeMin < 0.0 {
-            settings.chromaKeyDistRangeMin = 0.0
+        if gStore.settings.chromaKeyDistRangeMin < 0.0 {
+            gStore.settings.chromaKeyDistRangeMin = 0.0
         }
-        if settings.chromaKeyDistRangeMin > 1.0 {
-            settings.chromaKeyDistRangeMin = 1.0
+        if gStore.settings.chromaKeyDistRangeMin > 1.0 {
+            gStore.settings.chromaKeyDistRangeMin = 1.0
         }
         
-        if settings.chromaKeyDistRangeMin > settings.chromaKeyDistRangeMax {
-            settings.chromaKeyDistRangeMin = settings.chromaKeyDistRangeMax - 0.001
+        if gStore.settings.chromaKeyDistRangeMin > gStore.settings.chromaKeyDistRangeMax {
+            gStore.settings.chromaKeyDistRangeMin = gStore.settings.chromaKeyDistRangeMax - 0.001
         }
-        WorldTracker.shared.settings = settings
-        chromaRangeMaximum = settings.chromaKeyDistRangeMax
+        chromaRangeMaximum = gStore.settings.chromaKeyDistRangeMax
         saveAction()
     }
 
@@ -68,24 +67,24 @@ struct Entry: View {
                 VStack {
                     Text("Main Settings:")
                         .font(.system(size: 20, weight: .bold))
-                    Toggle(isOn: $settings.showHandsOverlaid) {
+                    Toggle(isOn: $gStore.settings.showHandsOverlaid) {
                         Text("Show hands overlaid")
                     }
                     .toggleStyle(.switch)
                     
-                    Toggle(isOn: $settings.keepSteamVRCenter) {
+                    Toggle(isOn: $gStore.settings.keepSteamVRCenter) {
                         Text("Crown Button long-press ignored by SteamVR")
                     }
                     .toggleStyle(.switch)
                     
-                    Toggle(isOn: $settings.setDisplayTo96Hz) {
+                    Toggle(isOn: $gStore.settings.setDisplayTo96Hz) {
                         Text("Optimize refresh rate for 24P film*")
                         Text("*May cause skipping when displaying 30P content, or while passthrough is active")
                         .font(.system(size: 10))
                     }
                     .toggleStyle(.switch)
                     
-                    Toggle(isOn: $settings.emulatedPinchInteractions) {
+                    Toggle(isOn: $gStore.settings.emulatedPinchInteractions) {
                         Text("Emulate pinch interactions as controller inputs")
                     }
                     .toggleStyle(.switch)
@@ -99,7 +98,7 @@ struct Entry: View {
                     Text("Advanced Settings:")
                         .font(.system(size: 20, weight: .bold))
                     
-                    Toggle(isOn: $settings.experimental40ppd) {
+                    Toggle(isOn: $gStore.settings.experimental40ppd) {
                         Text("Experimental 40PPD renderer*")
                         Text("*Experimental! May cause juddering and/or nausea!")
                         .font(.system(size: 10))
@@ -108,90 +107,86 @@ struct Entry: View {
                     
                     Text("Experimental Render Scale").frame(maxWidth: .infinity, alignment: .leading)
                     HStack {
-                       Slider(value: $settings.realityKitRenderScale,
+                       Slider(value: $gStore.settings.realityKitRenderScale,
                               in: 0...2.5,
                               step: 0.25) {
                            Text("Experimental Render Scale")
                        }
-                       .onChange(of: settings.realityKitRenderScale) {
+                       .onChange(of: gStore.settings.realityKitRenderScale) {
                            applyRangeSettings()
                        }
-                       TextField("Experimental Render Scale", value: $settings.realityKitRenderScale, formatter: chromaFormatter)
+                       TextField("Experimental Render Scale", value: $gStore.settings.realityKitRenderScale, formatter: chromaFormatter)
                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                       .onChange(of: settings.realityKitRenderScale) {
+                       .onChange(of: gStore.settings.realityKitRenderScale) {
                            applyRangeSettings()
                        }
                        .frame(width: 100)
                     }
                     
-                    Toggle(isOn: $settings.metalFxEnabled) {
+                    Toggle(isOn: $gStore.settings.metalFxEnabled) {
                         Text("Upscale stream to experimental render scale with MetalFX*")
                         Text("*Only works with 40PPD renderer. Not recommended, thermal throttles quickly.")
                         .font(.system(size: 10))
                     }
                     .toggleStyle(.switch)
-                    .onChange(of: settings.chromaKeyEnabled) {
-                        WorldTracker.shared.settings = settings
+                    .onChange(of: gStore.settings.chromaKeyEnabled) {
                         saveAction()
                     }
                     
-                    Toggle(isOn: $settings.chromaKeyEnabled) {
+                    Toggle(isOn: $gStore.settings.chromaKeyEnabled) {
                         Text("Enable Chroma Keyed Passthrough*")
                         Text("*Only works with 40PPD renderer")
                         .font(.system(size: 10))
                     }
                     .toggleStyle(.switch)
-                    .onChange(of: settings.chromaKeyEnabled) {
-                        WorldTracker.shared.settings = settings
+                    .onChange(of: gStore.settings.chromaKeyEnabled) {
                         saveAction()
                     }
                     
                     ColorPicker("Chroma Key Color", selection: $chromaKeyColor)
                     .onChange(of: chromaKeyColor) {
-                        settings.chromaKeyColorR = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[0])
-                        settings.chromaKeyColorG = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[1])
-                        settings.chromaKeyColorB = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[2])
-                        print(settings.chromaKeyColorR * 255, settings.chromaKeyColorG * 255, settings.chromaKeyColorB * 255)
-                        WorldTracker.shared.settings = settings
+                        gStore.settings.chromaKeyColorR = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[0])
+                        gStore.settings.chromaKeyColorG = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[1])
+                        gStore.settings.chromaKeyColorB = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[2])
                         saveAction()
                    }
                    
                    Text("Chroma Blend Distance Min/Max").frame(maxWidth: .infinity, alignment: .leading)
                    HStack {
-                       Slider(value: $settings.chromaKeyDistRangeMin,
+                       Slider(value: $gStore.settings.chromaKeyDistRangeMin,
                               in: 0...chromaRangeMaximum,
                               step: 0.01) {
                            Text("Chroma Blend Distance Min")
                        }
-                       .onChange(of: settings.chromaKeyDistRangeMin) {
+                       .onChange(of: gStore.settings.chromaKeyDistRangeMin) {
                            applyRangeSettings()
                            
                        }
-                       TextField("Chroma Blend Distance Min", value: $settings.chromaKeyDistRangeMin, formatter: chromaFormatter)
+                       TextField("Chroma Blend Distance Min", value: $gStore.settings.chromaKeyDistRangeMin, formatter: chromaFormatter)
                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                       .onChange(of: settings.chromaKeyDistRangeMin) {
+                       .onChange(of: gStore.settings.chromaKeyDistRangeMin) {
                            applyRangeSettings()
                        }
                        .frame(width: 100)
                    }
                    HStack {
-                       Slider(value: $settings.chromaKeyDistRangeMax,
+                       Slider(value: $gStore.settings.chromaKeyDistRangeMax,
                               in: 0.001...1,
                               step: 0.01) {
                            Text("Chroma Blend Distance Min")
                        }
-                       .onChange(of: settings.chromaKeyDistRangeMax) {
+                       .onChange(of: gStore.settings.chromaKeyDistRangeMax) {
                            applyRangeSettings()
                        }
-                       TextField("Chroma Blend Distance Max", value: $settings.chromaKeyDistRangeMax, formatter: chromaFormatter)
+                       TextField("Chroma Blend Distance Max", value: $gStore.settings.chromaKeyDistRangeMax, formatter: chromaFormatter)
                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                       .onChange(of: settings.chromaKeyDistRangeMax) {
+                       .onChange(of: gStore.settings.chromaKeyDistRangeMax) {
                            applyRangeSettings()
                        }
                        .frame(width: 100)
                    }
                    
-                   Toggle(isOn: $settings.dismissWindowOnEnter) {
+                   Toggle(isOn: $gStore.settings.dismissWindowOnEnter) {
                         Text("Dismiss this window on entry")
                     }
                     .toggleStyle(.switch)
@@ -277,12 +272,6 @@ struct Entry: View {
             }
         }
         
-        EntryControls(settings: $settings, saveAction: saveAction)
-    }
-}
-
-struct Entry_Previews: PreviewProvider {
-    static var previews: some View {
-        Entry(settings: .constant(GlobalSettings.sampleData), chromaKeyColor: .constant(Color(.sRGB, red: 0.98, green: 0.9, blue: 0.2)), saveAction: {})
+        EntryControls(saveAction: saveAction)
     }
 }

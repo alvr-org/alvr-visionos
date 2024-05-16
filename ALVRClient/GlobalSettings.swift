@@ -20,6 +20,7 @@ struct GlobalSettings: Codable {
     var realityKitRenderScale: Float = 1.75
     var metalFxEnabled: Bool = false
     var emulatedPinchInteractions: Bool = false
+    var dontShowAWDLAlertAgain: Bool = false
     
     init() {}
     
@@ -40,15 +41,15 @@ struct GlobalSettings: Codable {
         self.realityKitRenderScale = try container.decodeIfPresent(Float.self, forKey: .realityKitRenderScale) ?? self.realityKitRenderScale
         self.metalFxEnabled = try container.decodeIfPresent(Bool.self, forKey: .metalFxEnabled) ?? self.metalFxEnabled
         self.emulatedPinchInteractions = try container.decodeIfPresent(Bool.self, forKey: .emulatedPinchInteractions) ?? self.emulatedPinchInteractions
+        self.dontShowAWDLAlertAgain = try container.decodeIfPresent(Bool.self, forKey: .dontShowAWDLAlertAgain) ?? self.dontShowAWDLAlertAgain
     }
 }
 
-extension GlobalSettings {
-    static let sampleData: GlobalSettings =
-    GlobalSettings()
+extension GlobalSettingsStore {
+    static let sampleData: GlobalSettingsStore =
+    GlobalSettingsStore()
 }
 
-@MainActor
 class GlobalSettingsStore: ObservableObject {
     @Published var settings: GlobalSettings = GlobalSettings()
     

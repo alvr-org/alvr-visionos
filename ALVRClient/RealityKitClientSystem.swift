@@ -148,18 +148,17 @@ class RealityKitClientSystem : System {
     required init(scene: RealityKit.Scene) {
         self.renderer = Renderer(nil)
         renderer.rebuildRenderPipelines()
-        if let settings = WorldTracker.shared.settings {
-            metalFxEnabled = settings.metalFxEnabled
+        let settings = ALVRClientApp.gStore.settings
+        metalFxEnabled = settings.metalFxEnabled
 
-            currentSetRenderScale = settings.realityKitRenderScale
-            if settings.realityKitRenderScale <= 0.0 {
-                currentRenderScale = Float(renderScale)
-                dynamicallyAdjustRenderScale = true
-            }
-            else {
-                currentRenderScale = currentSetRenderScale
-                dynamicallyAdjustRenderScale = false
-            }
+        currentSetRenderScale = settings.realityKitRenderScale
+        if settings.realityKitRenderScale <= 0.0 {
+            currentRenderScale = Float(renderScale)
+            dynamicallyAdjustRenderScale = true
+        }
+        else {
+            currentRenderScale = currentSetRenderScale
+            dynamicallyAdjustRenderScale = false
         }
         
         // TODO: SSAA after moving foveation out of frag shader?
@@ -660,46 +659,45 @@ class RealityKitClientSystem : System {
                 EventHandler.shared.lastIpd = ipd
             }
             
-            if let settings = WorldTracker.shared.settings {
-                if metalFxEnabled != settings.metalFxEnabled {
-                    metalFxEnabled = settings.metalFxEnabled
-                    renderer.isUsingMetalFX = metalFxEnabled
-                    
-                    // TODO: SSAA after moving foveation out of frag shader?
-                    if metalFxEnabled || renderDoStreamSSAA {
-                        if let event = EventHandler.shared.streamEvent?.STREAMING_STARTED {
-                            currentOffscreenRenderScale = Float(event.view_width) / Float(renderWidthReal)
-                            
-                            currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
-                            currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
-                        }
-                    }
-                    else {
-                        currentOffscreenRenderScale = currentRenderScale
-                            
+            let settings = ALVRClientApp.gStore.settings
+            if metalFxEnabled != settings.metalFxEnabled {
+                metalFxEnabled = settings.metalFxEnabled
+                renderer.isUsingMetalFX = metalFxEnabled
+                
+                // TODO: SSAA after moving foveation out of frag shader?
+                if metalFxEnabled || renderDoStreamSSAA {
+                    if let event = EventHandler.shared.streamEvent?.STREAMING_STARTED {
+                        currentOffscreenRenderScale = Float(event.view_width) / Float(renderWidthReal)
+                        
                         currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
                         currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
                     }
-                    
-                    needsPipelineRebuild = true
                 }
+                else {
+                    currentOffscreenRenderScale = currentRenderScale
+                        
+                    currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
+                    currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
+                }
+                
+                needsPipelineRebuild = true
+            }
 
-                if currentSetRenderScale != settings.realityKitRenderScale {
-                    currentSetRenderScale = settings.realityKitRenderScale
-                    if settings.realityKitRenderScale <= 0.0 {
-                        currentRenderScale = Float(renderScale)
-                        dynamicallyAdjustRenderScale = true
-                    }
-                    else {
-                        currentRenderScale = currentSetRenderScale
-                        dynamicallyAdjustRenderScale = false
-                    }
+            if currentSetRenderScale != settings.realityKitRenderScale {
+                currentSetRenderScale = settings.realityKitRenderScale
+                if settings.realityKitRenderScale <= 0.0 {
+                    currentRenderScale = Float(renderScale)
+                    dynamicallyAdjustRenderScale = true
                 }
+                else {
+                    currentRenderScale = currentSetRenderScale
+                    dynamicallyAdjustRenderScale = false
+                }
+            }
 
-                if CACurrentMediaTime() - renderer.lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != renderer.chromaKeyEnabled || settings.chromaKeyColorR != renderer.chromaKeyColor.x || settings.chromaKeyColorG != renderer.chromaKeyColor.y || settings.chromaKeyColorB != renderer.chromaKeyColor.z || settings.chromaKeyDistRangeMin != renderer.chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != renderer.chromaKeyLerpDistRange.y) {
-                    renderer.lastReconfigureTime = CACurrentMediaTime()
-                    needsPipelineRebuild = true
-                }
+            if CACurrentMediaTime() - renderer.lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != renderer.chromaKeyEnabled || settings.chromaKeyColorR != renderer.chromaKeyColor.x || settings.chromaKeyColorG != renderer.chromaKeyColor.y || settings.chromaKeyColorB != renderer.chromaKeyColor.z || settings.chromaKeyDistRangeMin != renderer.chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != renderer.chromaKeyLerpDistRange.y) {
+                renderer.lastReconfigureTime = CACurrentMediaTime()
+                needsPipelineRebuild = true
             }
             
             if needsPipelineRebuild {
