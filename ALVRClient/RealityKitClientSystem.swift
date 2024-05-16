@@ -526,6 +526,7 @@ class RealityKitClientSystem : System {
                     upscaleTexture.setPurgeableState(.nonVolatile)
                     texture.setPurgeableState(.nonVolatile)
                     depthTexture.setPurgeableState(.nonVolatile)
+                    drawable!.texture.setPurgeableState(.nonVolatile)
                     
                     //upscaleTextureToTexture(commandBuffer, texture, drawable!.texture)
                     copyTextureToTexture(commandBuffer, metalFxEnabled ? upscaleTexture : texture, drawable!.texture)
@@ -556,6 +557,8 @@ class RealityKitClientSystem : System {
                     plane.position = position
                     plane.orientation = orientation
                     plane.scale = scale
+                    
+                    //drawable!.texture.setPurgeableState(.volatile)
                     
                     drawable!.presentOnSceneUpdate()
 
