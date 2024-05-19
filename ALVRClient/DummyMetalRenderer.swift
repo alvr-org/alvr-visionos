@@ -38,11 +38,24 @@ class DummyMetalRenderer {
             fatalError("Failed to create command buffer")
         }
         
+        var averageViewTransformPositionalComponent = simd_float4()
+        
         DummyMetalRenderer.renderTangents.removeAll()
         DummyMetalRenderer.renderViewTransforms.removeAll()
         for view in drawable.views {
             DummyMetalRenderer.renderTangents.append(view.tangents)
             DummyMetalRenderer.renderViewTransforms.append(view.transform)
+            
+            averageViewTransformPositionalComponent += view.transform.columns.3
+        }
+        
+        // HACK: for some reason Apple's view transforms' positional component has this really weird drift downwards at the start.
+        // Initially, it's off by like 26cm, super weird.
+        averageViewTransformPositionalComponent /= Float(DummyMetalRenderer.renderViewTransforms.count)
+        averageViewTransformPositionalComponent.w = 0.0
+        
+        for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
+            DummyMetalRenderer.renderViewTransforms[i].columns.3 -= averageViewTransformPositionalComponent
         }
         
         drawable.encodePresent(commandBuffer: commandBuffer)

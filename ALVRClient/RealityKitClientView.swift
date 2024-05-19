@@ -10,8 +10,14 @@ import CoreImage
 struct RealityKitClientView: View {
     var texture: MaterialParameters.Texture?
     
-    // TODO: make this a common function
-    func handleEvent(_ event: SpatialEventCollection.Event) {
+    static func handleSpatialEvent(_ value: EntityTargetValue<SpatialEventCollection>?, _ event: SpatialEventCollection.Event) {
+        if value != nil {
+            WorldTracker.shared.pinchesAreFromRealityKit = true
+        }
+        else {
+            WorldTracker.shared.pinchesAreFromRealityKit = false
+        }
+
         var isInProgressPinch = false
         var isRight = false
         if event.id.hashValue == WorldTracker.shared.leftSelectionRayId {
@@ -29,8 +35,13 @@ struct RealityKitClientView: View {
                 }
                 
                 if isRight && WorldTracker.shared.rightSelectionRayId != -1 {
-                    print("THIRD HAND???")
-                    print(event, isRight, isInProgressPinch, WorldTracker.shared.leftSelectionRayId, WorldTracker.shared.rightSelectionRayId)
+                    print("THIRD HAND??? early fallback")
+                    
+                    WorldTracker.shared.leftSelectionRayId = -1
+                    WorldTracker.shared.rightSelectionRayId = -1
+                    isRight = false
+                    
+                    print(event, event.id.hashValue, isRight, isInProgressPinch, WorldTracker.shared.leftSelectionRayId, WorldTracker.shared.rightSelectionRayId)
                     return
                 }
                 
@@ -42,7 +53,7 @@ struct RealityKitClientView: View {
                 }
                 else {
                     print("THIRD HAND???")
-                    print(event, isRight, isInProgressPinch, WorldTracker.shared.leftSelectionRayId, WorldTracker.shared.rightSelectionRayId)
+                    print(event, event.id.hashValue, isRight, isInProgressPinch, WorldTracker.shared.leftSelectionRayId, WorldTracker.shared.rightSelectionRayId)
                     return
                 }
             }
@@ -76,21 +87,24 @@ struct RealityKitClientView: View {
         
         // selectionRay origin + direction
         if let ray = event.selectionRay {
-            let pos = simd_float3(ray.origin + ray.direction)
+            let origin = value?.convert(ray.origin, from: .local, to: event.targetedEntity!.parent!) ?? simd_float3(ray.origin)
+            let direction = (value?.convert(ray.origin + ray.direction, from: .local, to: event.targetedEntity!.parent!) ?? origin + simd_float3(ray.direction)) - origin
+            let pos = origin + direction
+            
             WorldTracker.shared.testPosition = pos
             if isRight {
-                WorldTracker.shared.rightSelectionRayOrigin = simd_float3(ray.origin)
-                WorldTracker.shared.rightSelectionRayDirection = simd_float3(ray.direction)
+                WorldTracker.shared.rightSelectionRayOrigin = origin
+                WorldTracker.shared.rightSelectionRayDirection = direction
             }
             else {
-                WorldTracker.shared.leftSelectionRayOrigin = simd_float3(ray.origin)
-                WorldTracker.shared.leftSelectionRayDirection = simd_float3(ray.direction)
+                WorldTracker.shared.leftSelectionRayOrigin = origin
+                WorldTracker.shared.leftSelectionRayDirection = direction
             }
         }
         
         // inputDevicePose
         if let inputPose = event.inputDevicePose {
-            let pos = simd_float3(inputPose.pose3D.position)
+            let pos = value?.convert(inputPose.pose3D.position, from: .local, to: event.targetedEntity!.parent!) ?? simd_float3(inputPose.pose3D.position)
             //WorldTracker.shared.testPosition = pos
             
             // Started a pinch and have a start position
@@ -146,9 +160,9 @@ struct RealityKitClientView: View {
         update: { content in
 
         }
-        .gesture(
+        /*.gesture(
             // TODO: We need gaze rays somehow.
-            SpatialEventGesture()
+            SpatialEventGesture(coordinateSpace: .local)
                 .onChanged { events in
                     //print("onchanged")
                     for event in events {
@@ -162,6 +176,21 @@ struct RealityKitClientView: View {
                         handleEvent(event)
                     }
 
+                }
+        )*/
+        .gesture(
+            // TODO: We need gaze rays somehow.
+            SpatialEventGesture(coordinateSpace: .local)
+                .targetedToAnyEntity()
+                .onChanged { value in
+                    for v in value.gestureValue {
+                        RealityKitClientView.handleSpatialEvent(value, v)
+                    }
+                }
+                .onEnded { value in
+                    for v in value.gestureValue {
+                        RealityKitClientView.handleSpatialEvent(value, v)
+                    }
                 }
         )
     }
