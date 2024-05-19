@@ -8,6 +8,7 @@ import CompositorServices
 import GameController
 import CoreHaptics
 import Spatial
+import RealityKit
 
 enum SteamVRJoints : Int {
     case root = 0                                  //eBone_Root
@@ -252,6 +253,8 @@ class WorldTracker {
     var rightIsPinching = false
     var lastRightIsPinching = false
     var rightPinchTrigger: Float = 0.0
+    
+    var pinchesAreFromRealityKit = false
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -551,12 +554,8 @@ class WorldTracker {
         // Then I adjusted the positional offset with pinchOffset.xyz.
         let adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7389288)))
         let adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3(0.06772318, 0.0, 1.0)))
-        let adjPosition = simd_float3(0.0007324219, -0.094070435, -0.006164551) // -0.095443726
+        let adjPosition = pinchesAreFromRealityKit ? simd_float3() : simd_float3(0.0007324219, -0.094070435, -0.006164551) // -0.095443726
         let q = simd_quatf(orient) * adjLeftRight * adjUpDown
-        
-        /*pinchOffset.x = 0.0
-        pinchOffset.y = 0.0
-        pinchOffset.z = 0.0*/
         
         let pose: AlvrPose = AlvrPose(q, convertApplePositionToSteamVR(appleOrigin + (appleDirection * -0.5) + pinchOffset + adjPosition))
         
@@ -1094,6 +1093,10 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
                     alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
                     leftPinchTrigger -= 0.1
+                    if leftPinchTrigger <= 0.1 {
+                        WorldTracker.shared.leftSelectionRayOrigin = simd_float3()
+                        WorldTracker.shared.leftSelectionRayDirection = simd_float3()
+                    }
                     if leftPinchTrigger < 0.0 {
                         leftPinchTrigger = 0.0
                     }
@@ -1112,6 +1115,10 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
                     alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
                     rightPinchTrigger -= 0.1
+                    if rightPinchTrigger <= 0.1 {
+                        WorldTracker.shared.rightSelectionRayOrigin = simd_float3()
+                        WorldTracker.shared.rightSelectionRayDirection = simd_float3()
+                    }
                     if rightPinchTrigger < 0.0 {
                         rightPinchTrigger = 0.0
                     }
