@@ -169,37 +169,20 @@ struct ALVRClientApp: App {
             }
         }.immersionStyle(selection: .constant(.full), in: .full)
         
-        ImmersiveSpace(id: "RealityKitClientWithHands") {
+        ImmersiveSpace(id: "RealityKitClient") {
             RealityKitClientView()
         }
         .immersionStyle(selection: .constant(.mixed), in: .mixed)
-        .upperLimbVisibility(.visible)
+        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
         
-        ImmersiveSpace(id: "RealityKitClientNoHands") {
-            RealityKitClientView()
-        }
-        .immersionStyle(selection: .constant(.mixed), in: .mixed)
-        .upperLimbVisibility(.hidden)
-        
-        // This is dumb but I think it might genuinely be the correct solution.
-        // But also, somehow it doesn't work, so I'm out of ideas here.
-        ImmersiveSpace(id: "MetalClientWithHands") {
+        ImmersiveSpace(id: "MetalClient") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
                 let system = MetalClientSystem(layerRenderer)
                 system.startRenderLoop()
             }
         }
         .immersionStyle(selection: $clientImmersionStyle, in: .full)
-        .upperLimbVisibility(.visible)
-        
-        ImmersiveSpace(id: "MetalClientNoHands") {
-            CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
-                let system = MetalClientSystem(layerRenderer)
-                system.startRenderLoop()
-            }
-        }
-        .immersionStyle(selection: $clientImmersionStyle, in: .full)
-        .upperLimbVisibility(.hidden)
+        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
     }
     
 }

@@ -948,6 +948,8 @@ class WorldTracker {
         }
     }
     
+    var lastSentTime = 0.0
+    
     // TODO: figure out how stable Apple's predictions are into the future
     // targetTimestamp: The timestamp of the pose we will send to ALVR--capped by how far we can predict forward.
     // realTargetTimestamp: The timestamp we tell ALVR, which always includes the full round-trip prediction.
@@ -1146,6 +1148,8 @@ class WorldTracker {
         viewFovsPtr[0] = AlvrViewParams(pose: leftPose, fov: viewFovs[0])
         viewFovsPtr[1] = AlvrViewParams(pose: rightPose, fov: viewFovs[1])
 
+        //print((CACurrentMediaTime() - lastSentTime) * 1000.0)
+        lastSentTime = CACurrentMediaTime()
         EventHandler.shared.lastRequestedTimestamp = reportedTargetTimestampNS
         lastSentHandsTs = lastHandsUpdatedTs
         
@@ -1156,6 +1160,10 @@ class WorldTracker {
         Thread {
             //Thread.sleep(forTimeInterval: delay)
             alvr_send_tracking(reportedTargetTimestampNS, UnsafePointer(viewFovsPtr), trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+            
+            viewFovsPtr.deallocate()
+            skeletonLeftPtr?.deallocate()
+            skeletonRightPtr?.deallocate()
         }.start()
     }
     
@@ -1170,6 +1178,8 @@ class WorldTracker {
         viewFovsPtr[1] = AlvrViewParams(pose: dummyPose, fov: viewFovs[1])
         
         alvr_send_tracking(targetTimestampNS, UnsafePointer(viewFovsPtr), nil, 0, nil, nil)
+        
+        viewFovsPtr.deallocate()
     }
     
     // The poses we get back from the ALVR runtime are in SteamVR coordniate space,
