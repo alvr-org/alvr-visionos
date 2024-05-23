@@ -143,7 +143,7 @@ struct RealityKitClientView: View {
             return
         }
         
-        //print(event.id.hashValue, isRight, isInProgressPinch, WorldTracker.shared.leftSelectionRayId, WorldTracker.shared.rightSelectionRayId)
+        //print(event.id.hashValue, isRight, isInProgressPinch, WorldTracker.shared.leftSelectionRayId, WorldTracker.shared.rightSelectionRayId, event.inputDevicePose)
     
         // For eyes: inputDevicePose is the pinch connect location, and the selection ray is
         // the eye center plus the gaze
@@ -154,7 +154,7 @@ struct RealityKitClientView: View {
         // selectionRay origin + direction
         if let ray = event.selectionRay {
             let origin = value?.convert(ray.origin, from: .local, to: event.targetedEntity!.parent!) ?? simd_float3(ray.origin)
-            let direction = (value?.convert(ray.origin + ray.direction, from: .local, to: event.targetedEntity!.parent!) ?? origin + simd_float3(ray.direction)) - origin
+            let direction = simd_normalize((value?.convert(ray.origin + ray.direction, from: .local, to: event.targetedEntity!.parent!) ?? origin + simd_float3(ray.direction)) - origin)
             let pos = origin + direction
             
             WorldTracker.shared.testPosition = pos
@@ -171,6 +171,7 @@ struct RealityKitClientView: View {
         // inputDevicePose
         if let inputPose = event.inputDevicePose {
             let pos = value?.convert(inputPose.pose3D.position, from: .local, to: event.targetedEntity!.parent!) ?? simd_float3(inputPose.pose3D.position)
+            let rot = value?.convert(inputPose.pose3D.rotation, from: .local, to: event.targetedEntity!.parent!) ?? simd_quatf(inputPose.pose3D.rotation)
             //WorldTracker.shared.testPosition = pos
             
             // Started a pinch and have a start position
@@ -178,19 +179,25 @@ struct RealityKitClientView: View {
                 if isRight {
                     WorldTracker.shared.rightPinchStartPosition = pos
                     WorldTracker.shared.rightPinchCurrentPosition = pos
+                    WorldTracker.shared.rightPinchStartAngle = rot
+                    WorldTracker.shared.rightPinchCurrentAngle = rot
                 }
                 else {
                     WorldTracker.shared.leftPinchStartPosition = pos
                     WorldTracker.shared.leftPinchCurrentPosition = pos
+                    WorldTracker.shared.leftPinchStartAngle = rot
+                    WorldTracker.shared.leftPinchCurrentAngle = rot
                 }
                 
             }
             else {
                 if isRight {
                     WorldTracker.shared.rightPinchCurrentPosition = pos
+                    WorldTracker.shared.rightPinchCurrentAngle = rot
                 }
                 else {
                     WorldTracker.shared.leftPinchCurrentPosition = pos
+                    WorldTracker.shared.leftPinchCurrentAngle = rot
                 }
             }
         }
@@ -200,10 +207,14 @@ struct RealityKitClientView: View {
                 if isRight {
                     WorldTracker.shared.rightPinchStartPosition = simd_float3()
                     WorldTracker.shared.rightPinchCurrentPosition = simd_float3()
+                    WorldTracker.shared.rightPinchStartAngle = simd_quatf()
+                    WorldTracker.shared.rightPinchCurrentAngle = simd_quatf()
                 }
                 else {
                     WorldTracker.shared.leftPinchStartPosition = simd_float3()
                     WorldTracker.shared.leftPinchCurrentPosition = simd_float3()
+                    WorldTracker.shared.leftPinchStartAngle = simd_quatf()
+                    WorldTracker.shared.leftPinchCurrentAngle = simd_quatf()
                 }
                 
             }
