@@ -77,13 +77,7 @@ struct EntryControls: View {
                         
                         print("Open real immersive space")
                         
-                        var id = "RealityKitClientWithHands"
-                        if gStore.settings.showHandsOverlaid {
-                            id = "RealityKitClientWithHands"
-                        }
-                        else {
-                            id = "RealityKitClientNoHands"
-                        }
+                        var id = "RealityKitClient"
                         
                         switch await openImmersiveSpace(id: id) {
                         case .opened:
@@ -95,11 +89,8 @@ struct EntryControls: View {
                             showImmersiveSpace = false
                         }
                     }
-                    else if gStore.settings.showHandsOverlaid {
-                        await openImmersiveSpace(id: "MetalClientWithHands")
-                    }
                     else {
-                        await openImmersiveSpace(id: "MetalClientNoHands")
+                        await openImmersiveSpace(id: "MetalClient")
                     }
                     if gStore.settings.dismissWindowOnEnter {
                         dismissWindow(id: "Entry")

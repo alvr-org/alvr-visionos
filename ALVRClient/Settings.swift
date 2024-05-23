@@ -85,8 +85,13 @@ struct Settings {
         /*if let utf8String = String(bytes: data, encoding: .utf8) {
             print(utf8String.trimmingCharacters(in: ["\0"]))
         }*/
-
-        return try! JSONDecoder().decode(T.self, from: data)
+        
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        }
+        catch {
+            return nil
+        }
     }
 
     public static func getAlvrSettings() -> SettingsCodables.Settings? {

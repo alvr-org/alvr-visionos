@@ -146,7 +146,10 @@ struct RealityKitClientView: View {
     
     var body: some View {
         RealityView { content in
-            RealityKitClientSystem.registerSystem()
+            if DummyMetalRenderer.haveRenderInfo {
+                print("Registering RealityKitClientSystem")
+                RealityKitClientSystem.registerSystem()
+            }
             
             let material = PhysicallyBasedMaterial()
             let videoPlaneMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
@@ -160,26 +163,7 @@ struct RealityKitClientView: View {
         update: { content in
 
         }
-        /*.gesture(
-            // TODO: We need gaze rays somehow.
-            SpatialEventGesture(coordinateSpace: .local)
-                .onChanged { events in
-                    //print("onchanged")
-                    for event in events {
-                        handleEvent(event)
-                    }
-                }
-                .onEnded { events in
-
-                    //print("onended")
-                    for event in events {
-                        handleEvent(event)
-                    }
-
-                }
-        )*/
         .gesture(
-            // TODO: We need gaze rays somehow.
             SpatialEventGesture(coordinateSpace: .local)
                 .targetedToAnyEntity()
                 .onChanged { value in
@@ -194,8 +178,4 @@ struct RealityKitClientView: View {
                 }
         )
     }
-}
-
-#Preview(immersionStyle: .full) {
-    RealityKitClientView()
 }

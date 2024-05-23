@@ -27,7 +27,7 @@ let renderDepthFormat = MTLPixelFormat.depth16Unorm
 let renderViewCount = 1
 let renderZNear = 0.001
 let renderZFar = 100.0
-let rkFramesInFlight = 4
+let rkFramesInFlight = 3
 let renderDoStreamSSAA = true
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
@@ -94,7 +94,7 @@ class RealityKitClientSystem : System {
     var lastUpdateTime = 0.0
     var drawableQueue: TextureResource.DrawableQueue? = nil
     private(set) var surfaceMaterial: ShaderGraphMaterial? = nil
-    private var textureResource: TextureResource?
+    private var textureResource: TextureResource? = nil
     var passthroughPipelineState: MTLRenderPipelineState? = nil
     var passthroughPipelineStateHDR: MTLRenderPipelineState? = nil
     var passthroughPipelineStateWithAlpha: MTLRenderPipelineState? = nil
@@ -103,8 +103,7 @@ class RealityKitClientSystem : System {
     public let device: MTLDevice
     let commandQueue: MTLCommandQueue
     var renderViewports: [MTLViewport] = [MTLViewport(originX: 0, originY: 0, width: 1.0, height: 1.0, znear: 0.1, zfar: 10.0), MTLViewport(originX: 0, originY: 0, width: 1.0, height: 1.0, znear: 0.1, zfar: 10.0)]
-    
-    var fullscreenQuadBuffer:MTLBuffer!
+
     var lastTexture: MTLTexture? = nil
     
     var frameIdx: Int = 0
@@ -244,6 +243,11 @@ class RealityKitClientSystem : System {
     
     func createMetalFXUpscaler()
     {
+        if !metalFxEnabled {
+            metalFxScaler = nil
+            return
+        }
+
 #if !targetEnvironment(simulator)
         let desc = MTLFXSpatialScalerDescriptor()
         desc.inputWidth = currentOffscreenRenderWidth
@@ -265,49 +269,93 @@ class RealityKitClientSystem : System {
         let cnt = rkFramePool.count
         for _ in 0..<cnt {
             let (texture, upscaleTexture, depthTexture) = self.rkFramePool.removeFirst()
-            if texture.width == currentOffscreenRenderWidth && upscaleTexture.width == currentRenderWidth && texture.pixelFormat == currentRenderColorFormat {
+            if texture.width == currentOffscreenRenderWidth && upscaleTexture.width == (metalFxEnabled ? currentRenderWidth : 1) && texture.pixelFormat == currentRenderColorFormat {
                 rkFramePool.append((texture, upscaleTexture, depthTexture))
+            }
+            else {
+#if !targetEnvironment(simulator)
+                texture.setPurgeableState(.volatile)
+                upscaleTexture.setPurgeableState(.volatile)
+                depthTexture.setPurgeableState(.volatile)
+#endif
             }
         }
         
         while rkFramePool.count > rkFramesInFlight {
             let (a, b, c) = self.rkFramePool.removeFirst()
+#if !targetEnvironment(simulator)
             a.setPurgeableState(.volatile)
             b.setPurgeableState(.volatile)
             c.setPurgeableState(.volatile)
+#endif
         }
 
         for _ in rkFramePool.count..<rkFramesInFlight {
+            var texture: MTLTexture? = nil
+            var upscaleTexture: MTLTexture? = nil
+            var depthTexture: MTLTexture? = nil
+            
             let upscaleTextureDesc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: currentDrawableRenderColorFormat,
                                                                                   width: metalFxEnabled ? currentRenderWidth : 1,
                                                                                   height: metalFxEnabled ? currentRenderHeight*2 : 1,
                                                                                   mipmapped: false)
             upscaleTextureDesc.usage = [.renderTarget, .shaderRead]
             upscaleTextureDesc.storageMode = .private
-            let upscaleTexture = device.makeTexture(descriptor: upscaleTextureDesc)!
-            upscaleTexture.setPurgeableState(.volatile)
-
-            // TODO: VRR the edges when FFR is enabled (or always)
+            
             let textureDesc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: currentRenderColorFormat,
                                                                                   width: currentOffscreenRenderWidth,
                                                                                   height: currentOffscreenRenderHeight*2,
                                                                                   mipmapped: false)
             textureDesc.usage = [.renderTarget, .shaderRead]
             textureDesc.storageMode = .private
-            let texture = device.makeTexture(descriptor: textureDesc)!
-            texture.setPurgeableState(.volatile)
-            
             
             let depthTextureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: renderDepthFormat,
                                                                               width: currentOffscreenRenderWidth,
                                                                               height: currentOffscreenRenderHeight*2,
                                                                               mipmapped: false)
-            depthTextureDescriptor.usage = [.renderTarget, .shaderRead]
+            depthTextureDescriptor.usage = [.renderTarget]
             depthTextureDescriptor.storageMode = .private
-            let depthTexture = device.makeTexture(descriptor: depthTextureDescriptor)!
-            depthTexture.setPurgeableState(.volatile)
+            
+            for _ in 0..<100 {
+                upscaleTexture = device.makeTexture(descriptor: upscaleTextureDesc)
+#if !targetEnvironment(simulator)
+                upscaleTexture?.setPurgeableState(.volatile)
+#endif
+                if upscaleTexture != nil {
+                    break
+                }
+            }
+
+            for _ in 0..<100 {
+                // TODO: VRR the edges when FFR is enabled (or always)
+                
+                texture = device.makeTexture(descriptor: textureDesc)
+#if !targetEnvironment(simulator)
+                texture?.setPurgeableState(.volatile)
+#endif
+                if texture != nil {
+                    break
+                }
+            }
+            
+            for _ in 0..<100 {
+                depthTexture = device.makeTexture(descriptor: depthTextureDescriptor)
+#if !targetEnvironment(simulator)
+                depthTexture?.setPurgeableState(.volatile)
+#endif
+                if depthTexture != nil {
+                    break
+                }
+            }
+            
+            if texture == nil || depthTexture == nil || upscaleTexture == nil {
+                print("Couldn't allocate all texture!!!")
+                continue
+            }
+            
+            print("allocated frame pool", rkFramePool.count)
         
-            rkFramePool.append((texture, upscaleTexture, depthTexture))
+            rkFramePool.append((texture!, upscaleTexture!, depthTexture!))
         }
         objc_sync_exit(rkFramePoolLock)
     }
@@ -484,10 +532,11 @@ class RealityKitClientSystem : System {
                 if !rkFrameQueue.isEmpty {
                     while rkFrameQueue.count > 1 {
                         let pop = rkFrameQueue.removeFirst()
+#if !targetEnvironment(simulator)
                         pop.upscaleTexture.setPurgeableState(.volatile)
                         pop.texture.setPurgeableState(.volatile)
                         pop.depthTexture.setPurgeableState(.volatile)
-                            
+#endif
                         if pop.texture.pixelFormat == currentRenderColorFormat && pop.texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
                             objc_sync_enter(self.rkFramePoolLock)
                             rkFramePool.append((pop.texture, pop.upscaleTexture, pop.depthTexture))
@@ -520,12 +569,14 @@ class RealityKitClientSystem : System {
                     guard let commandBuffer = commandQueue.makeCommandBuffer() else {
                         fatalError("Failed to create command buffer")
                     }
-                    
+
+#if !targetEnvironment(simulator)
                     // Shouldn't be needed but just in case
                     upscaleTexture.setPurgeableState(.nonVolatile)
                     texture.setPurgeableState(.nonVolatile)
                     depthTexture.setPurgeableState(.nonVolatile)
                     drawable!.texture.setPurgeableState(.nonVolatile)
+#endif
                     
                     //upscaleTextureToTexture(commandBuffer, texture, drawable!.texture)
                     copyTextureToTexture(commandBuffer, metalFxEnabled ? upscaleTexture : texture, drawable!.texture)
@@ -563,9 +614,11 @@ class RealityKitClientSystem : System {
 
                     objc_sync_enter(rkFramePoolLock)
                     //print(texture.width, currentRenderWidth)
+#if !targetEnvironment(simulator)
                     texture.setPurgeableState(.volatile)
                     upscaleTexture.setPurgeableState(.volatile)
                     depthTexture.setPurgeableState(.volatile)
+#endif
                     if texture.pixelFormat == currentRenderColorFormat && texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
                         rkFramePool.append((texture, upscaleTexture, depthTexture))
                     }
@@ -771,10 +824,12 @@ class RealityKitClientSystem : System {
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             fatalError("Failed to create command buffer")
         }
-        
+
+#if !targetEnvironment(simulator)
         upscaleTexture.setPurgeableState(.nonVolatile)
         drawableTexture.setPurgeableState(.nonVolatile)
         depthTexture.setPurgeableState(.nonVolatile)
+#endif
         
         if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
             let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
