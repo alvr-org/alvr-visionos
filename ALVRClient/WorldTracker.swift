@@ -76,6 +76,11 @@ extension simd_float3
     {
         return (self.x, self.y, self.z)
     }
+    
+    func asFloat4() -> simd_float4
+    {
+        return simd_float4(self.x, self.y, self.z, 0.0)
+    }
 }
 
 extension simd_float4
@@ -241,6 +246,8 @@ class WorldTracker {
     var leftSelectionRayDirection = simd_float3(0.0, 0.0, 0.0)
     var leftPinchStartPosition = simd_float3(0.0, 0.0, 0.0)
     var leftPinchCurrentPosition = simd_float3(0.0, 0.0, 0.0)
+    var leftPinchStartAngle = simd_quatf()
+    var leftPinchCurrentAngle = simd_quatf()
     var leftIsPinching = false
     var lastLeftIsPinching = false
     var leftPinchTrigger: Float = 0.0
@@ -250,9 +257,15 @@ class WorldTracker {
     var rightSelectionRayDirection = simd_float3(0.0, 0.0, 0.0)
     var rightPinchStartPosition = simd_float3(0.0, 0.0, 0.0)
     var rightPinchCurrentPosition = simd_float3(0.0, 0.0, 0.0)
+    var rightPinchStartAngle = simd_quatf()
+    var rightPinchCurrentAngle = simd_quatf()
     var rightIsPinching = false
     var lastRightIsPinching = false
     var rightPinchTrigger: Float = 0.0
+    
+    var leftPinchEyeDelta = simd_float3()
+    var rightPinchEyeDelta = simd_float3()
+    var averageViewTransformPositionalComponent = simd_float3()
     
     var pinchesAreFromRealityKit = false
     
@@ -522,6 +535,10 @@ class WorldTracker {
         let dp = (pose.position.0 - lastPose.position.0, pose.position.1 - lastPose.position.1, pose.position.2 - lastPose.position.2)
         let dt = Float(lastHandsUpdatedTs - lastSentHandsTs)
         
+        if !hand.isTracked {
+            return AlvrDeviceMotion(device_id: device_id, pose: hand.chirality == .left ? lastLeftHandPose : lastRightHandPose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+        }
+        
         if hand.chirality == .left {
             lastLeftHandPose = pose
         }
@@ -530,6 +547,11 @@ class WorldTracker {
         }
         
         return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (dp.0 / dt, dp.1 / dt, dp.2 / dt), angular_velocity: (0, 0, 0))
+    }
+    
+    func quatDifference(_ a: simd_quatf, _ b: simd_quatf) -> simd_quatf {
+        let delta = a * b.inverse
+        return simd_slerp_longest(simd_quatf(), delta, 0.001)
     }
     
     func pinchToAlvrDeviceMotion(_ chirality: HandAnchor.Chirality) -> AlvrDeviceMotion {
@@ -549,13 +571,18 @@ class WorldTracker {
         
         var pinchOffset = isLeft ? (leftPinchCurrentPosition - leftPinchStartPosition) : (rightPinchCurrentPosition - rightPinchStartPosition)
         
+        //print(altitude)
+        
         // Gathered these by oscillating the controller along the gaze ray, and then adjusting the
         // angles slightly with pinchOffset.y until the pointer stopped moving left/right and up/down.
         // Then I adjusted the positional offset with pinchOffset.xyz.
         let adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7389288)))
         let adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3(0.06772318, 0.0, 1.0)))
-        let adjPosition = pinchesAreFromRealityKit ? simd_float3() : simd_float3(0.0007324219, -0.094070435, -0.006164551) // -0.095443726
+        let adjPosition = simd_float3(0.0, isLeft ? -leftPinchEyeDelta.y : -rightPinchEyeDelta.y, 0.0)
         let q = simd_quatf(orient) * adjLeftRight * adjUpDown
+        //pinchOffset = simd_float3()
+        
+        pinchOffset *= 3.5
         
         let pose: AlvrPose = AlvrPose(q, convertApplePositionToSteamVR(appleOrigin + (appleDirection * -0.5) + pinchOffset + adjPosition))
         
@@ -1004,6 +1031,34 @@ class WorldTracker {
         
         //let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
         let reportedTargetTimestampNS = UInt64(reportedTargetTimestamp * Double(NSEC_PER_SEC))
+        
+        let headPositionApple = deviceAnchor.originFromAnchorTransform.columns.3.asFloat3()
+        
+        
+        // HACK: The selection ray origin is slightly off (especially for Metal).
+        // I think they subtracted the view transform from the pinch origin twice?
+        // Added instead of subtracted? idk, it's something weird.
+        //
+        // Example: delta.y = 0.020709395
+        // Real head y = 1.1004653
+        // Pinch origin y = 1.0797559
+        // y which lines up the ray correctly = 1.059214
+        if leftIsPinching && leftSelectionRayOrigin != simd_float3() && leftPinchStartPosition == leftPinchCurrentPosition {
+            leftPinchEyeDelta = headPositionApple - leftSelectionRayOrigin
+            leftPinchEyeDelta -= averageViewTransformPositionalComponent
+            if !pinchesAreFromRealityKit {
+                leftPinchEyeDelta -= averageViewTransformPositionalComponent
+            }
+            //print("left pinch eye delta", leftPinchEyeDelta)
+        }
+        if rightIsPinching && rightSelectionRayOrigin != simd_float3() && rightPinchStartPosition == rightPinchCurrentPosition {
+            rightPinchEyeDelta = headPositionApple - rightSelectionRayOrigin
+            rightPinchEyeDelta -= averageViewTransformPositionalComponent
+            if !pinchesAreFromRealityKit {
+                rightPinchEyeDelta -= averageViewTransformPositionalComponent
+            }
+            //print("right pinch eye delta", rightPinchEyeDelta)
+        }
 
         // Don't move SteamVR center/bounds when the headset recenters
         let transform = self.worldTrackingSteamVRTransform.inverse * deviceAnchor.originFromAnchorTransform
@@ -1026,15 +1081,25 @@ class WorldTracker {
         
         let handPoses = handTracking.latestAnchors
         if let leftHand = handPoses.leftHand {
-            if leftHand.isTracked && !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
-                trackingMotions.append(handAnchorToAlvrDeviceMotion(leftHand))
-                skeletonLeft = handAnchorToSkeleton(leftHand)
+            if !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+                if leftHand.isTracked {
+                    trackingMotions.append(handAnchorToAlvrDeviceMotion(leftHand))
+                    skeletonLeft = handAnchorToSkeleton(leftHand)
+                }
+                else {
+                    trackingMotions.append(handAnchorToAlvrDeviceMotion(leftHand))
+                }
             }
         }
         if let rightHand = handPoses.rightHand {
-            if rightHand.isTracked && !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (rightIsPinching || rightPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
-                trackingMotions.append(handAnchorToAlvrDeviceMotion(rightHand))
-                skeletonRight = handAnchorToSkeleton(rightHand)
+            if !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (rightIsPinching || rightPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+                if rightHand.isTracked {
+                    trackingMotions.append(handAnchorToAlvrDeviceMotion(rightHand))
+                    skeletonRight = handAnchorToSkeleton(rightHand)
+                }
+                else {
+                    trackingMotions.append(handAnchorToAlvrDeviceMotion(rightHand))
+                }
             }
         }
         if let skeletonLeft = skeletonLeft {

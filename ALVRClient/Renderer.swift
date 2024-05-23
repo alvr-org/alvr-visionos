@@ -555,6 +555,22 @@ class Renderer {
             return
         }
         
+        // HACK: for some reason Apple's view transforms' positional component has this really weird drift downwards at the start.
+        // It seems to drift from the correct position, to an incorrect position 2.6cm away.
+        // Unfortunately, for gazes to be accurate we need to know the real eye positions, so we grab this quickly at the start.
+        if WorldTracker.shared.averageViewTransformPositionalComponent == simd_float3() {
+            var averageViewTransformPositionalComponent = simd_float4()
+            for view in drawable.views {
+                averageViewTransformPositionalComponent += view.transform.columns.3
+            }
+            
+            averageViewTransformPositionalComponent /= Float(drawable.views.count)
+            averageViewTransformPositionalComponent.w = 0.0
+            
+            WorldTracker.shared.averageViewTransformPositionalComponent = averageViewTransformPositionalComponent.asFloat3()
+            print("Average offset shared between eyes:", WorldTracker.shared.averageViewTransformPositionalComponent)
+        }
+        
         if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
             alvr_report_compositor_start(queuedFrame!.timestamp)
         }
@@ -584,6 +600,26 @@ class Renderer {
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
                 EventHandler.shared.viewTransforms = [drawable.views[0].transform, drawable.views.count > 1 ? drawable.views[1].transform : drawable.views[0].transform]
                 EventHandler.shared.lastIpd = ipd
+                
+                for i in 0..<EventHandler.shared.viewTransforms.count {
+                   EventHandler.shared.viewTransforms[i].columns.3 -= WorldTracker.shared.averageViewTransformPositionalComponent.asFloat4()
+                }
+                
+                var averageViewTransformPositionalComponent = simd_float4()
+                for view in drawable.views {
+                    averageViewTransformPositionalComponent += view.transform.columns.3
+                }
+                
+                // HACK: for some reason Apple's view transforms' positional component has this really weird drift downwards at the start.
+                // It seems to drift from the correct position, to an incorrect position 2.6cm away.
+                // For consistency, we take the first transform and use that.
+                averageViewTransformPositionalComponent /= Float(drawable.views.count)
+                averageViewTransformPositionalComponent.w = 0.0
+                
+                for i in 0..<EventHandler.shared.viewTransforms.count {
+                   EventHandler.shared.viewTransforms[i].columns.3 -= averageViewTransformPositionalComponent
+                   EventHandler.shared.viewTransforms[i].columns.3 += WorldTracker.shared.averageViewTransformPositionalComponent.asFloat4()
+                }
             }
             
             

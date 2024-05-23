@@ -54,9 +54,10 @@ class DummyMetalRenderer {
         averageViewTransformPositionalComponent /= Float(DummyMetalRenderer.renderViewTransforms.count)
         averageViewTransformPositionalComponent.w = 0.0
         
-        for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
+        /*for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
             DummyMetalRenderer.renderViewTransforms[i].columns.3 -= averageViewTransformPositionalComponent
-        }
+        }*/
+        WorldTracker.shared.averageViewTransformPositionalComponent = averageViewTransformPositionalComponent.asFloat3()
         
         drawable.encodePresent(commandBuffer: commandBuffer)
         commandBuffer.commit()
