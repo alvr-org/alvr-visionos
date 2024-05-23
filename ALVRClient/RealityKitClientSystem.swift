@@ -95,6 +95,8 @@ class RealityKitClientSystem : System {
     var drawableQueue: TextureResource.DrawableQueue? = nil
     private(set) var surfaceMaterial: ShaderGraphMaterial? = nil
     private var textureResource: TextureResource? = nil
+    let transparentMaterial = UnlitMaterial(color: UIColor(white: 0.0, alpha: 0.0))
+    let blackMaterial = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
     var passthroughPipelineState: MTLRenderPipelineState? = nil
     var passthroughPipelineStateHDR: MTLRenderPipelineState? = nil
     var passthroughPipelineStateWithAlpha: MTLRenderPipelineState? = nil
@@ -144,11 +146,18 @@ class RealityKitClientSystem : System {
     
     var renderer: Renderer;
     
+    var renderTangents = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
+    
     required init(scene: RealityKit.Scene) {
         self.renderer = Renderer(nil)
+        self.renderer.fadeInOverlayAlpha = 1.0
         renderer.rebuildRenderPipelines()
         let settings = ALVRClientApp.gStore.settings
         metalFxEnabled = settings.metalFxEnabled
+        renderTangents = DummyMetalRenderer.renderTangents
+        for i in 0..<renderTangents.count {
+            renderTangents[i] *= settings.fovRenderScale
+        }
 
         currentSetRenderScale = settings.realityKitRenderScale
         if settings.realityKitRenderScale <= 0.0 {
@@ -455,179 +464,205 @@ class RealityKitClientSystem : System {
     func update(context: SceneUpdateContext) {
         objc_sync_enter(self.blitLock)
         // RealityKit automatically calls this every frame for every scene.
-        let plane = context.scene.findEntity(named: "video_plane") as? ModelEntity
-        if let plane = plane {
-            do {
-                if dynamicallyAdjustRenderScale && CACurrentMediaTime() - lastSubmit > 0.02 && lastSubmit - lastLastSubmit > 0.02 && CACurrentMediaTime() - lastFbChangeTime > 0.25 {
-                    currentRenderScale -= 0.25
-                }
-                
-                // TODO: for some reason color format changes causes fps to drop to 45?
-                if lastRenderScale != currentRenderScale || lastOffscreenRenderScale != currentOffscreenRenderScale || lastRenderColorFormat != currentRenderColorFormat {
-                    currentRenderWidth = Int(Double(renderWidth) * Double(currentRenderScale))
-                    currentRenderHeight = Int(Double(renderHeight) * Double(currentRenderScale))
-                    
-                    // TODO: SSAA after moving foveation out of frag shader?
-                    if !metalFxEnabled && !renderDoStreamSSAA {
-                        currentOffscreenRenderScale = currentRenderScale
-                    }
-                    
-                    currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
-                    currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
-                
-                    // Recreate framebuffer
-                    let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], mipmapsMode: .none)
-                    self.drawableQueue = try? TextureResource.DrawableQueue(desc)
-                    self.drawableQueue!.allowsNextDrawableTimeout = true
-                    self.textureResource!.replace(withDrawables: self.drawableQueue!)
-                    
-                    renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
-                    renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
-                    self.lastFbChangeTime = CACurrentMediaTime()
-                    
-                    print("Resolution changed!")
-                    print("Offscreen render res:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
-                    print("RK render res:", currentRenderWidth, "x", currentRenderHeight, "(", currentRenderScale, ")")
-                    
-                    self.recreateFramePool()
-                }
-                lastRenderScale = currentRenderScale
-                lastOffscreenRenderScale = currentOffscreenRenderScale
-                lastRenderColorFormat = currentRenderColorFormat
-                
-                if rkFillUp > 0 {
-                    rkFillUp -= 1
-                    if rkFillUp <= 0 {
-                        rkFillUp = 0
-                        objc_sync_exit(self.blitLock)
-                        return
-                    }
-                }
-
-                if rkFrameQueue.isEmpty {
-                    rkFillUp = 2
-                    objc_sync_exit(self.blitLock)
-                    return
-                }
-            
-                let drawable = try drawableQueue?.nextDrawable()
-                if drawable == nil {
-                    objc_sync_exit(self.blitLock)
-                    return
-                }
-
-                lastUpdateTime = CACurrentMediaTime()
-                
-                if let surfaceMaterial = surfaceMaterial {
-                    plane.model?.materials = [surfaceMaterial]
-                }
-                
-                if lastSubmit == 0.0 {
-                    lastSubmit = CACurrentMediaTime() - visionPro.vsyncDelta
-                    EventHandler.shared.handleHeadsetRemovedOrReentry()
-                    EventHandler.shared.handleHeadsetEntered()
-                    //EventHandler.shared.kickAlvr() // HACK: RealityKit kills the audio :/
-                }
-                
-                if !rkFrameQueue.isEmpty {
-                    while rkFrameQueue.count > 1 {
-                        let pop = rkFrameQueue.removeFirst()
-#if !targetEnvironment(simulator)
-                        pop.upscaleTexture.setPurgeableState(.volatile)
-                        pop.texture.setPurgeableState(.volatile)
-                        pop.depthTexture.setPurgeableState(.volatile)
-#endif
-                        if pop.texture.pixelFormat == currentRenderColorFormat && pop.texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
-                            objc_sync_enter(self.rkFramePoolLock)
-                            rkFramePool.append((pop.texture, pop.upscaleTexture, pop.depthTexture))
-                            objc_sync_exit(self.rkFramePoolLock)
-                        }
-                    }
+        guard let plane = context.scene.findEntity(named: "video_plane") as? ModelEntity else {
+            return
+        }
+        guard let backdrop = context.scene.findEntity(named: "backdrop_cube") as? ModelEntity else {
+            return
+        }
+        let settings = ALVRClientApp.gStore.settings
         
-                    let frame = rkFrameQueue.removeFirst()
-                    var planeTransform = frame.transform
-                    let timestamp = frame.timestamp
-                    let texture = frame.texture
-                    let upscaleTexture = frame.upscaleTexture
-                    let depthTexture = frame.depthTexture
-                    var vsyncTime = frame.vsyncTime
-                    
-                    /*if frame.texture.width != drawable!.texture.width {
-                        objc_sync_enter(self.rkFramePoolLock)
-                        rkFramePool.append((texture, depthTexture))
-                        objc_sync_exit(self.rkFramePoolLock)
-                        objc_sync_exit(self.blitLock)
-                        return
-                    }*/
-                    
-                    planeTransform.columns.3 -= planeTransform.columns.2 * rk_panel_depth
-                    var scale = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
-                    scale *= rk_panel_depth
-                    let orientation = simd_quatf(planeTransform) * simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
-                    let position = simd_float3(planeTransform.columns.3.x, planeTransform.columns.3.y, planeTransform.columns.3.z)
-                    
-                    guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-                        fatalError("Failed to create command buffer")
-                    }
-
-#if !targetEnvironment(simulator)
-                    // Shouldn't be needed but just in case
-                    upscaleTexture.setPurgeableState(.nonVolatile)
-                    texture.setPurgeableState(.nonVolatile)
-                    depthTexture.setPurgeableState(.nonVolatile)
-                    drawable!.texture.setPurgeableState(.nonVolatile)
-#endif
-                    
-                    //upscaleTextureToTexture(commandBuffer, texture, drawable!.texture)
-                    copyTextureToTexture(commandBuffer, metalFxEnabled ? upscaleTexture : texture, drawable!.texture)
-
-                    let submitTime = CACurrentMediaTime()
-                    commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
-                        if EventHandler.shared.alvrInitialized /*&& EventHandler.shared.lastSubmittedTimestamp != timestamp*/ {
-                            vsyncTime = self.visionPro.nextFrameTime
-                            
-                            let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
-                            let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
-                            //print("Finished:", queuedFrame!.timestamp)
-                            //print((vsyncTime - CACurrentMediaTime()) * 1000.0)
-                            //print("blit", (CACurrentMediaTime() - submitTime) * 1000.0)
-                            Task {
-                                alvr_report_submit(timestamp, vsyncTimeNs &- currentTimeNs)
-                            }
-                            
-                            //print("blit roundtrip", CACurrentMediaTime() - self.lastUpdate, timestamp)
-                            self.lastUpdate = CACurrentMediaTime()
-                    
-                            EventHandler.shared.lastSubmittedTimestamp = timestamp
-                        }
-                    }
-                    commandBuffer.commit()
-                    commandBuffer.waitUntilCompleted()
-                    
-                    plane.position = position
-                    plane.orientation = orientation
-                    plane.scale = scale
-                    
-                    //drawable!.texture.setPurgeableState(.volatile)
-                    
-                    drawable!.presentOnSceneUpdate()
-
-                    objc_sync_enter(rkFramePoolLock)
-                    //print(texture.width, currentRenderWidth)
-#if !targetEnvironment(simulator)
-                    texture.setPurgeableState(.volatile)
-                    upscaleTexture.setPurgeableState(.volatile)
-                    depthTexture.setPurgeableState(.volatile)
-#endif
-                    if texture.pixelFormat == currentRenderColorFormat && texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
-                        rkFramePool.append((texture, upscaleTexture, depthTexture))
-                    }
-                    objc_sync_exit(rkFramePoolLock)
+        do {
+            if dynamicallyAdjustRenderScale && CACurrentMediaTime() - lastSubmit > 0.02 && lastSubmit - lastLastSubmit > 0.02 && CACurrentMediaTime() - lastFbChangeTime > 0.25 {
+                currentRenderScale -= 0.25
+            }
+            
+            // TODO: for some reason color format changes causes fps to drop to 45?
+            if lastRenderScale != currentRenderScale || lastOffscreenRenderScale != currentOffscreenRenderScale || lastRenderColorFormat != currentRenderColorFormat {
+                currentRenderWidth = Int(Double(renderWidth) * Double(currentRenderScale))
+                currentRenderHeight = Int(Double(renderHeight) * Double(currentRenderScale))
+                
+                // TODO: SSAA after moving foveation out of frag shader?
+                if !metalFxEnabled && !renderDoStreamSSAA {
+                    currentOffscreenRenderScale = currentRenderScale
+                }
+                
+                currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
+                currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
+            
+                // Recreate framebuffer
+                let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], mipmapsMode: .none)
+                self.drawableQueue = try? TextureResource.DrawableQueue(desc)
+                self.drawableQueue!.allowsNextDrawableTimeout = true
+                self.textureResource!.replace(withDrawables: self.drawableQueue!)
+                
+                renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
+                renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
+                self.lastFbChangeTime = CACurrentMediaTime()
+                
+                print("Resolution changed!")
+                print("Offscreen render res:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
+                print("RK render res:", currentRenderWidth, "x", currentRenderHeight, "(", currentRenderScale, ")")
+                
+                self.recreateFramePool()
+            }
+            lastRenderScale = currentRenderScale
+            lastOffscreenRenderScale = currentOffscreenRenderScale
+            lastRenderColorFormat = currentRenderColorFormat
+            
+            if rkFillUp > 0 {
+                rkFillUp -= 1
+                if rkFillUp <= 0 {
+                    rkFillUp = 0
+                    objc_sync_exit(self.blitLock)
+                    return
                 }
             }
-            catch {
-            
+
+            if rkFrameQueue.isEmpty {
+                rkFillUp = 2
+                objc_sync_exit(self.blitLock)
+                return
             }
+        
+            let drawable = try drawableQueue?.nextDrawable()
+            if drawable == nil {
+                objc_sync_exit(self.blitLock)
+                return
+            }
+
+            lastUpdateTime = CACurrentMediaTime()
+            
+            if let surfaceMaterial = surfaceMaterial {
+                plane.model?.materials = [surfaceMaterial]
+            }
+            
+            if lastSubmit == 0.0 {
+                lastSubmit = CACurrentMediaTime() - visionPro.vsyncDelta
+                EventHandler.shared.handleHeadsetRemovedOrReentry()
+                EventHandler.shared.handleHeadsetEntered()
+                //EventHandler.shared.kickAlvr() // HACK: RealityKit kills the audio :/
+            }
+            
+            if !rkFrameQueue.isEmpty {
+                while rkFrameQueue.count > 1 {
+                    let pop = rkFrameQueue.removeFirst()
+#if !targetEnvironment(simulator)
+                    pop.upscaleTexture.setPurgeableState(.volatile)
+                    pop.texture.setPurgeableState(.volatile)
+                    pop.depthTexture.setPurgeableState(.volatile)
+#endif
+                    if pop.texture.pixelFormat == currentRenderColorFormat && pop.texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
+                        objc_sync_enter(self.rkFramePoolLock)
+                        rkFramePool.append((pop.texture, pop.upscaleTexture, pop.depthTexture))
+                        objc_sync_exit(self.rkFramePoolLock)
+                    }
+                }
+    
+                let frame = rkFrameQueue.removeFirst()
+                var planeTransform = frame.transform
+                let timestamp = frame.timestamp
+                let texture = frame.texture
+                let upscaleTexture = frame.upscaleTexture
+                let depthTexture = frame.depthTexture
+                var vsyncTime = frame.vsyncTime
+                
+                /*if frame.texture.width != drawable!.texture.width {
+                    objc_sync_enter(self.rkFramePoolLock)
+                    rkFramePool.append((texture, depthTexture))
+                    objc_sync_exit(self.rkFramePoolLock)
+                    objc_sync_exit(self.blitLock)
+                    return
+                }*/
+                
+                planeTransform.columns.3 -= planeTransform.columns.2 * rk_panel_depth
+                var scale = simd_float3(renderTangents[0].x + renderTangents[0].y, 1.0, renderTangents[0].z + renderTangents[0].w)
+                scale *= rk_panel_depth
+                let orientation = simd_quatf(planeTransform) * simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
+                let position = simd_float3(planeTransform.columns.3.x, planeTransform.columns.3.y, planeTransform.columns.3.z)
+                
+                guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+                    fatalError("Failed to create command buffer")
+                }
+
+#if !targetEnvironment(simulator)
+                // Shouldn't be needed but just in case
+                upscaleTexture.setPurgeableState(.nonVolatile)
+                texture.setPurgeableState(.nonVolatile)
+                depthTexture.setPurgeableState(.nonVolatile)
+                drawable!.texture.setPurgeableState(.nonVolatile)
+#endif
+                
+                //upscaleTextureToTexture(commandBuffer, texture, drawable!.texture)
+                copyTextureToTexture(commandBuffer, metalFxEnabled ? upscaleTexture : texture, drawable!.texture)
+
+                let submitTime = CACurrentMediaTime()
+                commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
+                    if EventHandler.shared.alvrInitialized /*&& EventHandler.shared.lastSubmittedTimestamp != timestamp*/ {
+                        vsyncTime = self.visionPro.nextFrameTime
+                        
+                        let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
+                        let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
+                        //print("Finished:", queuedFrame!.timestamp)
+                        //print((vsyncTime - CACurrentMediaTime()) * 1000.0)
+                        //print("blit", (CACurrentMediaTime() - submitTime) * 1000.0)
+                        Task {
+                            alvr_report_submit(timestamp, vsyncTimeNs &- currentTimeNs)
+                        }
+                        
+                        //print("blit roundtrip", CACurrentMediaTime() - self.lastUpdate, timestamp)
+                        self.lastUpdate = CACurrentMediaTime()
+                
+                        EventHandler.shared.lastSubmittedTimestamp = timestamp
+                    }
+                }
+                commandBuffer.commit()
+                commandBuffer.waitUntilCompleted()
+                
+                plane.position = position
+                plane.orientation = orientation
+                plane.scale = scale
+                
+                if settings.chromaKeyEnabled {
+                    backdrop.scale = simd_float3(0.0, 0.0, 0.0)
+                }
+                else {
+                    // Place giant plane 1m behind the video feed
+                    backdrop.position = position
+                    backdrop.orientation = orientation
+                    backdrop.scale = simd_float3(rk_panel_depth + 1, rk_panel_depth + 1, rk_panel_depth + 1) * 100.0
+                    
+                    // Hopefully these optimize into consts to avoid allocations
+                    if renderer.fadeInOverlayAlpha >= 1.0 {
+                        backdrop.model?.materials = [transparentMaterial]
+                    }
+                    else if renderer.fadeInOverlayAlpha <= 0.0 {
+                        backdrop.model?.materials = [blackMaterial]
+                    }
+                    else {
+                        backdrop.model?.materials = [UnlitMaterial(color: UIColor(white: 0.0, alpha: CGFloat(1.0 - renderer.fadeInOverlayAlpha)))]
+                    }
+                }
+                
+                //drawable!.texture.setPurgeableState(.volatile)
+                
+                drawable!.presentOnSceneUpdate()
+
+                objc_sync_enter(rkFramePoolLock)
+                //print(texture.width, currentRenderWidth)
+#if !targetEnvironment(simulator)
+                texture.setPurgeableState(.volatile)
+                upscaleTexture.setPurgeableState(.volatile)
+                depthTexture.setPurgeableState(.volatile)
+#endif
+                if texture.pixelFormat == currentRenderColorFormat && texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
+                    rkFramePool.append((texture, upscaleTexture, depthTexture))
+                }
+                objc_sync_exit(rkFramePoolLock)
+            }
+        }
+        catch {
+        
         }
         objc_sync_exit(self.blitLock)
     }
@@ -703,8 +738,8 @@ class RealityKitClientSystem : System {
                     
                     needsPipelineRebuild = true
                 }
-                let leftAngles = atan(DummyMetalRenderer.renderTangents[0])
-                let rightAngles = DummyMetalRenderer.renderViewTransforms.count > 1 ? atan(DummyMetalRenderer.renderTangents[1]) : leftAngles
+                let leftAngles = atan(renderTangents[0])
+                let rightAngles = DummyMetalRenderer.renderViewTransforms.count > 1 ? atan(renderTangents[1]) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
                 let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
@@ -839,14 +874,14 @@ class RealityKitClientSystem : System {
             
             let allViewports = renderViewports
             let allViewTransforms = DummyMetalRenderer.renderViewTransforms
-            let allViewTangents = DummyMetalRenderer.renderTangents
+            let allViewTangents = renderTangents
             let rasterizationRateMap: MTLRasterizationRateMap? = nil
 
             if let encoder = renderer.beginRenderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: allViewports, viewTransforms: allViewTransforms, viewTangents: allViewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor) {
                 for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
                     let viewports = [renderViewports[i]]
                     let viewTransforms = [DummyMetalRenderer.renderViewTransforms[i]]
-                    let viewTangents = [DummyMetalRenderer.renderTangents[i]]
+                    let viewTangents = [renderTangents[i]]
                     
                     
                     renderer.renderStreamingFrame(i, commandBuffer: commandBuffer, renderEncoder: encoder, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
@@ -857,7 +892,7 @@ class RealityKitClientSystem : System {
             for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
                     let viewports = [renderViewports[i]]
                     let viewTransforms = [DummyMetalRenderer.renderViewTransforms[i]]
-                    let viewTangents = [DummyMetalRenderer.renderTangents[i]]
+                    let viewTangents = [renderTangents[i]]
                     renderer.renderStreamingFrameOverlays(i, commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
             }
 
@@ -887,7 +922,7 @@ class RealityKitClientSystem : System {
             for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
                 let viewports = [renderViewports[i]]
                 let viewTransforms = [DummyMetalRenderer.renderViewTransforms[i]]
-                let viewTangents = [DummyMetalRenderer.renderTangents[i]]
+                let viewTangents = [renderTangents[i]]
                 let framePose = noFramePose
                 let simdDeviceAnchor = deviceAnchor
                 let nearZ = renderZNear
