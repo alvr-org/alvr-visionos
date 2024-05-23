@@ -432,6 +432,7 @@ class Renderer {
     }
 
     private func updateGameStateForVideoFrame(_ whichIdx: Int, viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
+        let settings = ALVRClientApp.gStore.settings
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
             let tangents = viewTangents[viewIndex]
             
@@ -455,7 +456,7 @@ class Renderer {
                                                    nearZ: nearZ,
                                                    farZ: farZ,
                                                    reverseZ: true)
-            return Uniforms(projectionMatrix: .init(projection), modelViewMatrixFrame: viewMatrixFrame, modelViewMatrix: viewMatrix, tangents: tangents)
+            return Uniforms(projectionMatrix: .init(projection), modelViewMatrixFrame: viewMatrixFrame, modelViewMatrix: viewMatrix, tangents: tangents * (isRealityKit ? 1.0 : settings.fovRenderScale))
         }
         
         self.uniforms[0].uniforms.0 = uniforms(forViewIndex: 0)
@@ -559,6 +560,7 @@ class Renderer {
         }
 
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
+            let settings = ALVRClientApp.gStore.settings
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
             if abs(EventHandler.shared.lastIpd - ipd) > 0.001 {
                 print("Send view config")
@@ -575,8 +577,8 @@ class Renderer {
                     rebuildThread.name = "Rebuild Render Pipelines Thread"
                     rebuildThread.start()
                 }
-                let leftAngles = atan(drawable.views[0].tangents)
-                let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents) : leftAngles
+                let leftAngles = atan(drawable.views[0].tangents * settings.fovRenderScale)
+                let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents * settings.fovRenderScale) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
                 let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
@@ -584,7 +586,7 @@ class Renderer {
                 EventHandler.shared.lastIpd = ipd
             }
             
-            let settings = ALVRClientApp.gStore.settings
+            
             if CACurrentMediaTime() - lastReconfigureTime > 1.0 && (/*settings.chromaKeyEnabled != chromaKeyEnabled ||*/ settings.chromaKeyColorR != chromaKeyColor.x || settings.chromaKeyColorG != chromaKeyColor.y || settings.chromaKeyColorB != chromaKeyColor.z || settings.chromaKeyDistRangeMin != chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != chromaKeyLerpDistRange.y) {
                 lastReconfigureTime = CACurrentMediaTime()
                 let rebuildThread = Thread {

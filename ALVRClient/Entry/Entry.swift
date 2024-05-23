@@ -190,6 +190,27 @@ struct Entry: View {
                         Text("Dismiss this window on entry")
                     }
                     .toggleStyle(.switch)
+                    
+                    Text("FoV Scale").frame(maxWidth: .infinity, alignment: .leading)
+                    HStack {
+                       Slider(value: $gStore.settings.fovRenderScale,
+                              in: 0.2...1.6,
+                              step: 0.1) {
+                           Text("FoV Scale")
+                       }
+                       .onChange(of: gStore.settings.fovRenderScale) {
+                           applyRangeSettings()
+                       }
+                       TextField("FoV Scale", value: $gStore.settings.fovRenderScale, formatter: chromaFormatter)
+                       .textFieldStyle(RoundedBorderTextFieldStyle())
+                       .onChange(of: gStore.settings.fovRenderScale) {
+                           applyRangeSettings()
+                       }
+                       .frame(width: 100)
+                    }
+                    Text("Increase FoV for timewarp comfort, or sacrifice FoV for sharpness")
+                        .font(.system(size: 10))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(minWidth: 450)
                 .padding()

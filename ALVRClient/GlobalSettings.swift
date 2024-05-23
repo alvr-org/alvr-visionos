@@ -21,6 +21,7 @@ struct GlobalSettings: Codable {
     var metalFxEnabled: Bool = false
     var emulatedPinchInteractions: Bool = false
     var dontShowAWDLAlertAgain: Bool = false
+    var fovRenderScale: Float = 1.0
     
     init() {}
     
@@ -42,6 +43,7 @@ struct GlobalSettings: Codable {
         self.metalFxEnabled = try container.decodeIfPresent(Bool.self, forKey: .metalFxEnabled) ?? self.metalFxEnabled
         self.emulatedPinchInteractions = try container.decodeIfPresent(Bool.self, forKey: .emulatedPinchInteractions) ?? self.emulatedPinchInteractions
         self.dontShowAWDLAlertAgain = try container.decodeIfPresent(Bool.self, forKey: .dontShowAWDLAlertAgain) ?? self.dontShowAWDLAlertAgain
+        self.fovRenderScale = try container.decodeIfPresent(Float.self, forKey: .fovRenderScale) ?? self.fovRenderScale
     }
 }
 
