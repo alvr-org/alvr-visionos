@@ -1292,6 +1292,11 @@ class WorldTracker {
     // We want video frames ASAP, so we send a fake view pose/FOVs to keep the frames coming
     // until we have access to real values
     func sendFakeTracking(viewFovs: [AlvrFov], targetTimestamp: Double) {
+        // Shouldn't happen
+        if viewFovs.isEmpty {
+            return
+        }
+        
         let dummyPose = AlvrPose()
         let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         
@@ -1307,6 +1312,11 @@ class WorldTracker {
     // The poses we get back from the ALVR runtime are in SteamVR coordniate space,
     // so we need to convert them back to local space
     func convertSteamVRViewPose(_ viewParams: [AlvrViewParams]) -> simd_float4x4 {
+        // Shouldn't happen, somehow happened with the Metal renderer?
+        if viewParams.isEmpty {
+            return matrix_identity_float4x4
+        }
+
         let o = viewParams[0].pose.orientation
         let p = viewParams[0].pose.position
         var leftTransform = simd_float4x4(simd_quatf(ix: o.x, iy: o.y, iz: o.z, r: o.w))
