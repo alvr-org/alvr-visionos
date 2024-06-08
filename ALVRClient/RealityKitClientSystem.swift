@@ -1011,13 +1011,17 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             //print("render", (CACurrentMediaTime() - submitTime) * 1000.0)
             let timestamp = queuedFrame?.timestamp ?? 0
             let queuedFrame = RKQueuedFrame(texture: drawableTexture, upscaleTexture: upscaleTexture, depthTexture: depthTexture, timestamp: timestamp, transform: planeTransform, vsyncTime: self.visionPro.nextFrameTime)
-            if timestamp >= self.rkFrameQueue.last?.timestamp ?? timestamp {
-                self.rkFrameQueue.append(queuedFrame)
+            
+            // Not sure why this needs to be a task
+            Task {
+                objc_sync_enter(self.blitLock)
+                if timestamp >= self.rkFrameQueue.last?.timestamp ?? timestamp {
+                    self.rkFrameQueue.append(queuedFrame)
+                }
+                objc_sync_exit(self.blitLock)
             }
         }
-        objc_sync_enter(self.blitLock)
         commandBuffer.commit()
-        objc_sync_exit(self.blitLock)
         
         //print(submitTime - lastSubmit)
         
