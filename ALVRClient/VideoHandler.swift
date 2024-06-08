@@ -269,16 +269,16 @@ struct VideoHandler {
         if nalLength == 0 {
             return nil
         }
-        let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength))
+        let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength*16)) // HACK: idk how to handle this, there's a ToCToU here
         let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
         defer { nalBuffer.deallocate() }
         defer { nalViewsPtr.deallocate() }
         var nalTimestamp:UInt64 = 0
-        alvr_poll_nal(&nalTimestamp, nalViewsPtr, nalBuffer.baseAddress)
+        let realNalLength = alvr_poll_nal(&nalTimestamp, nalViewsPtr, nalBuffer.baseAddress)
         
         let nalViews = [nalViewsPtr[0], nalViewsPtr[1]]
         
-        return (nalTimestamp, nalViews, Data(buffer: nalBuffer))
+        return (nalTimestamp, nalViews, Data(bytes: nalBuffer.baseAddress!, count: Int(realNalLength & 0xFFFFFFFF)))
     }
     
     static func abandonAllPendingNals() {
