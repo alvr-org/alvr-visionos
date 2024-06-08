@@ -89,7 +89,54 @@ struct RKQueuedFrame {
     let vsyncTime: Double
 }
 
+// Every WindowGroup technically counts as a Scene, which means
+// we have to do Shenanigans to make sure that only the correct Scenes
+// get associated with our per-frame system.
 class RealityKitClientSystem : System {
+    static var howManyScenesExist = 0
+    var which = 0
+    var timesTried = 0
+    var s: RealityKitClientSystemCorrectlyAssociated? = nil
+
+    required init(scene: RealityKit.Scene) {
+        which = RealityKitClientSystem.howManyScenesExist
+        RealityKitClientSystem.howManyScenesExist += 1
+    }
+    
+    func update(context: SceneUpdateContext) {
+        //print(which, context.deltaTime, s != nil)
+        if s != nil {
+            s?.update(context: context)
+            return
+        }
+        
+        if timesTried > 10 {
+            return
+        }
+        
+        // Was hoping that the Window scenes would update slower if I avoided the weird
+        // magic enable-90Hz-mode calls, but this at least has one benefit of not relying
+        // on names
+        
+        var hasMagic = false
+        let query = EntityQuery(where: .has(MagicRealityKitClientSystemComponent.self))
+        for _ in context.entities(matching: query, updatingSystemWhen: .rendering) {
+            hasMagic = true
+            break
+        }
+        
+        if !hasMagic {
+            timesTried += 1
+            return
+        }
+        
+        if s == nil {
+            s = RealityKitClientSystemCorrectlyAssociated(scene: context.scene)
+        }
+    }
+}
+
+class RealityKitClientSystemCorrectlyAssociated : System {
     let visionPro = VisionPro()
     var lastUpdateTime = 0.0
     var drawableQueue: TextureResource.DrawableQueue? = nil
@@ -141,14 +188,16 @@ class RealityKitClientSystem : System {
     var lastSubmit = 0.0
     var lastUpdate = 0.0
     var lastLastSubmit = 0.0
+    var lastFrameQueueFillTime = 0.0
     var roundTripRenderTime: Double = 0.0
     var lastRoundTripRenderTimestamp: Double = 0.0
     
-    var renderer: Renderer;
+    var renderer: Renderer
     
     var renderTangents = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
     
     required init(scene: RealityKit.Scene) {
+        print("system init")
         self.renderer = Renderer(nil)
         self.renderer.fadeInOverlayAlpha = 1.0
         renderer.rebuildRenderPipelines()
@@ -520,7 +569,10 @@ class RealityKitClientSystem : System {
             }
 
             if rkFrameQueue.isEmpty {
-                rkFillUp = 2
+                if CACurrentMediaTime() - lastFrameQueueFillTime > 0.25 {
+                    rkFillUp = 2
+                    lastFrameQueueFillTime = CACurrentMediaTime()
+                }
                 objc_sync_exit(self.blitLock)
                 return
             }
