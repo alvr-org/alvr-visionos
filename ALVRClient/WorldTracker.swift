@@ -819,7 +819,7 @@ class WorldTracker {
                 // At some point we might want to use this (for separate motion), but at the moment we cannot, because it is incomplete
                 
                 let b = controller.physicalInputProfile.buttons
-                let a = controller.physicalInputProfile.axes
+                //let a = controller.physicalInputProfile.axes
                 if !isLeft {
                     alvr_send_button(WorldTracker.rightButtonA, boolVal(b["Button A"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.rightButtonB, boolVal(b["Button B"]?.isPressed ?? false))
@@ -858,7 +858,7 @@ class WorldTracker {
                         
                         if leftEngine != nil {
                             do {
-                                try leftEngine!.start()
+                                try leftEngine?.start()
                             } catch {
                                 print("Error starting left engine: \(error)")
                             }
@@ -897,7 +897,7 @@ class WorldTracker {
                         } catch {
                             print("Error playing pattern: \(error)")
                             
-                            leftEngine!.stop()
+                            leftEngine?.stop()
                             leftEngine = nil
                         }
                     }
@@ -921,7 +921,7 @@ class WorldTracker {
                         
                         if rightEngine != nil {
                             do {
-                                try rightEngine!.start()
+                                try rightEngine?.start()
                             } catch {
                                 print("Error starting right engine: \(error)")
                             }
@@ -960,7 +960,7 @@ class WorldTracker {
                         } catch {
                             print("Error playing pattern: \(error)")
                             
-                            rightEngine!.stop()
+                            rightEngine?.stop()
                             rightEngine = nil
                         }
                     }
