@@ -295,7 +295,7 @@ struct VideoHandler {
             .first
     }
     
-    static func createVideoDecoder(initialNals: Data, codec: Int, setDisplayTo96Hz: Bool) -> (VTDecompressionSession, CMFormatDescription) {
+    static func createVideoDecoder(initialNals: Data, codec: Int, setDisplayTo96Hz: Bool) -> (VTDecompressionSession?, CMFormatDescription?) {
         let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
         var videoFormat:CMFormatDescription? = nil
         var err:OSStatus = 0
@@ -313,7 +313,7 @@ struct VideoHandler {
                 let parameterSetPointers = [(nalOffset0 + 4).assumingMemoryBound(to: UInt8.self), UnsafeRawPointer(nalOffset1 + 4).assumingMemoryBound(to: UInt8.self)]
                 let parameterSetSizes = [nalLength0, nalLength1]
                 return CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2, parameterSetPointers: parameterSetPointers, parameterSetSizes: parameterSetSizes, nalUnitHeaderLength: 4, formatDescriptionOut: &videoFormat)
-            } 
+            }
         } else if (codec == HEVC_NAL_TYPE_VPS) {
             let (vps, sps, pps) = extractParameterSets(from: initialNals)
             
@@ -392,10 +392,16 @@ struct VideoHandler {
                 
             }
         }
-            
+
         if err != 0 {
-            fatalError("format?!")
+            print("format?!")
+            return (nil, nil)
         }
+
+        if videoFormat == nil {
+            return (nil, nil)
+        }
+
         print(videoFormat!)
         
         // We need our pixels unpacked for 10-bit so that the Metal textures actually work
@@ -417,7 +423,8 @@ struct VideoHandler {
         var decompressionSession:VTDecompressionSession? = nil
         err = VTDecompressionSessionCreate(allocator: nil, formatDescription: videoFormat!, decoderSpecification: videoDecoderSpecification as CFDictionary, imageBufferAttributes: destinationImageBufferAttributes as CFDictionary, outputCallback: nil, decompressionSessionOut: &decompressionSession)
         if err != 0 {
-            fatalError("format?!")
+            print("format?!")
+            return (nil, nil)
         }
         
         // Optimize display for 24P film viewing
@@ -428,6 +435,11 @@ struct VideoHandler {
                     avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: 96.0, formatDescription: videoFormat!)
                 }
             }
+        }
+        
+        if decompressionSession == nil {
+            print("no session??")
+            return (nil, nil)
         }
         
         return (decompressionSession!, videoFormat!)
@@ -531,14 +543,13 @@ struct VideoHandler {
     }
     
     // Based on https://webrtc.googlesource.com/src/+/refs/heads/main/sdk/objc/components/video_codec/nalu_rewriter.cc
-    private static func annexBBufferToCMSampleBuffer(buffer: Data, videoFormat: CMFormatDescription) -> CMSampleBuffer {
+    private static func annexBBufferToCMSampleBuffer(buffer: Data, videoFormat: CMFormatDescription) -> CMSampleBuffer? {
         // no SPS/PPS, handled with the initial nals
         
         var err: OSStatus = 0
         
         let naluIndices = findNaluIndices(buffer: buffer)
 
-        
         // we're replacing the 3/4 nalu headers with a 4 byte length, so add an extra byte on top of the original length for each 3-byte nalu header
         let blockBufferLength = buffer.count + naluIndices.filter(\.threeByteHeader).count
         let blockBuffer = try! CMBlockBuffer(length: blockBufferLength, flags: .assureMemoryNow)
@@ -547,7 +558,8 @@ struct VideoHandler {
         if !CMBlockBufferIsRangeContiguous(blockBuffer, atOffset: 0, length: 0) {
             err = CMBlockBufferCreateContiguous(allocator: nil, sourceBuffer: blockBuffer, blockAllocator: nil, customBlockSource: nil, offsetToData: 0, dataLength: 0, flags: 0, blockBufferOut: &contiguousBuffer)
             if err != 0 {
-                fatalError("CMBlockBufferCreateContiguous")
+                print("CMBlockBufferCreateContiguous error")
+                return nil
             }
         } else {
             contiguousBuffer = blockBuffer
@@ -557,7 +569,8 @@ struct VideoHandler {
         var dataPtr: UnsafeMutablePointer<Int8>!
         err = CMBlockBufferGetDataPointer(contiguousBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &blockBufferSize, dataPointerOut: &dataPtr)
         if err != 0 {
-            fatalError("CMBlockBufferGetDataPointer")
+            print("CMBlockBufferGetDataPointer error")
+            return nil
         }
         
         dataPtr.withMemoryRebound(to: UInt8.self, capacity: blockBufferSize) { pointer in
@@ -577,7 +590,8 @@ struct VideoHandler {
         var sampleBuffer: CMSampleBuffer!
         err = CMSampleBufferCreate(allocator: nil, dataBuffer: contiguousBuffer, dataReady: true, makeDataReadyCallback: nil, refcon: nil, formatDescription: videoFormat, sampleCount: 1, sampleTimingEntryCount: 0, sampleTimingArray: nil, sampleSizeEntryCount: 0, sampleSizeArray: nil, sampleBufferOut: &sampleBuffer)
         if err != 0 {
-            fatalError("CMSampleBufferCreate")
+            print("CMSampleBufferCreate error")
+            return nil
         }
         
         return sampleBuffer
@@ -585,7 +599,10 @@ struct VideoHandler {
     
     static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: Data, timestamp: UInt64, videoFormat: CMFormatDescription, callback: @escaping (_ imageBuffer: CVImageBuffer?) -> Void) {
         var err:OSStatus = 0
-        let sampleBuffer = annexBBufferToCMSampleBuffer(buffer: nals, videoFormat: videoFormat)
+        guard let sampleBuffer = annexBBufferToCMSampleBuffer(buffer: nals, videoFormat: videoFormat) else {
+            print("Failed in annexBBufferToCMSampleBuffer")
+            return
+        }
         err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
             //print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
             //print("status: \(status), image_nil?: \(imageBuffer == nil), infoFlags: \(infoFlags)")
