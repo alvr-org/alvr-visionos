@@ -278,7 +278,8 @@ struct VideoHandler {
         
         let nalViews = [nalViewsPtr[0], nalViewsPtr[1]]
         
-        return (nalTimestamp, nalViews, Data(bytes: nalBuffer.baseAddress!, count: Int(realNalLength & 0xFFFFFFFF)))
+        let ret = (nalTimestamp, nalViews, Data(bytes: nalBuffer.baseAddress!, count: Int(realNalLength & 0xFFFFFFFF)))
+        return ret
     }
     
     static func abandonAllPendingNals() {
