@@ -73,6 +73,10 @@ public extension MeshResource.Part {
     }
 }
 
+struct MagicRealityKitClientSystemComponent : Component {
+    
+}
+
 struct RealityKitClientView: View {
     var texture: MaterialParameters.Texture?
     
@@ -223,20 +227,16 @@ struct RealityKitClientView: View {
     
     var body: some View {
         RealityView { content in
-            if DummyMetalRenderer.haveRenderInfo {
-                print("Registering RealityKitClientSystem")
-                RealityKitClientSystem.registerSystem()
-            }
-            
             let material = UnlitMaterial(color: .white)
             let videoPlaneMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
             let videoPlane = ModelEntity(mesh: videoPlaneMesh, materials: [material])
             videoPlane.name = "video_plane"
+            videoPlane.components.set(MagicRealityKitClientSystemComponent())
             videoPlane.components.set(InputTargetComponent())
             videoPlane.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
             videoPlane.scale = simd_float3(0.0, 0.0, 0.0)
             
-            var material2 = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
+            let material2 = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
             //material2.blending = .transparent(opacity: 0.0)
             let cubeMesh = MeshResource.generateBox(size: 1.0)
             try? cubeMesh.addInvertedNormals()
@@ -248,6 +248,9 @@ struct RealityKitClientView: View {
 
             content.add(videoPlane)
             content.add(backdrop)
+            
+            MagicRealityKitClientSystemComponent.registerComponent()
+            RealityKitClientSystem.registerSystem()
         }
         update: { content in
 
