@@ -453,6 +453,7 @@ class WorldTracker {
         for await update in handTracking.anchorUpdates {
             switch update.event {
             case .added, .updated:
+                //print(update.timestamp - lastHandsUpdatedTs)
                 lastHandsUpdatedTs = update.timestamp
                 break
             case .removed:
