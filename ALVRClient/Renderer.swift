@@ -318,7 +318,12 @@ class Renderer {
         
         let fragmentConstants = MTLFunctionConstantValues()
         let settings = ALVRClientApp.gStore.settings
-        chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
+        if #available(visionOS 2.0, *) {
+            chromaKeyEnabled = settings.chromaKeyEnabled
+        }
+        else {
+            chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
+        }
         chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
         chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
 
@@ -385,7 +390,12 @@ class Renderer {
         let fragmentConstants = FFR.makeFunctionConstants(foveationVars)
         
         let settings = ALVRClientApp.gStore.settings
-        chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
+        if #available(visionOS 2.0, *) {
+            chromaKeyEnabled = settings.chromaKeyEnabled
+        }
+        else {
+            chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
+        }
         chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
         chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
 
@@ -467,6 +477,7 @@ class Renderer {
     
     // Checks if eye tracking was secretly added, maybe, hard to know really.
     func checkEyes(drawable: LayerRenderer.Drawable) {
+        print(drawable.colorTextures.first?.width, drawable.colorTextures.first?.height)
         print(drawable.views[0].transform - EventHandler.shared.viewTransforms[0])
         print(drawable.views[1].transform - EventHandler.shared.viewTransforms[1])
         if let vrr = drawable.rasterizationRateMaps.first {
@@ -601,24 +612,27 @@ class Renderer {
                 EventHandler.shared.viewTransforms = [drawable.views[0].transform, drawable.views.count > 1 ? drawable.views[1].transform : drawable.views[0].transform]
                 EventHandler.shared.lastIpd = ipd
                 
-                for i in 0..<EventHandler.shared.viewTransforms.count {
-                   EventHandler.shared.viewTransforms[i].columns.3 -= WorldTracker.shared.averageViewTransformPositionalComponent.asFloat4()
-                }
+                if #unavailable(visionOS 2.0) {
+                    for i in 0..<EventHandler.shared.viewTransforms.count {
+                       EventHandler.shared.viewTransforms[i].columns.3 -= WorldTracker.shared.averageViewTransformPositionalComponent.asFloat4()
+                    }
+                    
+                    var averageViewTransformPositionalComponent = simd_float4()
+                    for view in drawable.views {
+                        averageViewTransformPositionalComponent += view.transform.columns.3
+                    }
+                    
+                    // HACK: for some reason Apple's view transforms' positional component has this really weird drift downwards at the start.
+                    // It seems to drift from the correct position, to an incorrect position 2.6cm away.
+                    // For consistency, we take the first transform and use that.
+                    averageViewTransformPositionalComponent /= Float(drawable.views.count)
+                    averageViewTransformPositionalComponent.w = 0.0
                 
-                var averageViewTransformPositionalComponent = simd_float4()
-                for view in drawable.views {
-                    averageViewTransformPositionalComponent += view.transform.columns.3
-                }
                 
-                // HACK: for some reason Apple's view transforms' positional component has this really weird drift downwards at the start.
-                // It seems to drift from the correct position, to an incorrect position 2.6cm away.
-                // For consistency, we take the first transform and use that.
-                averageViewTransformPositionalComponent /= Float(drawable.views.count)
-                averageViewTransformPositionalComponent.w = 0.0
-                
-                for i in 0..<EventHandler.shared.viewTransforms.count {
-                   EventHandler.shared.viewTransforms[i].columns.3 -= averageViewTransformPositionalComponent
-                   EventHandler.shared.viewTransforms[i].columns.3 += WorldTracker.shared.averageViewTransformPositionalComponent.asFloat4()
+                    for i in 0..<EventHandler.shared.viewTransforms.count {
+                       EventHandler.shared.viewTransforms[i].columns.3 -= averageViewTransformPositionalComponent
+                       EventHandler.shared.viewTransforms[i].columns.3 += WorldTracker.shared.averageViewTransformPositionalComponent.asFloat4()
+                    }
                 }
             }
             
@@ -645,6 +659,9 @@ class Renderer {
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized {
+            if #available(visionOS 2.0, *) {
+                EventHandler.shared.viewTransforms = [drawable.views[0].transform, drawable.views.count > 1 ? drawable.views[1].transform : drawable.views[0].transform]
+            }
             // TODO: I suspect Apple changes view transforms every frame to account for pupil swim, figure out how to fit the latest view transforms in?
             // Since pupil swim is purely an axial thing, maybe we can just timewarp the view transforms as well idk
             let viewFovs = EventHandler.shared.viewFovs
@@ -652,7 +669,8 @@ class Renderer {
             
             let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
-            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, delay: 0.0)
+            let anchorTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)
         }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
@@ -852,7 +870,7 @@ class Renderer {
         renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
         renderPassDescriptor.colorAttachments[0].loadAction = .load
         renderPassDescriptor.colorAttachments[0].storeAction = .dontCare
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: chromaKeyEnabled ? 0.0 : 1.0)
         renderPassDescriptor.depthAttachment.texture = renderTargetDepth
         renderPassDescriptor.depthAttachment.loadAction = .clear
         renderPassDescriptor.depthAttachment.storeAction = .store
@@ -901,7 +919,7 @@ class Renderer {
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
-        renderPassDescriptor.colorAttachments[0].loadAction = isRealityKit ? (whichIdx == 0 ? .clear : .load) : .clear
+        renderPassDescriptor.colorAttachments[0].loadAction = isRealityKit ? (whichIdx == 0 ? .clear : .load) : .clear 
         renderPassDescriptor.colorAttachments[0].storeAction = .store
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
         renderPassDescriptor.depthAttachment.texture = renderTargetDepth
@@ -1057,7 +1075,7 @@ class Renderer {
         renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
         renderPassDescriptor.colorAttachments[0].loadAction = whichIdx == 0 ? .clear : .load
         renderPassDescriptor.colorAttachments[0].storeAction = .store
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: chromaKeyEnabled ? 0.0 : 1.0)
         renderPassDescriptor.rasterizationRateMap = rasterizationRateMap
         
         renderPassDescriptor.renderTargetArrayLength = isRealityKit ? 1 : viewports.count

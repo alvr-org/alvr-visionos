@@ -289,19 +289,34 @@ fragment half4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]
     half3 color = NonlinearToLinearRGB_half(rgb_uncorrect);
     color = EncodingNonlinearToLinearRGB_half(color, encodingUniform.encodingGamma);
     
+    half4 colorOut = half4(color.rgb, 1.0);
+    if (CHROMAKEY_ENABLED && !REALITYKIT_ENABLED) {
+        half4 chromaKeyHSV = half4(rgb2hsv(half3(CHROMAKEY_COLOR)), 1.0);
+        half4 newHSV = half4(rgb2hsv(color.rgb), 1.0);
+        half mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, half2(CHROMAKEY_LERP_DIST_RANGE));
+        if (mask <= 0.0) {
+            discard_fragment();
+        }
+        
+        colorOut = half4((colorOut.rgb * mask) - (half3(CHROMAKEY_COLOR) * (1.0 - mask)), colorOut.a * mask);
+        return colorOut;
+        //return float4(color.rgb, mask);
+    }
+    else {
+        return colorOut;
+    }
+    
     // Brighten the scene to examine blocking artifacts/smearing
     //color = pow(color, 1.0 / 2.4);
 
-    const float3x3 linearToDisplayP3 = {
+    /*const float3x3 linearToDisplayP3 = {
         float3(1.2249, -0.0420, -0.0197),
         float3(-0.2247, 1.0419, -0.0786),
         float3(0.0, 0.0, 1.0979),
-    };
+    };*/
     
     //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
     //color = linearToDisplayP3 * color;
-    
-    return half4(half3(color.rgb), 1.0);
 }
 
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {

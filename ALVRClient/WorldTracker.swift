@@ -342,7 +342,6 @@ class WorldTracker {
             case .removed:
                 removePlane(update.anchor)
             }
-            
         }
     }
     
@@ -980,7 +979,7 @@ class WorldTracker {
     // TODO: figure out how stable Apple's predictions are into the future
     // targetTimestamp: The timestamp of the pose we will send to ALVR--capped by how far we can predict forward.
     // realTargetTimestamp: The timestamp we tell ALVR, which always includes the full round-trip prediction.
-    func sendTracking(viewTransforms: [simd_float4x4], viewFovs: [AlvrFov], targetTimestamp: Double, reportedTargetTimestamp: Double, delay: Double) {
+    func sendTracking(viewTransforms: [simd_float4x4], viewFovs: [AlvrFov], targetTimestamp: Double, reportedTargetTimestamp: Double, anchorTimestamp: Double, delay: Double) {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
@@ -1048,6 +1047,9 @@ class WorldTracker {
             leftPinchEyeDelta -= averageViewTransformPositionalComponent
             if !pinchesAreFromRealityKit {
                 leftPinchEyeDelta -= averageViewTransformPositionalComponent
+                if #available(visionOS 2.0, *) {
+                    leftPinchEyeDelta += averageViewTransformPositionalComponent
+                }
             }
             //print("left pinch eye delta", leftPinchEyeDelta)
         }
@@ -1056,6 +1058,9 @@ class WorldTracker {
             rightPinchEyeDelta -= averageViewTransformPositionalComponent
             if !pinchesAreFromRealityKit {
                 rightPinchEyeDelta -= averageViewTransformPositionalComponent
+                if #available(visionOS 2.0, *) {
+                    rightPinchEyeDelta += averageViewTransformPositionalComponent
+                }
             }
             //print("right pinch eye delta", rightPinchEyeDelta)
         }
@@ -1079,7 +1084,10 @@ class WorldTracker {
         var skeletonLeftPtr:UnsafeMutablePointer<AlvrPose>? = nil
         var skeletonRightPtr:UnsafeMutablePointer<AlvrPose>? = nil
         
-        let handPoses = handTracking.latestAnchors
+        var handPoses = handTracking.latestAnchors
+        if #available(visionOS 2.0, *) {
+            handPoses = handTracking.handAnchors(at: anchorTimestamp)
+        }
         if let leftHand = handPoses.leftHand {
             if !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 if leftHand.isTracked {
