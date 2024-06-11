@@ -66,7 +66,7 @@ struct ALVRClientApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openWindow) var openWindow
     @Environment(\.dismissWindow) var dismissWindow
-    @State private var clientImmersionStyle: ImmersionStyle = .full
+    @State private var clientImmersionStyle: ImmersionStyle = .mixed
     
     static var gStore = GlobalSettingsStore()
     @State private var chromaKeyColor = Color(.sRGB, red: 0.98, green: 0.9, blue: 0.2)
@@ -99,6 +99,9 @@ struct ALVRClientApp: App {
                 }
             }
             .task {
+                if #unavailable(visionOS 2.0) {
+                    clientImmersionStyle = .full
+                }
                 loadSettings()
                 model.isShowingClient = false
                 EventHandler.shared.initializeAlvr()
@@ -181,7 +184,7 @@ struct ALVRClientApp: App {
                 system.startRenderLoop()
             }
         }
-        .immersionStyle(selection: $clientImmersionStyle, in: .full)
+        .immersionStyle(selection: $clientImmersionStyle, in: .mixed, .full)
         .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
     }
     
