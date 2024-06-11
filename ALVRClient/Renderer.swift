@@ -669,7 +669,11 @@ class Renderer {
             
             let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
-            let anchorTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            var anchorTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            if #available(visionOS 2.0, *) {
+                //anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            }
+            
             WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)
         }
         
