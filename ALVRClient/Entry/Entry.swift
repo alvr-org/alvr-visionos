@@ -188,6 +188,15 @@ struct Entry: View {
                        .frame(width: 100)
                    }
                    
+                   Toggle(isOn: $gStore.settings.forceMipmapEyeTracking) {
+                        Text("Force visionOS 1.x eye tracking")
+                        Text("*Eye tracking requires Experimental Renderer. Moves faster, but requires obstructing the left eye FoV.")
+                            .font(.system(size: 10))
+                        Text("Long click View Recording in the Control Center to select ALVR broadcaster.")
+                            .font(.system(size: 10))
+                    }
+                    .toggleStyle(.switch)
+                   
                    Toggle(isOn: $gStore.settings.dismissWindowOnEnter) {
                         Text("Dismiss this window on entry")
                     }

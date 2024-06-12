@@ -198,6 +198,8 @@ class WorldTracker {
     var averageViewTransformPositionalComponent = simd_float3()
     
     var pinchesAreFromRealityKit = false
+    var eyeX: Float = 0.0
+    var eyeY: Float = 0.0
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -218,6 +220,27 @@ class WorldTracker {
         Task {
             await processHandTrackingUpdates()
         }
+#if false
+        // HACK
+        guard var fileFolder = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.alvr.client.ALVR")?.path else {
+            return
+        }
+        
+        fileFolder = fileFolder + "/Library/Caches/video/"
+        
+        if !FileManager.default.fileExists(atPath: fileFolder) {
+            try? FileManager.default.createDirectory(atPath: fileFolder, withIntermediateDirectories: true, attributes: nil)
+        }
+        
+        print("asdf")
+        let fm = FileManager.default
+        let items = try! fm.contentsOfDirectory(atPath: fileFolder)
+        for item in items {
+            print(item)
+            do { try FileManager.default.copyItem(at: URL(fileURLWithPath: fileFolder + item), to: URL.documentsDirectory.appending(path: item)) } catch { }
+            //.write(to:  atomically: true, encoding: .utf8)
+        }
+#endif
     }
     
     func resetPlayspace() {
@@ -1051,7 +1074,8 @@ class WorldTracker {
         }
 
         // Don't move SteamVR center/bounds when the headset recenters
-        let transform = self.worldTrackingSteamVRTransform.inverse * deviceAnchor.originFromAnchorTransform
+        let appleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
+        let transform = self.worldTrackingSteamVRTransform.inverse * appleOriginFromAnchor
         let leftTransform = transform * viewTransforms[0]
         let rightTransform = transform * viewTransforms[1]
         
@@ -1068,6 +1092,41 @@ class WorldTracker {
         
         var skeletonLeftPtr:UnsafeMutablePointer<AlvrPose>? = nil
         var skeletonRightPtr:UnsafeMutablePointer<AlvrPose>? = nil
+        
+        var eyeGazeLeftPtr:UnsafeMutablePointer<AlvrPose>? = nil
+        var eyeGazeRightPtr:UnsafeMutablePointer<AlvrPose>? = nil
+        
+        eyeGazeLeftPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
+        eyeGazeRightPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
+
+        // TODO: Actually get this to be as accurate as the gaze ray, currently it is not.
+        
+        // To get the most accurate rotations, we have each eye look at the in-space coordinates
+        // we know the HoverEffect is reporting
+        let directionTarget = simd_float3(-eyeX * (DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y) * 0.5 * 50.0, eyeY * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.5 * 50.0, 50.0)
+        let directionL = viewTransforms[0].columns.3.asFloat3() - directionTarget
+        let directionR = viewTransforms[1].columns.3.asFloat3() - directionTarget
+        let orientL = simd_look(at: -directionL)
+        let orientR = simd_look(at: -directionR)
+        let qL = leftOrientation * simd_quaternion(orientL)
+        let qR = rightOrientation * simd_quaternion(orientR)
+
+        //print(eyeX, eyeY)
+        
+        // TODO: Attach SteamVR controller to eyes for input anticipation/hovers.
+        // Needs the gazes to be as accurate as the pinch events.
+#if false
+        let directionTargetApple = appleOriginFromAnchor * directionTarget.asFloat4_1()
+
+        leftSelectionRayOrigin = appleOriginFromAnchor.columns.3.asFloat3()
+        leftSelectionRayDirection = simd_normalize(appleOriginFromAnchor.columns.3.asFloat3() - directionTargetApple.asFloat3())
+        //leftPinchEyeDelta = simd_float3()
+        leftPinchStartPosition = simd_float3()
+        leftPinchCurrentPosition = simd_float3()
+#endif
+        
+        eyeGazeLeftPtr?[0] = AlvrPose(qL, leftTransform.columns.3.asFloat3())
+        eyeGazeRightPtr?[0] = AlvrPose(qR, rightTransform.columns.3.asFloat3())
         
         var handPoses = handTracking.latestAnchors
         if #available(visionOS 2.0, *) {
@@ -1217,9 +1276,11 @@ class WorldTracker {
 
         Thread {
             //Thread.sleep(forTimeInterval: delay)
-            alvr_send_tracking(reportedTargetTimestampNS, UnsafePointer(viewFovsPtr), trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+            alvr_send_tracking(reportedTargetTimestampNS, UnsafePointer(viewFovsPtr), trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)])
             
             viewFovsPtr.deallocate()
+            eyeGazeLeftPtr?.deallocate()
+            eyeGazeRightPtr?.deallocate()
             skeletonLeftPtr?.deallocate()
             skeletonRightPtr?.deallocate()
         }.start()

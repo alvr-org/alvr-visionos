@@ -22,6 +22,7 @@ struct GlobalSettings: Codable {
     var emulatedPinchInteractions: Bool = false
     var dontShowAWDLAlertAgain: Bool = false
     var fovRenderScale: Float = 1.0
+    var forceMipmapEyeTracking = false
     
     init() {}
     
@@ -44,6 +45,7 @@ struct GlobalSettings: Codable {
         self.emulatedPinchInteractions = try container.decodeIfPresent(Bool.self, forKey: .emulatedPinchInteractions) ?? self.emulatedPinchInteractions
         self.dontShowAWDLAlertAgain = try container.decodeIfPresent(Bool.self, forKey: .dontShowAWDLAlertAgain) ?? self.dontShowAWDLAlertAgain
         self.fovRenderScale = try container.decodeIfPresent(Float.self, forKey: .fovRenderScale) ?? self.fovRenderScale
+        self.forceMipmapEyeTracking = try container.decodeIfPresent(Bool.self, forKey: .forceMipmapEyeTracking) ?? self.forceMipmapEyeTracking
     }
 }
 

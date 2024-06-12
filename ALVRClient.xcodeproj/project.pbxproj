@@ -27,13 +27,28 @@
 		E71DEF982C18D478008A2074 /* SwiftUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF942C18D325008A2074 /* SwiftUI.swift */; };
 		E71DEF9A2C18D4B4008A2074 /* ALVRTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF992C18D4B4008A2074 /* ALVRTypes.swift */; };
 		E71DEF9C2C18D4DA008A2074 /* simd.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF9B2C18D4DA008A2074 /* simd.swift */; };
+		E71DEFA52C192617008A2074 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E71DEFA42C192617008A2074 /* ReplayKit.framework */; };
+		E71DEFA82C192617008A2074 /* SampleHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEFA72C192617008A2074 /* SampleHandler.swift */; };
+		E71DEFAC2C192617008A2074 /* ALVREyeBroadcast.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E71DEFA32C192617008A2074 /* ALVREyeBroadcast.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E72683DB2BE73DD10065B78B /* MetalClientSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */; };
 		E7285AAE2B9C44CB0032514C /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7285AAD2B9C44CB0032514C /* AVKit.framework */; };
 		E7A98A9E2BE2EEAB003DF333 /* DummyMetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */; };
 		E7A98AA02BE2EEEA003DF333 /* RealityKitClientSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */; };
+		E7D606032C1B5D39009E3343 /* RealityKitEyeTrackingSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D606022C1B5D37009E3343 /* RealityKitEyeTrackingSystem.swift */; };
+		E7D606052C1B646D009E3343 /* EyeTrackingMats.usda in Resources */ = {isa = PBXBuildFile; fileRef = E7D606042C1B646D009E3343 /* EyeTrackingMats.usda */; };
 		E7F222422BE2F03800D10191 /* RealityKitClientView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7F222412BE2F03800D10191 /* RealityKitClientView.swift */; };
 		E7F222442BE2F21600D10191 /* SBSMaterial.usda in Resources */ = {isa = PBXBuildFile; fileRef = E7F222432BE2F21600D10191 /* SBSMaterial.usda */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E71DEFAA2C192617008A2074 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C5E590222B6379ED00328ED6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E71DEFA22C192617008A2074;
+			remoteInfo = ALVREyeBroadcast;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		C5114FAE2B63899C00865FD2 /* Embed Libraries */ = {
@@ -45,6 +60,17 @@
 				C588CC222B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Embed Libraries */,
 			);
 			name = "Embed Libraries";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E71DEFB02C192617008A2074 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E71DEFAC2C192617008A2074 /* ALVREyeBroadcast.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -75,10 +101,18 @@
 		E71DEF942C18D325008A2074 /* SwiftUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUI.swift; sourceTree = "<group>"; };
 		E71DEF992C18D4B4008A2074 /* ALVRTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ALVRTypes.swift; sourceTree = "<group>"; };
 		E71DEF9B2C18D4DA008A2074 /* simd.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = simd.swift; sourceTree = "<group>"; };
+		E71DEFA32C192617008A2074 /* ALVREyeBroadcast.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ALVREyeBroadcast.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E71DEFA42C192617008A2074 /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = System/Library/Frameworks/ReplayKit.framework; sourceTree = SDKROOT; };
+		E71DEFA72C192617008A2074 /* SampleHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleHandler.swift; sourceTree = "<group>"; };
+		E71DEFA92C192617008A2074 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E71DEFB12C192627008A2074 /* ALVREyeBroadcast.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ALVREyeBroadcast.entitlements; sourceTree = "<group>"; };
+		E71DEFB22C19263D008A2074 /* ALVRClient.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ALVRClient.entitlements; sourceTree = "<group>"; };
 		E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalClientSystem.swift; sourceTree = "<group>"; };
 		E7285AAD2B9C44CB0032514C /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
 		E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DummyMetalRenderer.swift; sourceTree = "<group>"; };
 		E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitClientSystem.swift; sourceTree = "<group>"; };
+		E7D606022C1B5D37009E3343 /* RealityKitEyeTrackingSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitEyeTrackingSystem.swift; sourceTree = "<group>"; };
+		E7D606042C1B646D009E3343 /* EyeTrackingMats.usda */ = {isa = PBXFileReference; lastKnownFileType = text; path = EyeTrackingMats.usda; sourceTree = "<group>"; };
 		E7F222412BE2F03800D10191 /* RealityKitClientView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitClientView.swift; sourceTree = "<group>"; };
 		E7F222432BE2F21600D10191 /* SBSMaterial.usda */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SBSMaterial.usda; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -90,6 +124,14 @@
 			files = (
 				E7285AAE2B9C44CB0032514C /* AVKit.framework in Frameworks */,
 				C588CC212B6BC7B200D00DF0 /* ALVRClientCore.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E71DEFA02C192617008A2074 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E71DEFA52C192617008A2074 /* ReplayKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +161,7 @@
 				D68FA8042B73D5DD0052B7FF /* ALVRClient.xcconfig */,
 				D68FA8052B73D6260052B7FF /* Override.xcconfig */,
 				C5E5902C2B6379ED00328ED6 /* ALVRClient */,
+				E71DEFA62C192617008A2074 /* ALVREyeBroadcast */,
 				C5E5902B2B6379ED00328ED6 /* Products */,
 				E7285AAC2B9C44CB0032514C /* Frameworks */,
 			);
@@ -128,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				C5E5902A2B6379ED00328ED6 /* ALVRClient.app */,
+				E71DEFA32C192617008A2074 /* ALVREyeBroadcast.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -135,6 +179,7 @@
 		C5E5902C2B6379ED00328ED6 /* ALVRClient */ = {
 			isa = PBXGroup;
 			children = (
+				E71DEFB22C19263D008A2074 /* ALVRClient.entitlements */,
 				E71DEF962C18D425008A2074 /* Extensions */,
 				8E1240FD2B7CC021005B75F2 /* Entry */,
 				8E739C892B7898EC0045ED16 /* Model */,
@@ -143,6 +188,7 @@
 				C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */,
 				C5E5903F2B6379EE00328ED6 /* Info.plist */,
 				E7F222432BE2F21600D10191 /* SBSMaterial.usda */,
+				E7D606042C1B646D009E3343 /* EyeTrackingMats.usda */,
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
 				E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */,
 				8E458AB22B7E05FB0019FC73 /* EventHandler.swift */,
@@ -151,6 +197,7 @@
 				E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */,
 				E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */,
 				E7F222412BE2F03800D10191 /* RealityKitClientView.swift */,
+				E7D606022C1B5D37009E3343 /* RealityKitEyeTrackingSystem.swift */,
 				C5E590352B6379ED00328ED6 /* Renderer.swift */,
 				9ED257162B8062A1008DC22F /* Settings.swift */,
 				C5E590372B6379ED00328ED6 /* Shaders.metal */,
@@ -181,10 +228,21 @@
 			path = Extensions;
 			sourceTree = "<group>";
 		};
+		E71DEFA62C192617008A2074 /* ALVREyeBroadcast */ = {
+			isa = PBXGroup;
+			children = (
+				E71DEFB12C192627008A2074 /* ALVREyeBroadcast.entitlements */,
+				E71DEFA72C192617008A2074 /* SampleHandler.swift */,
+				E71DEFA92C192617008A2074 /* Info.plist */,
+			);
+			path = ALVREyeBroadcast;
+			sourceTree = "<group>";
+		};
 		E7285AAC2B9C44CB0032514C /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				E7285AAD2B9C44CB0032514C /* AVKit.framework */,
+				E71DEFA42C192617008A2074 /* ReplayKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -200,10 +258,12 @@
 				C5E590272B6379ED00328ED6 /* Frameworks */,
 				C5E590282B6379ED00328ED6 /* Resources */,
 				C5114FAE2B63899C00865FD2 /* Embed Libraries */,
+				E71DEFB02C192617008A2074 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E71DEFAB2C192617008A2074 /* PBXTargetDependency */,
 			);
 			name = ALVRClient;
 			packageProductDependencies = (
@@ -212,6 +272,23 @@
 			productReference = C5E5902A2B6379ED00328ED6 /* ALVRClient.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E71DEFA22C192617008A2074 /* ALVREyeBroadcast */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E71DEFAD2C192617008A2074 /* Build configuration list for PBXNativeTarget "ALVREyeBroadcast" */;
+			buildPhases = (
+				E71DEF9F2C192617008A2074 /* Sources */,
+				E71DEFA02C192617008A2074 /* Frameworks */,
+				E71DEFA12C192617008A2074 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ALVREyeBroadcast;
+			productName = ALVREyeBroadcast;
+			productReference = E71DEFA32C192617008A2074 /* ALVREyeBroadcast.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -219,11 +296,14 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1530;
+				LastSwiftUpdateCheck = 1600;
 				LastUpgradeCheck = 1530;
 				TargetAttributes = {
 					C5E590292B6379ED00328ED6 = {
 						CreatedOnToolsVersion = 15.3;
+					};
+					E71DEFA22C192617008A2074 = {
+						CreatedOnToolsVersion = 16.0;
 					};
 				};
 			};
@@ -243,6 +323,7 @@
 			projectRoot = "";
 			targets = (
 				C5E590292B6379ED00328ED6 /* ALVRClient */,
+				E71DEFA22C192617008A2074 /* ALVREyeBroadcast */,
 			);
 		};
 /* End PBXProject section */
@@ -254,7 +335,15 @@
 			files = (
 				C5E5903E2B6379EE00328ED6 /* Assets.xcassets in Resources */,
 				E7F222442BE2F21600D10191 /* SBSMaterial.usda in Resources */,
+				E7D606052C1B646D009E3343 /* EyeTrackingMats.usda in Resources */,
 				C5E5903C2B6379ED00328ED6 /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E71DEFA12C192617008A2074 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -283,12 +372,29 @@
 				9ED257172B8062A2008DC22F /* Settings.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
+				E7D606032C1B5D39009E3343 /* RealityKitEyeTrackingSystem.swift in Sources */,
 				E71DEF9C2C18D4DA008A2074 /* simd.swift in Sources */,
 				8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E71DEF9F2C192617008A2074 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E71DEFA82C192617008A2074 /* SampleHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E71DEFAB2C192617008A2074 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E71DEFA22C192617008A2074 /* ALVREyeBroadcast */;
+			targetProxy = E71DEFAA2C192617008A2074 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		C5E590402B6379EE00328ED6 /* Debug */ = {
@@ -416,6 +522,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ALVRClient/ALVRClient.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
@@ -457,6 +564,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ALVRClient/ALVRClient.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_ASSET_PATHS = "\"ALVRClient/Preview Content\"";
@@ -492,6 +600,62 @@
 			};
 			name = Release;
 		};
+		E71DEFAE2C192617008A2074 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ALVREyeBroadcast/ALVREyeBroadcast.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A2R992S5N3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ALVREyeBroadcast/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send Eye Tracking To ALVR";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = alvr.client.ALVREyeBroadcast;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 2.0;
+			};
+			name = Debug;
+		};
+		E71DEFAF2C192617008A2074 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ALVREyeBroadcast/ALVREyeBroadcast.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A2R992S5N3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ALVREyeBroadcast/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send Eye Tracking To ALVR";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = alvr.client.ALVREyeBroadcast;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 2.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -509,6 +673,15 @@
 			buildConfigurations = (
 				C5E590432B6379EE00328ED6 /* Debug */,
 				C5E590442B6379EE00328ED6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E71DEFAD2C192617008A2074 /* Build configuration list for PBXNativeTarget "ALVREyeBroadcast" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E71DEFAE2C192617008A2074 /* Debug */,
+				E71DEFAF2C192617008A2074 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
