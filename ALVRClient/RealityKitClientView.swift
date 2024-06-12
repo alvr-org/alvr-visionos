@@ -167,6 +167,14 @@ struct RealityKitClientView: View {
             videoPlane.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
             videoPlane.scale = simd_float3(0.0, 0.0, 0.0)
             
+            let eyeXPlane = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            eyeXPlane.name = "eye_x_plane"
+            eyeXPlane.scale = simd_float3(0.0, 0.0, 0.0)
+            
+            let eyeYPlane = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            eyeYPlane.name = "eye_y_plane"
+            eyeYPlane.scale = simd_float3(0.0, 0.0, 0.0)
+            
             let material2 = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
             //material2.blending = .transparent(opacity: 0.0)
             let cubeMesh = MeshResource.generateBox(size: 1.0)
@@ -176,9 +184,20 @@ struct RealityKitClientView: View {
             backdrop.components.set(InputTargetComponent())
             backdrop.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
             backdrop.scale = simd_float3(0.0, 0.0, 0.0)
+            
+            let anchor = AnchorEntity(.head)
+            anchor.anchoring.trackingMode = .continuous
+            anchor.name = "HeadAnchor"
+            anchor.position = simd_float3(0.0, 0.0, 0.0)
+            
+            anchor.addChild(eyeXPlane)
+            anchor.addChild(eyeYPlane)
+            content.add(anchor)
 
             content.add(videoPlane)
             content.add(backdrop)
+            //content.add(eyeXPlane)
+            //content.add(eyeYPlane)
             
             MagicRealityKitClientSystemComponent.registerComponent()
             RealityKitClientSystem.registerSystem()

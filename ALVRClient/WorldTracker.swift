@@ -198,6 +198,9 @@ class WorldTracker {
     var averageViewTransformPositionalComponent = simd_float3()
     
     var pinchesAreFromRealityKit = false
+    var eyeX: Float = 0.0
+    var eyeY: Float = 0.0
+    private var notificationManager = NotificationManager()
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -217,6 +220,26 @@ class WorldTracker {
         }
         Task {
             await processHandTrackingUpdates()
+        }
+        
+        // HACK
+        guard var fileFolder = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.alvr.client.ALVR")?.path else {
+            return
+        }
+        
+        fileFolder = fileFolder + "/Library/Caches/video/"
+        
+        if !FileManager.default.fileExists(atPath: fileFolder) {
+            try? FileManager.default.createDirectory(atPath: fileFolder, withIntermediateDirectories: true, attributes: nil)
+        }
+        
+        print("asdf")
+        let fm = FileManager.default
+        let items = try! fm.contentsOfDirectory(atPath: fileFolder)
+        for item in items {
+            print(item)
+            do { try FileManager.default.copyItem(at: URL(fileURLWithPath: fileFolder + item), to: URL.documentsDirectory.appending(path: item)) } catch { }
+            //.write(to:  atomically: true, encoding: .utf8)
         }
     }
     
@@ -1069,6 +1092,32 @@ class WorldTracker {
         var skeletonLeftPtr:UnsafeMutablePointer<AlvrPose>? = nil
         var skeletonRightPtr:UnsafeMutablePointer<AlvrPose>? = nil
         
+        var eyeGazeLeftPtr:UnsafeMutablePointer<AlvrPose>? = nil
+        var eyeGazeRightPtr:UnsafeMutablePointer<AlvrPose>? = nil
+        
+        eyeGazeLeftPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
+        eyeGazeRightPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
+        
+        //let adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7389288)))
+        //let adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3(sin(Float(CACurrentMediaTime())), 0.0, 1.0)))
+        //let q = simd_quatf() * adjLeftRight * adjUpDown
+        //print(q)
+        
+        let xExtentRad = (tan(EventHandler.shared.viewFovs[0].right) - tan(EventHandler.shared.viewFovs[0].left)) * 0.3
+        let yExtentRad = (tan(EventHandler.shared.viewFovs[0].up) - tan(EventHandler.shared.viewFovs[0].down)) * 0.5
+        
+        //eyeX = sin(Float(CACurrentMediaTime()))
+        //eyeY = cos(Float(CACurrentMediaTime()))
+        
+        let q = simd_quatf(angle: -eyeX * xExtentRad, axis: SIMD3<Float>(0, 1, 0))
+    * simd_quatf(angle: -eyeY * yExtentRad, axis: SIMD3<Float>(1, 0, 0))
+        let qL = leftOrientation * q
+        let qR = rightOrientation * q
+
+        
+        eyeGazeLeftPtr?[0] = AlvrPose(qL, simd_float3(0.0,0.0,0.0))
+        eyeGazeRightPtr?[0] = AlvrPose(qR, simd_float3(0.0,0.0,0.0))
+        
         var handPoses = handTracking.latestAnchors
         if #available(visionOS 2.0, *) {
             handPoses = handTracking.handAnchors(at: anchorTimestamp)
@@ -1214,12 +1263,16 @@ class WorldTracker {
         if delay == 0.0 {
             sendGamepadInputs()
         }
+        
+        print(eyeX, eyeY)
 
         Thread {
             //Thread.sleep(forTimeInterval: delay)
-            alvr_send_tracking(reportedTargetTimestampNS, UnsafePointer(viewFovsPtr), trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], nil)
+            alvr_send_tracking(reportedTargetTimestampNS, UnsafePointer(viewFovsPtr), trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)])
             
             viewFovsPtr.deallocate()
+            eyeGazeLeftPtr?.deallocate()
+            eyeGazeRightPtr?.deallocate()
             skeletonLeftPtr?.deallocate()
             skeletonRightPtr?.deallocate()
         }.start()
