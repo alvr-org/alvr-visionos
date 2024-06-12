@@ -15,6 +15,11 @@ extension simd_float3
     {
         return simd_float4(self.x, self.y, self.z, 0.0)
     }
+    
+    func asFloat4_1() -> simd_float4
+    {
+        return simd_float4(self.x, self.y, self.z, 1.0)
+    }
 }
 
 extension simd_float4
@@ -35,6 +40,28 @@ extension simd_quatd
     func toQuatf() -> simd_quatf
     {
         return simd_quatf(ix: Float(self.vector.x), iy: Float(self.vector.y), iz: Float(self.vector.z), r: Float(self.vector.w))
+    }
+}
+
+extension Float {
+    func clamp(_ min: Float, _ max: Float) -> Float {
+        if self < min {
+            return min
+        }
+        if self > max {
+            return max
+        }
+        return self
+    }
+    
+    func clamp(_ min: Double, _ max: Double) -> Float {
+        if self < Float(min) {
+            return Float(min)
+        }
+        if self > Float(max) {
+            return Float(max)
+        }
+        return self
     }
 }
 

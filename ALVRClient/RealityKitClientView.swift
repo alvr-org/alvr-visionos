@@ -88,8 +88,8 @@ struct RealityKitClientView: View {
         
         // selectionRay origin + direction
         if let ray = event.selectionRay {
-            let origin = value?.convert(ray.origin, from: .local, to: event.targetedEntity!.parent!) ?? simd_float3(ray.origin)
-            let direction = simd_normalize((value?.convert(ray.origin + ray.direction, from: .local, to: event.targetedEntity!.parent!) ?? origin + simd_float3(ray.direction)) - origin)
+            let origin = value?.convert(ray.origin, from: .local, to: .scene) ?? simd_float3(ray.origin)
+            let direction = simd_normalize((value?.convert(ray.origin + ray.direction, from: .local, to: .scene) ?? origin + simd_float3(ray.direction)) - origin)
             let pos = origin + direction
             
             WorldTracker.shared.testPosition = pos
@@ -105,8 +105,8 @@ struct RealityKitClientView: View {
         
         // inputDevicePose
         if let inputPose = event.inputDevicePose {
-            let pos = value?.convert(inputPose.pose3D.position, from: .local, to: event.targetedEntity!.parent!) ?? simd_float3(inputPose.pose3D.position)
-            let rot = value?.convert(inputPose.pose3D.rotation, from: .local, to: event.targetedEntity!.parent!) ?? simd_quatf(inputPose.pose3D.rotation)
+            let pos = value?.convert(inputPose.pose3D.position, from: .local, to: .scene) ?? simd_float3(inputPose.pose3D.position)
+            let rot = value?.convert(inputPose.pose3D.rotation, from: .local, to: .scene) ?? simd_quatf(inputPose.pose3D.rotation)
             //WorldTracker.shared.testPosition = pos
             
             // Started a pinch and have a start position
@@ -158,30 +158,13 @@ struct RealityKitClientView: View {
     
     var body: some View {
         RealityView { content in
-            let material = UnlitMaterial(color: .white)
-            let videoPlaneMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
-            let videoPlane = ModelEntity(mesh: videoPlaneMesh, materials: [material])
-            videoPlane.name = "video_plane"
-            videoPlane.components.set(MagicRealityKitClientSystemComponent())
-            videoPlane.components.set(InputTargetComponent())
-            videoPlane.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
-            videoPlane.scale = simd_float3(0.0, 0.0, 0.0)
-            
-            let material2 = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
-            //material2.blending = .transparent(opacity: 0.0)
-            let cubeMesh = MeshResource.generateBox(size: 1.0)
-            try? cubeMesh.addInvertedNormals()
-            let backdrop = ModelEntity(mesh: cubeMesh, materials: [material2])
-            backdrop.name = "backdrop_cube"
-            backdrop.components.set(InputTargetComponent())
-            backdrop.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
-            backdrop.scale = simd_float3(0.0, 0.0, 0.0)
-
-            content.add(videoPlane)
-            content.add(backdrop)
+            await RealityKitClientSystem.setup(content)
+            await RealityKitEyeTrackingSystem.setup(content)
             
             MagicRealityKitClientSystemComponent.registerComponent()
+            MagicRealityKitEyeTrackingSystemComponent.registerComponent()
             RealityKitClientSystem.registerSystem()
+            RealityKitEyeTrackingSystem.registerSystem()
         }
         update: { content in
 

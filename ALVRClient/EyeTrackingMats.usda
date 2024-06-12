@@ -1,0 +1,334 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "Reality Composer Pro Version 2.0 (448.0.0.500.6)"
+    }
+    defaultPrim = "Root"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "Root"
+{
+    reorder nameChildren = ["HoverEdgeTracker", "LeftEyeOnly"]
+    def Material "HoverEdgeTracker"
+    {
+        token outputs:mtlx:surface.connect = </Root/HoverEdgeTracker/UnlitSurface.outputs:out>
+        token outputs:realitykit:vertex
+        token outputs:surface.connect = </Root/HoverEdgeTracker/UsdPreviewSurface.outputs:surface>
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (2190.3271, 2.2105622)
+        int ui:nodegraph:realitykit:subgraphOutputs:stackingOrder = 1069
+
+        def Shader "UsdPreviewSurface" (
+            active = false
+        )
+        {
+            uniform token info:id = "UsdPreviewSurface"
+            token outputs:surface
+        }
+
+        def Shader "UnlitSurface"
+        {
+            uniform token info:id = "ND_realitykit_unlit_surfaceshader"
+            bool inputs:applyPostProcessToneMap = 0
+            color3f inputs:color.connect = </Root/HoverEdgeTracker/Combine3_2.outputs:out>
+            bool inputs:hasPremultipliedAlpha
+            float inputs:opacity = 1
+            float inputs:opacity.connect = </Root/HoverEdgeTracker/Separate4.outputs:outa>
+            float inputs:opacityThreshold
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (1911.8273, 63.710564)
+            int ui:nodegraph:node:stackingOrder = 1069
+            string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["inputs:opacity", "inputs:opacity"]
+        }
+
+        def Shader "RealitykitHoverState"
+        {
+            uniform token info:id = "ND_realitykit_hover_state"
+            float outputs:intensity
+            bool outputs:isActive
+            float3 outputs:position
+            float outputs:timeSinceHoverStart
+            float2 ui:nodegraph:node:pos = (-368.625, 130.875)
+            int ui:nodegraph:node:stackingOrder = 650
+        }
+
+        def Shader "Separate3"
+        {
+            uniform token info:id = "ND_separate3_vector3"
+            float3 inputs:in.connect = </Root/HoverEdgeTracker/RealitykitHoverState.outputs:position>
+            float outputs:outx
+            float outputs:outy
+            float outputs:outz
+            float2 ui:nodegraph:node:pos = (-170.875, 165)
+            int ui:nodegraph:node:stackingOrder = 653
+        }
+
+        def Shader "Convert_1"
+        {
+            uniform token info:id = "ND_convert_vector3_color3"
+            float3 inputs:in.connect = </Root/HoverEdgeTracker/Multiply_2.outputs:out>
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (458.1987, 325.0239)
+            int ui:nodegraph:node:stackingOrder = 917
+        }
+
+        def Shader "Multiply"
+        {
+            uniform token info:id = "ND_multiply_vector3"
+            float3 inputs:in1.connect = </Root/HoverEdgeTracker/Add.outputs:out>
+            float3 inputs:in2 = (0.5, 0.5, 0)
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (152.375, 236.75)
+            int ui:nodegraph:node:stackingOrder = 1076
+        }
+
+        def Shader "Add"
+        {
+            uniform token info:id = "ND_add_vector3"
+            float3 inputs:in1.connect = </Root/HoverEdgeTracker/Multiply_1.outputs:out>
+            float3 inputs:in2 = (1, 1, 1)
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (-20.875, 233.25)
+            int ui:nodegraph:node:stackingOrder = 1074
+        }
+
+        def Shader "Combine3"
+        {
+            uniform token info:id = "ND_combine3_vector3"
+            float inputs:in1.connect = </Root/HoverEdgeTracker/Separate3.outputs:outx>
+            float inputs:in2 = -0.5
+            float inputs:in2.connect = </Root/HoverEdgeTracker/Separate3.outputs:outy>
+            float inputs:in3 = -0.5
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (-62.1875, 50.3125)
+            int ui:nodegraph:node:stackingOrder = 677
+        }
+
+        def Shader "Multiply_1"
+        {
+            uniform token info:id = "ND_multiply_vector3"
+            float3 inputs:in1.connect = </Root/HoverEdgeTracker/Combine3.outputs:out>
+            float3 inputs:in2 = (0.04, 0.04, 0.04)
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (114.625, 100.125)
+            int ui:nodegraph:node:stackingOrder = 1078
+        }
+
+        def Shader "Texcoord"
+        {
+            uniform token info:id = "ND_texcoord_vector2"
+            int inputs:index = 0
+            float2 outputs:out
+            float2 ui:nodegraph:node:pos = (-347.81906, 387.7568)
+            int ui:nodegraph:node:stackingOrder = 824
+        }
+
+        def Shader "Step"
+        {
+            uniform token info:id = "ND_realitykit_step_vector2"
+            float2 inputs:edge = (0.8, 0)
+            float2 inputs:in.connect = </Root/HoverEdgeTracker/Texcoord.outputs:out>
+            float2 outputs:out
+            float2 ui:nodegraph:node:pos = (-78.82069, 427.7709)
+            int ui:nodegraph:node:stackingOrder = 1081
+        }
+
+        def Shader "Separate2"
+        {
+            uniform token info:id = "ND_separate2_vector2"
+            float2 inputs:in.connect = </Root/HoverEdgeTracker/Step.outputs:out>
+            float outputs:outx
+            float outputs:outy
+            float2 ui:nodegraph:node:pos = (73.86083, 531.9016)
+            int ui:nodegraph:node:stackingOrder = 847
+        }
+
+        def Shader "Combine3_1"
+        {
+            uniform token info:id = "ND_combine3_vector3"
+            float inputs:in1.connect = </Root/HoverEdgeTracker/Separate2.outputs:outx>
+            float inputs:in2.connect = </Root/HoverEdgeTracker/Separate2.outputs:outx>
+            float inputs:in3.connect = </Root/HoverEdgeTracker/Separate2.outputs:outx>
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (315.19577, 484.38007)
+            int ui:nodegraph:node:stackingOrder = 863
+        }
+
+        def Shader "Multiply_2"
+        {
+            uniform token info:id = "ND_multiply_vector3"
+            float3 inputs:in1.connect = </Root/HoverEdgeTracker/Clamp.outputs:out>
+            float3 inputs:in2.connect = </Root/HoverEdgeTracker/Combine3_1.outputs:out>
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (326.75827, 328.60272)
+            int ui:nodegraph:node:stackingOrder = 889
+        }
+
+        def Shader "Power"
+        {
+            uniform token info:id = "ND_power_vector3"
+            float3 inputs:in1.connect = </Root/HoverEdgeTracker/Multiply.outputs:out>
+            float3 inputs:in2 = (2.2, 2.2, 2.2)
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (-117.20431, 303.9157)
+            int ui:nodegraph:node:stackingOrder = 906
+        }
+
+        def Shader "Clamp"
+        {
+            uniform token info:id = "ND_clamp_vector3"
+            float3 inputs:high
+            float3 inputs:in.connect = </Root/HoverEdgeTracker/Power.outputs:out>
+            float3 inputs:low
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (86.85852, 350.50537)
+            int ui:nodegraph:node:stackingOrder = 1070
+        }
+
+        def Shader "Separate3_1"
+        {
+            uniform token info:id = "ND_separate3_color3"
+            color3f inputs:in.connect = </Root/HoverEdgeTracker/Convert_1.outputs:out>
+            float outputs:outb
+            float outputs:outg
+            float outputs:outr
+            float2 ui:nodegraph:node:pos = (641.1128, 437.94147)
+            int ui:nodegraph:node:stackingOrder = 968
+        }
+
+        def Shader "Combine4"
+        {
+            uniform token info:id = "ND_combine4_color4"
+            float inputs:in1.connect = </Root/HoverEdgeTracker/Separate3_1.outputs:outr>
+            float inputs:in2.connect = </Root/HoverEdgeTracker/Separate3_1.outputs:outg>
+            float inputs:in3.connect = </Root/HoverEdgeTracker/Separate3_1.outputs:outb>
+            float inputs:in4.connect = </Root/HoverEdgeTracker/Separate2.outputs:outx>
+            color4f outputs:out
+            float2 ui:nodegraph:node:pos = (877.1128, 397.56647)
+            int ui:nodegraph:node:stackingOrder = 975
+        }
+
+        def Shader "GeometrySwitchCameraIndex"
+        {
+            uniform token info:id = "ND_realitykit_geometry_switch_cameraindex_color4"
+            color4f inputs:left.connect = </Root/HoverEdgeTracker/Combine4.outputs:out>
+            color4f inputs:mono.connect = </Root/HoverEdgeTracker/Combine4.outputs:out>
+            color4f inputs:right
+            color4f outputs:out
+            float2 ui:nodegraph:node:pos = (1109.1128, 340.06647)
+            int ui:nodegraph:node:stackingOrder = 978
+        }
+
+        def Shader "Separate4"
+        {
+            uniform token info:id = "ND_separate4_color4"
+            color4f inputs:in.connect = </Root/HoverEdgeTracker/GeometrySwitchCameraIndex.outputs:out>
+            float outputs:outa
+            float outputs:outb
+            float outputs:outg
+            float outputs:outr
+            float2 ui:nodegraph:node:pos = (1370.9878, 301.81647)
+            int ui:nodegraph:node:stackingOrder = 981
+        }
+
+        def Shader "Combine3_2"
+        {
+            uniform token info:id = "ND_combine3_color3"
+            float inputs:in1.connect = </Root/HoverEdgeTracker/Separate4.outputs:outr>
+            float inputs:in2.connect = </Root/HoverEdgeTracker/Separate4.outputs:outg>
+            float inputs:in3.connect = </Root/HoverEdgeTracker/Separate4.outputs:outb>
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (1602.8628, 208.19147)
+            int ui:nodegraph:node:stackingOrder = 984
+        }
+    }
+
+    def Material "LeftEyeOnly"
+    {
+        asset inputs:texture (
+            customData = {
+                dictionary realitykit = {
+                    float2 positionInSubgraph = (-714.7617, 37.04297)
+                    float2 sizeInSubgraph = (115.5, 53)
+                    int stackingOrderInSubgraph = 621
+                }
+            }
+        )
+        token outputs:mtlx:surface.connect = </Root/LeftEyeOnly/UnlitSurface.outputs:out>
+        token outputs:realitykit:vertex
+        float2 ui:nodegraph:realitykit:subgraphOutputs:pos = (890.9682, 176.60297)
+        float2 ui:nodegraph:realitykit:subgraphOutputs:size = (182, 99)
+        int ui:nodegraph:realitykit:subgraphOutputs:stackingOrder = 598
+
+        def Shader "Separate4"
+        {
+            uniform token info:id = "ND_separate4_color4"
+            color4f inputs:in.connect = </Root/LeftEyeOnly/GeometrySwitchCameraIndex.outputs:out>
+            float outputs:outa
+            float outputs:outb
+            float outputs:outg
+            float outputs:outr
+            float2 ui:nodegraph:node:pos = (164.8399, 145.45125)
+            float2 ui:nodegraph:node:size = (115.5, 163)
+            int ui:nodegraph:node:stackingOrder = 536
+        }
+
+        def Shader "Combine3"
+        {
+            uniform token info:id = "ND_combine3_color3"
+            float inputs:in1.connect = </Root/LeftEyeOnly/Separate4.outputs:outr>
+            float inputs:in2.connect = </Root/LeftEyeOnly/Separate4.outputs:outg>
+            float inputs:in3.connect = </Root/LeftEyeOnly/Separate4.outputs:outb>
+            color3f outputs:out
+            float2 ui:nodegraph:node:pos = (323.72595, 12.485718)
+            float2 ui:nodegraph:node:size = (145, 54)
+            int ui:nodegraph:node:stackingOrder = 614
+        }
+
+        def Shader "GeometrySwitchCameraIndex"
+        {
+            uniform token info:id = "ND_realitykit_geometry_switch_cameraindex_color4"
+            color4f inputs:left.connect = </Root/LeftEyeOnly/Left.outputs:out>
+            color4f inputs:mono.connect = </Root/LeftEyeOnly/Left.outputs:out>
+            color4f inputs:right.connect = None
+            color4f outputs:out
+            float2 ui:nodegraph:node:pos = (-73.09742, 83.86663)
+            float2 ui:nodegraph:node:size = (237, 145)
+            int ui:nodegraph:node:stackingOrder = 626
+        }
+
+        def Shader "Left"
+        {
+            uniform token info:id = "ND_tiledimage_color4"
+            color4f inputs:default
+            asset inputs:file.connect = </Root/LeftEyeOnly.inputs:texture>
+            string inputs:filtertype
+            float2 inputs:realworldimagesize
+            float2 inputs:realworldtilesize
+            float2 inputs:texcoord
+            float2 inputs:uvoffset
+            float2 inputs:uvtiling = (1, 1)
+            color4f outputs:out
+            float2 ui:nodegraph:node:pos = (-441.85236, -42.11212)
+            float2 ui:nodegraph:node:size = (158.5, 235)
+            int ui:nodegraph:node:stackingOrder = 627
+        }
+
+        def Shader "UnlitSurface"
+        {
+            uniform token info:id = "ND_realitykit_unlit_surfaceshader"
+            bool inputs:applyPostProcessToneMap = 0
+            color3f inputs:color.connect = </Root/LeftEyeOnly/Combine3.outputs:out>
+            bool inputs:hasPremultipliedAlpha = 0
+            float inputs:opacity.connect = </Root/LeftEyeOnly/Separate4.outputs:outa>
+            float inputs:opacityThreshold
+            token outputs:out
+            float2 ui:nodegraph:node:pos = (601.2183, 63.652813)
+            float2 ui:nodegraph:node:size = (194.5, 181)
+            int ui:nodegraph:node:stackingOrder = 615
+            string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["inputs:opacity", "inputs:opacity"]
+        }
+    }
+}
+
