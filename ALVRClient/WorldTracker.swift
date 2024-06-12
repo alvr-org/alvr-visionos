@@ -221,7 +221,7 @@ class WorldTracker {
         Task {
             await processHandTrackingUpdates()
         }
-        
+#if false
         // HACK
         guard var fileFolder = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.alvr.client.ALVR")?.path else {
             return
@@ -241,6 +241,7 @@ class WorldTracker {
             do { try FileManager.default.copyItem(at: URL(fileURLWithPath: fileFolder + item), to: URL.documentsDirectory.appending(path: item)) } catch { }
             //.write(to:  atomically: true, encoding: .utf8)
         }
+#endif
     }
     
     func resetPlayspace() {
@@ -1103,8 +1104,8 @@ class WorldTracker {
         //let q = simd_quatf() * adjLeftRight * adjUpDown
         //print(q)
         
-        let xExtentRad = (tan(EventHandler.shared.viewFovs[0].right) - tan(EventHandler.shared.viewFovs[0].left)) * 0.3
-        let yExtentRad = (tan(EventHandler.shared.viewFovs[0].up) - tan(EventHandler.shared.viewFovs[0].down)) * 0.5
+        let xExtentRad = (atan(DummyMetalRenderer.renderTangents[0].x) + atan(DummyMetalRenderer.renderTangents[0].y)) * 0.7
+        let yExtentRad = (atan(DummyMetalRenderer.renderTangents[0].z) + atan(DummyMetalRenderer.renderTangents[0].w)) * 0.7
         
         //eyeX = sin(Float(CACurrentMediaTime()))
         //eyeY = cos(Float(CACurrentMediaTime()))

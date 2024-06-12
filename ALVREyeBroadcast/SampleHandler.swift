@@ -190,7 +190,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         var largestY = 0
         for y2 in 0..<yHeight {
             let y = y2
-            let x = 0
+            let x = yWidth-1
             let yPixel = yPlane.load(fromByteOffset: y * yBytesPerRow + x, as: UInt8.self)
             let uvIndex = (y / 2) * uvBytesPerRow + (x / 2) * 2
             let uPixel = uvPlane.load(fromByteOffset: uvIndex, as: UInt8.self)

@@ -29,7 +29,8 @@ let renderZNear = 0.001
 let renderZFar = 100.0
 let rkFramesInFlight = 3
 let renderDoStreamSSAA = true
-let eyeTrackWidth = 4096
+let eyeTrackWidth = Int(Float(renderWidth) * 2.5)
+let eyeTrackHeight = Int(Float(renderHeight) * 2.5)
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
@@ -260,7 +261,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         self.drawableQueueX = try? TextureResource.DrawableQueue(descx)
         self.drawableQueueX!.allowsNextDrawableTimeout = true
         
-        let descy = TextureResource.DrawableQueue.Descriptor(pixelFormat: MTLPixelFormat.bgra8Unorm_srgb, width: 1, height: eyeTrackWidth, usage: [.renderTarget, .shaderRead], mipmapsMode: .allocateAll)
+        let descy = TextureResource.DrawableQueue.Descriptor(pixelFormat: MTLPixelFormat.bgra8Unorm_srgb, width: 1, height: eyeTrackHeight, usage: [.renderTarget, .shaderRead], mipmapsMode: .allocateAll)
         self.drawableQueueY = try? TextureResource.DrawableQueue(descy)
         self.drawableQueueY!.allowsNextDrawableTimeout = true
         
@@ -342,12 +343,12 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         let xColors = [
             MTLClearColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.9, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.8, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.7, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.6, alpha: 1.0),
             MTLClearColor(red: 0.0, green: 1.0, blue: 0.5, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.4, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.25, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.125, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0625, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.03125, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.015625, alpha: 1.0),
             MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0), // 7
             MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
             MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
@@ -361,12 +362,12 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         let yColors = [
             MTLClearColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.9, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.8, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.7, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.6, alpha: 1.0),
             MTLClearColor(red: 0.0, green: 1.0, blue: 0.5, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.4, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.25, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.125, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0625, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.03125, alpha: 1.0),
+            MTLClearColor(red: 0.0, green: 1.0, blue: 0.015625, alpha: 1.0),
             MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0), // 7
             MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
             MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
@@ -390,7 +391,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         
         for i in 0..<16 {
-            var size = CGSize(width: 1, height: eyeTrackWidth / (1<<i))
+            var size = CGSize(width: 1, height: eyeTrackHeight / (1<<i))
             if size.width <= 0 {
                 size.width = 1
             }
@@ -898,14 +899,22 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 var planeTransformX = matrix_identity_float4x4// frame.transform
                 planeTransformX.columns.3 -= transform.columns.2 * rk_eye_panel_depth
                 planeTransformX.columns.3 += transform.columns.2 * rk_eye_panel_depth * 0.001
-                planeTransformX.columns.3 += transform.columns.1 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.72
+                planeTransformX.columns.3 += transform.columns.1 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.724
                 var planeTransformY = matrix_identity_float4x4//frame.transform
                 planeTransformY.columns.3 -= transform.columns.2 * rk_eye_panel_depth
                 planeTransformY.columns.3 += transform.columns.2 * rk_eye_panel_depth * 0.001
                 planeTransformY.columns.3 += transform.columns.2 * rk_eye_panel_depth * 0.001
-                planeTransformY.columns.3 -= transform.columns.0 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y) * 0.81
-                var scaleXY = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
-                scaleXY *= rk_eye_panel_depth
+                planeTransformY.columns.3 += transform.columns.0 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y) * 0.8125
+                
+                var scaleX = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
+                scaleX *= rk_eye_panel_depth
+                scaleX.z = 5.0
+                planeTransformX.columns.3 -= transform.columns.1 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.724
+                planeTransformX.columns.3 += transform.columns.1 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.22625
+                
+                var scaleY = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
+                scaleY *= rk_eye_panel_depth
+        
                 var orientationXY = /*simd_quatf(frame.transform) **/ simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
                 
                 if let surfaceMaterial = surfaceMaterialX {
@@ -918,11 +927,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 
                 eyeXPlane.position = simd_float3(planeTransformX.columns.3.x, planeTransformX.columns.3.y, planeTransformX.columns.3.z)
                 eyeXPlane.orientation = orientationXY
-                eyeXPlane.scale = scaleXY
+                eyeXPlane.scale = scaleX
                 
                 eyeYPlane.position = simd_float3(planeTransformY.columns.3.x, planeTransformY.columns.3.y, planeTransformY.columns.3.z)
                 eyeYPlane.orientation = orientationXY
-                eyeYPlane.scale = scaleXY
+                eyeYPlane.scale = scaleY
                 
                 if let commandBuffer = commandQueue.makeCommandBuffer() {
                     //print(drawableX!.texture.mipmapLevelCount)

@@ -161,7 +161,7 @@ def Xform "Root"
             uniform token info:id = "ND_realitykit_geometry_switch_cameraindex_color4"
             color4f inputs:left.connect = </Root/MonoMaterialBilinear/Left.outputs:out>
             color4f inputs:mono.connect = </Root/MonoMaterialBilinear/Left.outputs:out>
-            color4f inputs:right.connect = </Root/MonoMaterialBilinear/Right.outputs:out>
+            color4f inputs:right.connect = None
             color4f outputs:out
             float2 ui:nodegraph:node:pos = (-73.09742, 83.86663)
             float2 ui:nodegraph:node:size = (237, 145)

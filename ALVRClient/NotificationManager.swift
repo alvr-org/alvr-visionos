@@ -30,7 +30,7 @@ class NotificationManager: ObservableObject {
         }
         
         WorldTracker.shared.eyeX = (self.xFloat - 0.5) * 2.0
-        WorldTracker.shared.eyeY = ((self.yFloat - 0.5) * 0.7) * 2.0
+        WorldTracker.shared.eyeY = ((self.yFloat - 0.5) * 0.6) * 2.0
     }
 
     init() {
