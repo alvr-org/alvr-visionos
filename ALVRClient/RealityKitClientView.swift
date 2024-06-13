@@ -164,16 +164,27 @@ struct RealityKitClientView: View {
             videoPlane.name = "video_plane"
             videoPlane.components.set(MagicRealityKitClientSystemComponent())
             videoPlane.components.set(InputTargetComponent())
-            videoPlane.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            try! await videoPlane.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
             videoPlane.scale = simd_float3(0.0, 0.0, 0.0)
+            
+            let hoverTestMat = try! await ShaderGraphMaterial(
+                named: "/Root/HoverTest",
+                from: "SBSMaterial.usda"
+            )
             
             let eyeXPlane = ModelEntity(mesh: videoPlaneMesh, materials: [material])
             eyeXPlane.name = "eye_x_plane"
             eyeXPlane.scale = simd_float3(0.0, 0.0, 0.0)
             
-            let eyeYPlane = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            let eyeYPlane = ModelEntity(mesh: videoPlaneMesh, materials: [hoverTestMat])
             eyeYPlane.name = "eye_y_plane"
             eyeYPlane.scale = simd_float3(0.0, 0.0, 0.0)
+            eyeYPlane.components.set(InputTargetComponent())
+            try! await eyeYPlane.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            
+            if #available(visionOS 2.0, *) {
+                eyeYPlane.components.set(HoverEffectComponent(.shader(.default)))
+            }
             
             let material2 = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
             //material2.blending = .transparent(opacity: 0.0)
@@ -182,7 +193,7 @@ struct RealityKitClientView: View {
             let backdrop = ModelEntity(mesh: cubeMesh, materials: [material2])
             backdrop.name = "backdrop_cube"
             backdrop.components.set(InputTargetComponent())
-            backdrop.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            try! await backdrop.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
             backdrop.scale = simd_float3(0.0, 0.0, 0.0)
             
             let anchor = AnchorEntity(.head)

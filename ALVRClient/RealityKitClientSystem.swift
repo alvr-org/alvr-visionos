@@ -761,7 +761,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 return
             }
             
-            let drawableX = try drawableQueueX?.nextDrawable()
+            /*let drawableX = try drawableQueueX?.nextDrawable()
             if drawableX == nil {
                 objc_sync_exit(self.blitLock)
                 return
@@ -771,7 +771,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             if drawableY == nil {
                 objc_sync_exit(self.blitLock)
                 return
-            }
+            }*/
 
             lastUpdateTime = CACurrentMediaTime()
             
@@ -902,9 +902,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 planeTransformX.columns.3 += transform.columns.1 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.724
                 var planeTransformY = matrix_identity_float4x4//frame.transform
                 planeTransformY.columns.3 -= transform.columns.2 * rk_eye_panel_depth
-                planeTransformY.columns.3 += transform.columns.2 * rk_eye_panel_depth * 0.001
-                planeTransformY.columns.3 += transform.columns.2 * rk_eye_panel_depth * 0.001
-                planeTransformY.columns.3 += transform.columns.0 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y) * 0.8125
+                //planeTransformY.columns.3 += transform.columns.0 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y) * 0.8125
                 
                 var scaleX = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
                 scaleX *= rk_eye_panel_depth
@@ -922,18 +920,18 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 }
                 
                 if let surfaceMaterial = surfaceMaterialY {
-                    eyeYPlane.model?.materials = [surfaceMaterial]
+                    //eyeYPlane.model?.materials = [surfaceMaterial]
                 }
                 
                 eyeXPlane.position = simd_float3(planeTransformX.columns.3.x, planeTransformX.columns.3.y, planeTransformX.columns.3.z)
                 eyeXPlane.orientation = orientationXY
-                eyeXPlane.scale = scaleX
+                eyeXPlane.scale = scaleX * 0.0
                 
                 eyeYPlane.position = simd_float3(planeTransformY.columns.3.x, planeTransformY.columns.3.y, planeTransformY.columns.3.z)
                 eyeYPlane.orientation = orientationXY
                 eyeYPlane.scale = scaleY
                 
-                if let commandBuffer = commandQueue.makeCommandBuffer() {
+                /*if let commandBuffer = commandQueue.makeCommandBuffer() {
                     //print(drawableX!.texture.mipmapLevelCount)
                     for i in 0..<drawableX!.texture.mipmapLevelCount {
                         //print(i, mipColorTexturesX[i].width, mipColorTexturesX[i].height, drawableX!.texture.width, drawableX!.texture.height)
@@ -951,7 +949,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                     commandBuffer.commit()
                     commandBuffer.waitUntilCompleted() // this is a load-bearing wait
                 }
-                drawableY!.presentOnSceneUpdate()
+                drawableY!.presentOnSceneUpdate()*/
                 
                 //
                 // end eye track

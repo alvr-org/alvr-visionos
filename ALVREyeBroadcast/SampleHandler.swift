@@ -89,7 +89,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         let uvBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
 
         // Process the pixel buffer data on the CPU
-        processNV12PixelBufferData(yPlane: yPlane, yWidth: yWidth, yHeight: yHeight, yBytesPerRow: yBytesPerRow,
+        processNV12PixelBufferDataAlt(yPlane: yPlane, yWidth: yWidth, yHeight: yHeight, yBytesPerRow: yBytesPerRow,
                                     uvPlane: uvPlane, uvWidth: uvWidth, uvHeight: uvHeight, uvBytesPerRow: uvBytesPerRow)
 
         // Unlock the base address of the pixel buffer
@@ -242,6 +242,42 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         excavateValue(to: "X", val: Float(xPred) / Float(yWidth))
         excavateValue(to: "Y", val: Float(yPred) / Float(yHeight))
+    }
+    
+    private func processNV12PixelBufferDataAlt(yPlane: UnsafeMutableRawPointer?, yWidth: Int, yHeight: Int, yBytesPerRow: Int,
+                                        uvPlane: UnsafeMutableRawPointer?, uvWidth: Int, uvHeight: Int, uvBytesPerRow: Int) {
+        guard let yPlane = yPlane, let uvPlane = uvPlane else { return }
+
+
+        let y = 80
+        let x = yWidth-1
+        let yPixel = yPlane.load(fromByteOffset: y * yBytesPerRow + x, as: UInt8.self)
+        let uvIndex = (y / 2) * uvBytesPerRow + (x / 2) * 2
+        let uPixel = uvPlane.load(fromByteOffset: uvIndex, as: UInt8.self)
+        let vPixel = uvPlane.load(fromByteOffset: uvIndex + 1, as: UInt8.self)
+
+        // Convert YUV to RGB (this is a simple and not highly accurate conversion)
+        let yValue = Float(yPixel)
+        let uValue = Float(uPixel) - 128.0
+        let vValue = Float(vPixel) - 128.0
+
+        let r = yValue + 1.402 * vValue
+        let g = yValue - 0.344136 * uValue - 0.714136 * vValue
+        let b = yValue + 1.772 * uValue
+
+        // Clamping the results to [0, 255]
+        let rClamped = min(max(r / 255.0, 0.0), 1.0)
+        let gClamped = min(max(g / 255.0, 0.0), 1.0)
+        let bClamped = min(max(b / 255.0, 0.0), 1.0)
+        
+        let xPred = rClamped
+        let yPred = gClamped
+        
+        //let message = String(format: "EYES: %f %f", Float(xPred), Float(yPred))
+        //NSLog(message)
+        
+        excavateValue(to: "X", val: Float(xPred))
+        excavateValue(to: "Y", val: Float(yPred))
     }
     
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {

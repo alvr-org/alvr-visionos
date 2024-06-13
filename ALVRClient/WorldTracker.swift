@@ -1104,8 +1104,8 @@ class WorldTracker {
         //let q = simd_quatf() * adjLeftRight * adjUpDown
         //print(q)
         
-        let xExtentRad = (atan(DummyMetalRenderer.renderTangents[0].x) + atan(DummyMetalRenderer.renderTangents[0].y)) * 0.7
-        let yExtentRad = (atan(DummyMetalRenderer.renderTangents[0].z) + atan(DummyMetalRenderer.renderTangents[0].w)) * 0.7
+        let xExtentRad = (atan(DummyMetalRenderer.renderTangents[0].x) + atan(DummyMetalRenderer.renderTangents[0].y)) * 0.5
+        let yExtentRad = (atan(DummyMetalRenderer.renderTangents[0].z) + atan(DummyMetalRenderer.renderTangents[0].w)) * 0.5
         
         //eyeX = sin(Float(CACurrentMediaTime()))
         //eyeY = cos(Float(CACurrentMediaTime()))
