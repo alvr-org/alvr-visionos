@@ -4,15 +4,7 @@
 
 import SwiftUI
 import RealityKit
-import ARKit
 import QuartzCore
-import Metal
-import MetalKit
-import Spatial
-import AVFoundation
-#if !targetEnvironment(simulator)
-import MetalFX
-#endif
 
 let eyeTrackWidth = Int(Float(renderWidth) * 2.5)
 let eyeTrackHeight = Int(Float(renderHeight) * 2.5)

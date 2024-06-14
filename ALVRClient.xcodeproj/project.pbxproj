@@ -30,7 +30,6 @@
 		E71DEFA52C192617008A2074 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E71DEFA42C192617008A2074 /* ReplayKit.framework */; };
 		E71DEFA82C192617008A2074 /* SampleHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEFA72C192617008A2074 /* SampleHandler.swift */; };
 		E71DEFAC2C192617008A2074 /* ALVREyeBroadcast.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E71DEFA32C192617008A2074 /* ALVREyeBroadcast.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		E71DEFB42C1948EF008A2074 /* SampleWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEFB32C1948EF008A2074 /* SampleWriter.swift */; };
 		E72683DB2BE73DD10065B78B /* MetalClientSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */; };
 		E7285AAE2B9C44CB0032514C /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7285AAD2B9C44CB0032514C /* AVKit.framework */; };
 		E7A98A9E2BE2EEAB003DF333 /* DummyMetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */; };
@@ -108,7 +107,6 @@
 		E71DEFA92C192617008A2074 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E71DEFB12C192627008A2074 /* ALVREyeBroadcast.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ALVREyeBroadcast.entitlements; sourceTree = "<group>"; };
 		E71DEFB22C19263D008A2074 /* ALVRClient.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ALVRClient.entitlements; sourceTree = "<group>"; };
-		E71DEFB32C1948EF008A2074 /* SampleWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleWriter.swift; sourceTree = "<group>"; };
 		E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalClientSystem.swift; sourceTree = "<group>"; };
 		E7285AAD2B9C44CB0032514C /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
 		E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DummyMetalRenderer.swift; sourceTree = "<group>"; };
@@ -236,7 +234,6 @@
 				E71DEFB12C192627008A2074 /* ALVREyeBroadcast.entitlements */,
 				E71DEFA72C192617008A2074 /* SampleHandler.swift */,
 				E71DEFA92C192617008A2074 /* Info.plist */,
-				E71DEFB32C1948EF008A2074 /* SampleWriter.swift */,
 			);
 			path = ALVREyeBroadcast;
 			sourceTree = "<group>";
@@ -385,7 +382,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E71DEFB42C1948EF008A2074 /* SampleWriter.swift in Sources */,
 				E71DEFA82C192617008A2074 /* SampleHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

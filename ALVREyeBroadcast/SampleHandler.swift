@@ -1,8 +1,5 @@
 //
 //  SampleHandler.swift
-//  ALVREyeBroadcast
-//
-//  Created by Max Thomas on 6/11/24.
 //
 
 import ReplayKit
@@ -28,17 +25,15 @@ class SampleHandler: RPBroadcastSampleHandler {
             //NSLog("EYES: Using mipmap method")
         }, "EyeTrackingInfo_UseMipmapMethod" as CFString, nil, .deliverImmediately)
 
+        // TODO: Allow user-invoked screen recording while we have exclusive access?
+#if false
         // User has requested to start the broadcast. Setup info from the UI extension can be supplied but optional.
-        /*let dateFormatter = DateFormatter()
+        let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMddHHmmss"
         dateFormatter.string(from: Date())
         let fileName = "ScreenRecord_\(dateFormatter.string(from: Date())).mp4"
         
-        guard var fileFolder = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.alvr.client.ALVR")?.path else {
-            return
-        }
-        
-        fileFolder = fileFolder + "/Library/Caches/video/"
+        var fileFolder = URL.documentsDirectory.path
         
         if !FileManager.default.fileExists(atPath: fileFolder) {
             try? FileManager.default.createDirectory(atPath: fileFolder, withIntermediateDirectories: true, attributes: nil)
@@ -56,7 +51,8 @@ class SampleHandler: RPBroadcastSampleHandler {
                 let error = NSError(domain: "SampleHandler", code: -1, userInfo: [NSLocalizedDescriptionKey: "writer init error: \(error)"])
                 strongSelf.finishBroadcastWithError(error)
             }
-        }*/
+        }
+#endif
     }
     
     override func broadcastPaused() {
