@@ -19,6 +19,8 @@ xcrun vtool -arch arm64 -set-build-version maccatalyst 17.0 17.0 -replace -outpu
 xcrun vtool -arch arm64 -set-build-version xros 1.0 1.0 -replace -output alvrrepack/xros/$target_lib alvrrepack/ios/$target_lib
 xcrun vtool -arch arm64 -set-build-version xrossim 1.0 1.0 -replace -output alvrrepack/xrsimulator/$target_lib alvrrepack/ios/$target_lib
 
+rm -rf ALVRClientCore.xcframework
+rm -rf ALVRClient/ALVRClientCore.xcframework
 
 xcodebuild -create-xcframework \
 	-framework alvrrepack/ios/$target_framework \
@@ -28,4 +30,3 @@ xcodebuild -create-xcframework \
 	-output ALVRClient/ALVRClientCore.xcframework
 
 rm -rf alvrrepack
-rm -rf ALVRClientCore.xcframework
