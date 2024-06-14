@@ -1011,7 +1011,10 @@ class WorldTracker {
             print("Failed to get device anchor for future prediction!!")
             // Prevent audio crackling issues
             if sentPoses > 30 {
-                EventHandler.shared.handleHeadsetRemoved()
+                // Yayyy they fixed it, but this also caused audio to cut out for random device anchor failures...
+                if #unavailable(visionOS 2.0) {
+                    EventHandler.shared.handleHeadsetRemoved()
+                }
             }
             return
         }

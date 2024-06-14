@@ -70,6 +70,7 @@ class EventHandler: ObservableObject {
     var stutterEventsCounted = 0
     var lastStutterTime = 0.0
     var awdlAlertPresented = false
+    var audioIsOff = false
     
     init() {}
     
@@ -159,6 +160,7 @@ class EventHandler: ObservableObject {
     }
 
     func fixAudioForDirectStereo() {
+        audioIsOff = false
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setActive(true)
@@ -172,11 +174,15 @@ class EventHandler: ObservableObject {
     }
     
     func preventAudioCracklingOnExit() {
+        if audioIsOff {
+            return
+        }
+        audioIsOff = true
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setActive(false)
         } catch {
-            print("Failed to set the audio session configuration?")
+            print("Failed to set the audio session configuration? \(error)")
         }
     }
 
