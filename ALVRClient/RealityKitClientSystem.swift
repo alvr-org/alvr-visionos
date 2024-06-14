@@ -114,6 +114,11 @@ class RealityKitClientSystem : System {
             let cubeMesh = MeshResource.generateBox(size: 1.0)
             try? cubeMesh.addInvertedNormals()
             
+            let anchor = AnchorEntity(.head)
+            anchor.anchoring.trackingMode = .continuous
+            anchor.name = "backdrop_headanchor"
+            anchor.position = simd_float3(0.0, 0.0, 0.0)
+            
             let videoPlane = ModelEntity(mesh: videoPlaneMesh, materials: [material])
             videoPlane.name = "video_plane"
             videoPlane.components.set(MagicRealityKitClientSystemComponent())
@@ -121,15 +126,14 @@ class RealityKitClientSystem : System {
             videoPlane.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
             videoPlane.scale = simd_float3(0.0, 0.0, 0.0)
 
-            let backdrop = ModelEntity(mesh: cubeMesh, materials: [material2])
-            backdrop.name = "backdrop_cube"
-            backdrop.components.set(InputTargetComponent())
-            backdrop.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
-            backdrop.scale = simd_float3(0.0, 0.0, 0.0)
+            let backdrop = ModelEntity(mesh: videoPlaneMesh, materials: [material2])
+            backdrop.name = "backdrop_plane"
             backdrop.isEnabled = false
+            
+            anchor.addChild(backdrop)
 
             content.add(videoPlane)
-            content.add(backdrop)
+            content.add(anchor)
         }
     }
     
@@ -172,8 +176,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var drawableQueue: TextureResource.DrawableQueue? = nil
     private(set) var surfaceMaterial: ShaderGraphMaterial? = nil
     private var textureResource: TextureResource? = nil
-    let transparentMaterial = UnlitMaterial(color: UIColor(white: 0.0, alpha: 0.0))
-    let blackMaterial = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
     var passthroughPipelineState: MTLRenderPipelineState? = nil
     var passthroughPipelineStateHDR: MTLRenderPipelineState? = nil
     var passthroughPipelineStateWithAlpha: MTLRenderPipelineState? = nil
@@ -546,7 +548,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         guard let plane = context.scene.findEntity(named: "video_plane") as? ModelEntity else {
             return
         }
-        guard let backdrop = context.scene.findEntity(named: "backdrop_cube") as? ModelEntity else {
+        guard let backdrop = context.scene.findEntity(named: "backdrop_plane") as? ModelEntity else {
             return
         }
         let settings = ALVRClientApp.gStore.settings
@@ -612,18 +614,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 objc_sync_exit(self.blitLock)
                 return
             }
-            
-            /*let drawableX = try drawableQueueX?.nextDrawable()
-            if drawableX == nil {
-                objc_sync_exit(self.blitLock)
-                return
-            }
-            
-            let drawableY = try drawableQueueY?.nextDrawable()
-            if drawableY == nil {
-                objc_sync_exit(self.blitLock)
-                return
-            }*/
 
             lastUpdateTime = CACurrentMediaTime()
             
@@ -718,25 +708,22 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 plane.scale = scale
                 
                 if settings.chromaKeyEnabled {
-                    backdrop.scale = simd_float3(0.0, 0.0, 0.0)
                     backdrop.isEnabled = false
                 }
                 else {
                     // Place giant plane 1m behind the video feed
-                    backdrop.position = position
-                    backdrop.orientation = orientation
+                    backdrop.position = simd_float3(0.0, 0.0, rk_panel_depth + 1)
+                    backdrop.orientation = simd_quatf()
                     backdrop.scale = simd_float3(rk_panel_depth + 1, rk_panel_depth + 1, rk_panel_depth + 1) * 100.0
                     
                     // Hopefully these optimize into consts to avoid allocations
                     if renderer.fadeInOverlayAlpha >= 1.0 {
-                        backdrop.model?.materials = [transparentMaterial]
+                        backdrop.isEnabled = false
                     }
                     else if renderer.fadeInOverlayAlpha <= 0.0 {
-                        //backdrop.model?.materials = [blackMaterial]
                         backdrop.isEnabled = true
                     }
                     else {
-                        //backdrop.model?.materials = [UnlitMaterial(color: UIColor(white: 0.0, alpha: CGFloat(1.0 - renderer.fadeInOverlayAlpha)))]
                         backdrop.isEnabled = false
                     }
                     
@@ -747,7 +734,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 drawable!.presentOnSceneUpdate()
 
                 objc_sync_enter(rkFramePoolLock)
-                //print(texture.width, currentRenderWidth)
 #if !targetEnvironment(simulator)
                 texture.setPurgeableState(.volatile)
                 upscaleTexture.setPurgeableState(.volatile)
