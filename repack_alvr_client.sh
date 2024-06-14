@@ -25,5 +25,7 @@ xcodebuild -create-xcframework \
 	-framework alvrrepack/maccatalyst/$target_framework \
 	-framework alvrrepack/xros/$target_framework \
 	-framework alvrrepack/xrsimulator/$target_framework \
-	-output ALVRClientCore.xcframework
+	-output ALVRClient/ALVRClientCore.xcframework
 
+rm -rf alvrrepack
+rm -rf ALVRClientCore.xcframework
