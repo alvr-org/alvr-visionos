@@ -27,7 +27,6 @@
 		E71DEF982C18D478008A2074 /* SwiftUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF942C18D325008A2074 /* SwiftUI.swift */; };
 		E71DEF9A2C18D4B4008A2074 /* ALVRTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF992C18D4B4008A2074 /* ALVRTypes.swift */; };
 		E71DEF9C2C18D4DA008A2074 /* simd.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF9B2C18D4DA008A2074 /* simd.swift */; };
-		E71DEF9E2C191D66008A2074 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF9D2C191D66008A2074 /* NotificationManager.swift */; };
 		E71DEFA52C192617008A2074 /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E71DEFA42C192617008A2074 /* ReplayKit.framework */; };
 		E71DEFA82C192617008A2074 /* SampleHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEFA72C192617008A2074 /* SampleHandler.swift */; };
 		E71DEFAC2C192617008A2074 /* ALVREyeBroadcast.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E71DEFA32C192617008A2074 /* ALVREyeBroadcast.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -36,6 +35,8 @@
 		E7285AAE2B9C44CB0032514C /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7285AAD2B9C44CB0032514C /* AVKit.framework */; };
 		E7A98A9E2BE2EEAB003DF333 /* DummyMetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */; };
 		E7A98AA02BE2EEEA003DF333 /* RealityKitClientSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */; };
+		E7D606032C1B5D39009E3343 /* RealityKitEyeTrackingSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D606022C1B5D37009E3343 /* RealityKitEyeTrackingSystem.swift */; };
+		E7D606052C1B646D009E3343 /* EyeTrackingMats.usda in Resources */ = {isa = PBXBuildFile; fileRef = E7D606042C1B646D009E3343 /* EyeTrackingMats.usda */; };
 		E7F222422BE2F03800D10191 /* RealityKitClientView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7F222412BE2F03800D10191 /* RealityKitClientView.swift */; };
 		E7F222442BE2F21600D10191 /* SBSMaterial.usda in Resources */ = {isa = PBXBuildFile; fileRef = E7F222432BE2F21600D10191 /* SBSMaterial.usda */; };
 /* End PBXBuildFile section */
@@ -101,7 +102,6 @@
 		E71DEF942C18D325008A2074 /* SwiftUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUI.swift; sourceTree = "<group>"; };
 		E71DEF992C18D4B4008A2074 /* ALVRTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ALVRTypes.swift; sourceTree = "<group>"; };
 		E71DEF9B2C18D4DA008A2074 /* simd.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = simd.swift; sourceTree = "<group>"; };
-		E71DEF9D2C191D66008A2074 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		E71DEFA32C192617008A2074 /* ALVREyeBroadcast.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ALVREyeBroadcast.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E71DEFA42C192617008A2074 /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = System/Library/Frameworks/ReplayKit.framework; sourceTree = SDKROOT; };
 		E71DEFA72C192617008A2074 /* SampleHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleHandler.swift; sourceTree = "<group>"; };
@@ -113,6 +113,8 @@
 		E7285AAD2B9C44CB0032514C /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
 		E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DummyMetalRenderer.swift; sourceTree = "<group>"; };
 		E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitClientSystem.swift; sourceTree = "<group>"; };
+		E7D606022C1B5D37009E3343 /* RealityKitEyeTrackingSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitEyeTrackingSystem.swift; sourceTree = "<group>"; };
+		E7D606042C1B646D009E3343 /* EyeTrackingMats.usda */ = {isa = PBXFileReference; lastKnownFileType = text; path = EyeTrackingMats.usda; sourceTree = "<group>"; };
 		E7F222412BE2F03800D10191 /* RealityKitClientView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitClientView.swift; sourceTree = "<group>"; };
 		E7F222432BE2F21600D10191 /* SBSMaterial.usda */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SBSMaterial.usda; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -188,6 +190,7 @@
 				C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */,
 				C5E5903F2B6379EE00328ED6 /* Info.plist */,
 				E7F222432BE2F21600D10191 /* SBSMaterial.usda */,
+				E7D606042C1B646D009E3343 /* EyeTrackingMats.usda */,
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
 				E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */,
 				8E458AB22B7E05FB0019FC73 /* EventHandler.swift */,
@@ -196,6 +199,7 @@
 				E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */,
 				E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */,
 				E7F222412BE2F03800D10191 /* RealityKitClientView.swift */,
+				E7D606022C1B5D37009E3343 /* RealityKitEyeTrackingSystem.swift */,
 				C5E590352B6379ED00328ED6 /* Renderer.swift */,
 				9ED257162B8062A1008DC22F /* Settings.swift */,
 				C5E590372B6379ED00328ED6 /* Shaders.metal */,
@@ -203,7 +207,6 @@
 				D61E6FDF2B71CE080076031A /* VideoHandler.swift */,
 				8E458AB42B7E2C010019FC73 /* WorldTracker.swift */,
 				C5E5903A2B6379ED00328ED6 /* Preview Content */,
-				E71DEF9D2C191D66008A2074 /* NotificationManager.swift */,
 			);
 			path = ALVRClient;
 			sourceTree = "<group>";
@@ -335,6 +338,7 @@
 			files = (
 				C5E5903E2B6379EE00328ED6 /* Assets.xcassets in Resources */,
 				E7F222442BE2F21600D10191 /* SBSMaterial.usda in Resources */,
+				E7D606052C1B646D009E3343 /* EyeTrackingMats.usda in Resources */,
 				C5E5903C2B6379ED00328ED6 /* Preview Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -371,7 +375,7 @@
 				9ED257172B8062A2008DC22F /* Settings.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
-				E71DEF9E2C191D66008A2074 /* NotificationManager.swift in Sources */,
+				E7D606032C1B5D39009E3343 /* RealityKitEyeTrackingSystem.swift in Sources */,
 				E71DEF9C2C18D4DA008A2074 /* simd.swift in Sources */,
 				8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */,
 			);
@@ -609,7 +613,7 @@
 				DEVELOPMENT_TEAM = A2R992S5N3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ALVREyeBroadcast/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = ALVREyeBroadcast;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send Eye Tracking To ALVR";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -637,7 +641,7 @@
 				DEVELOPMENT_TEAM = A2R992S5N3;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ALVREyeBroadcast/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = ALVREyeBroadcast;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send Eye Tracking To ALVR";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -3,6 +3,7 @@
 //  RealityKitShenanigans
 //
 
+import SwiftUI
 import RealityKit
 import ARKit
 import QuartzCore
@@ -29,8 +30,6 @@ let renderZNear = 0.001
 let renderZFar = 100.0
 let rkFramesInFlight = 3
 let renderDoStreamSSAA = true
-let eyeTrackWidth = Int(Float(renderWidth) * 2.5)
-let eyeTrackHeight = Int(Float(renderHeight) * 2.5)
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
@@ -105,6 +104,35 @@ class RealityKitClientSystem : System {
         RealityKitClientSystem.howManyScenesExist += 1
     }
     
+    static func setup(_ content: RealityViewContent) async {
+        
+        await MainActor.run {
+            let material = UnlitMaterial(color: .white)
+            let material2 = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
+            
+            let videoPlaneMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
+            let cubeMesh = MeshResource.generateBox(size: 1.0)
+            try? cubeMesh.addInvertedNormals()
+            
+            let videoPlane = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            videoPlane.name = "video_plane"
+            videoPlane.components.set(MagicRealityKitClientSystemComponent())
+            videoPlane.components.set(InputTargetComponent())
+            videoPlane.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            videoPlane.scale = simd_float3(0.0, 0.0, 0.0)
+
+            let backdrop = ModelEntity(mesh: cubeMesh, materials: [material2])
+            backdrop.name = "backdrop_cube"
+            backdrop.components.set(InputTargetComponent())
+            backdrop.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            backdrop.scale = simd_float3(0.0, 0.0, 0.0)
+            backdrop.isEnabled = false
+
+            content.add(videoPlane)
+            content.add(backdrop)
+        }
+    }
+    
     func update(context: SceneUpdateContext) {
         //print(which, context.deltaTime, s != nil)
         if s != nil {
@@ -142,14 +170,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     let visionPro = VisionPro()
     var lastUpdateTime = 0.0
     var drawableQueue: TextureResource.DrawableQueue? = nil
-    var drawableQueueX: TextureResource.DrawableQueue? = nil
-    var drawableQueueY: TextureResource.DrawableQueue? = nil
     private(set) var surfaceMaterial: ShaderGraphMaterial? = nil
-    private(set) var surfaceMaterialX: ShaderGraphMaterial? = nil
-    private(set) var surfaceMaterialY: ShaderGraphMaterial? = nil
     private var textureResource: TextureResource? = nil
-    private var textureResourceX: TextureResource? = nil
-    private var textureResourceY: TextureResource? = nil
     let transparentMaterial = UnlitMaterial(color: UIColor(white: 0.0, alpha: 0.0))
     let blackMaterial = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
     var passthroughPipelineState: MTLRenderPipelineState? = nil
@@ -203,8 +225,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var renderer: Renderer
     
     var renderTangents = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
-    var mipColorTexturesX = [MTLTexture]()
-    var mipColorTexturesY = [MTLTexture]()
     
     required init(scene: RealityKit.Scene) {
         print("system init")
@@ -257,37 +277,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         self.drawableQueue = try? TextureResource.DrawableQueue(desc)
         self.drawableQueue!.allowsNextDrawableTimeout = true
         
-        let descx = TextureResource.DrawableQueue.Descriptor(pixelFormat: MTLPixelFormat.bgra8Unorm_srgb, width: eyeTrackWidth, height: 1, usage: [.renderTarget, .shaderRead], mipmapsMode: .allocateAll)
-        self.drawableQueueX = try? TextureResource.DrawableQueue(descx)
-        self.drawableQueueX!.allowsNextDrawableTimeout = true
-        
-        let descy = TextureResource.DrawableQueue.Descriptor(pixelFormat: MTLPixelFormat.bgra8Unorm_srgb, width: 1, height: eyeTrackHeight, usage: [.renderTarget, .shaderRead], mipmapsMode: .allocateAll)
-        self.drawableQueueY = try? TextureResource.DrawableQueue(descy)
-        self.drawableQueueY!.allowsNextDrawableTimeout = true
-        
         // Dummy texture
         let data = Data([0x00, 0x00, 0x00, 0xFF])
         self.textureResource = try! TextureResource(
-            dimensions: .dimensions(width: 1, height: 1),
-            format: .raw(pixelFormat: .bgra8Unorm),
-            contents: .init(
-                mipmapLevels: [
-                    .mip(data: data, bytesPerRow: 4),
-                ]
-            )
-        )
-        
-        self.textureResourceX = try! TextureResource(
-            dimensions: .dimensions(width: 1, height: 1),
-            format: .raw(pixelFormat: .bgra8Unorm),
-            contents: .init(
-                mipmapLevels: [
-                    .mip(data: data, bytesPerRow: 4),
-                ]
-            )
-        )
-        
-        self.textureResourceY = try! TextureResource(
             dimensions: .dimensions(width: 1, height: 1),
             format: .raw(pixelFormat: .bgra8Unorm),
             contents: .init(
@@ -314,92 +306,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             )
             textureResource!.replace(withDrawables: drawableQueue!)
         }
-        
-        Task {
-            let materialName = "/Root/MonoMaterialBilinear"
-            self.surfaceMaterialX = try! await ShaderGraphMaterial(
-                named: materialName,
-                from: "SBSMaterial.usda"
-            )
-            try! self.surfaceMaterialX!.setParameter(
-                name: "texture",
-                value: .textureResource(self.textureResourceX!)
-            )
-            textureResourceX!.replace(withDrawables: drawableQueueX!)
-        }
-        
-        Task {
-            let materialName = "/Root/MonoMaterialBilinear"
-            self.surfaceMaterialY = try! await ShaderGraphMaterial(
-                named: materialName,
-                from: "SBSMaterial.usda"
-            )
-            try! self.surfaceMaterialY!.setParameter(
-                name: "texture",
-                value: .textureResource(self.textureResourceY!)
-            )
-            textureResourceY!.replace(withDrawables: drawableQueueY!)
-        }
-        
-        let xColors = [
-            MTLClearColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.5, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.25, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.125, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0625, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.03125, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.015625, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0), // 7
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0), // 11, this is where 1920x1080 goes to
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0), // 15
-        ]
-        
-        let yColors = [
-            MTLClearColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.5, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.25, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.125, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0625, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.03125, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.015625, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0), // 7
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0), // 11, this is where 1920x1080 goes to
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0),
-            MTLClearColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0), // 15
-        ]
-        
-        for i in 0..<16 {
-            var size = CGSize(width: eyeTrackWidth / (1<<i), height: 1)
-            if size.width <= 0 {
-                size.width = 1
-            }
-            if size.height <= 0 {
-                size.height = 1
-            }
-            mipColorTexturesX.append(createTextureWithColor(color: xColors[i], size: size)!)
-        }
-        
-        for i in 0..<16 {
-            var size = CGSize(width: 1, height: eyeTrackHeight / (1<<i))
-            if size.width <= 0 {
-                size.width = 1
-            }
-            if size.height <= 0 {
-                size.height = 1
-            }
-            mipColorTexturesY.append(createTextureWithColor(color: yColors[i], size: size)!)
-        }
 
         self.visionPro.vsyncCallback = rkVsyncCallback
         
@@ -412,41 +318,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 
         EventHandler.shared.handleRenderStarted()
         EventHandler.shared.renderStarted = true
-    }
-    
-    func createTextureWithColor(color: MTLClearColor, size: CGSize) -> MTLTexture? {
-        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm_srgb,
-                                                                         width: Int(size.width),
-                                                                         height: Int(size.height),
-                                                                         mipmapped: false)
-        textureDescriptor.usage = [.shaderRead, .renderTarget]
-        
-        guard let texture = device.makeTexture(descriptor: textureDescriptor) else {
-            return nil
-        }
-        
-        let region = MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
-                               size: MTLSize(width: Int(size.width), height: Int(size.height), depth: 1))
-        
-        var colorComponents: [UInt8] = [UInt8](repeating: 0, count: 4*Int(size.width)*Int(size.height))
-        colorComponents[0] = UInt8(color.blue * 255)
-        colorComponents[1] = UInt8(color.green * 255)
-        colorComponents[2] = UInt8(color.red * 255)
-        colorComponents[3] = UInt8(color.alpha * 255)
-        
-        for i in 0..<Int(size.width)*Int(size.height) {
-            colorComponents[(i*4)+0] = colorComponents[0]
-            colorComponents[(i*4)+1] = colorComponents[1]
-            colorComponents[(i*4)+2] = colorComponents[2]
-            colorComponents[(i*4)+3] = colorComponents[3]
-        }
-        
-        texture.replace(region: region,
-                        mipmapLevel: 0,
-                        withBytes: colorComponents,
-                        bytesPerRow: Int(size.width) * 4)
-        
-        return texture
     }
     
     func createCopyShaderPipelines()
@@ -667,19 +538,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
 #endif
     }
-    
-    func copyTextureToMipLevelRaw(_ commandBuffer: MTLCommandBuffer, _ textureDst: MTLTexture,  _ textureSrc: MTLTexture, _ level: Int) {
-        guard let blitEncoder = commandBuffer.makeBlitCommandEncoder() else {
-            fatalError("Failed to create blit command encoder")
-        }
-
-        blitEncoder.label = "Copy Texture To Mipmap Level"
-        blitEncoder.pushDebugGroup("Copy Texture To Mipmap Level")
-        blitEncoder.copy(from: textureSrc, sourceSlice: 0, sourceLevel: 0, to: textureDst, destinationSlice: 0, destinationLevel: level, sliceCount: 1, levelCount: 1)
-
-        blitEncoder.popDebugGroup()
-        blitEncoder.endEncoding()
-    }
 
     var rkFillUp = 2
     func update(context: SceneUpdateContext) {
@@ -689,12 +547,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             return
         }
         guard let backdrop = context.scene.findEntity(named: "backdrop_cube") as? ModelEntity else {
-            return
-        }
-        guard let eyeXPlane = context.scene.findEntity(named: "eye_x_plane") as? ModelEntity else {
-            return
-        }
-        guard let eyeYPlane = context.scene.findEntity(named: "eye_y_plane") as? ModelEntity else {
             return
         }
         let settings = ALVRClientApp.gStore.settings
@@ -867,6 +719,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 
                 if settings.chromaKeyEnabled {
                     backdrop.scale = simd_float3(0.0, 0.0, 0.0)
+                    backdrop.isEnabled = false
                 }
                 else {
                     // Place giant plane 1m behind the video feed
@@ -879,81 +732,19 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                         backdrop.model?.materials = [transparentMaterial]
                     }
                     else if renderer.fadeInOverlayAlpha <= 0.0 {
-                        backdrop.model?.materials = [blackMaterial]
+                        //backdrop.model?.materials = [blackMaterial]
+                        backdrop.isEnabled = true
                     }
                     else {
-                        backdrop.model?.materials = [UnlitMaterial(color: UIColor(white: 0.0, alpha: CGFloat(1.0 - renderer.fadeInOverlayAlpha)))]
+                        //backdrop.model?.materials = [UnlitMaterial(color: UIColor(white: 0.0, alpha: CGFloat(1.0 - renderer.fadeInOverlayAlpha)))]
+                        backdrop.isEnabled = false
                     }
+                    
                 }
                 
                 //drawable!.texture.setPurgeableState(.volatile)
                 
                 drawable!.presentOnSceneUpdate()
-                
-                //
-                // start eye track
-                //
-                
-                let rk_eye_panel_depth = rk_panel_depth * 0.5
-                var transform = matrix_identity_float4x4 // frame.transform
-                var planeTransformX = matrix_identity_float4x4// frame.transform
-                planeTransformX.columns.3 -= transform.columns.2 * rk_eye_panel_depth
-                planeTransformX.columns.3 += transform.columns.2 * rk_eye_panel_depth * 0.001
-                planeTransformX.columns.3 += transform.columns.1 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.724
-                var planeTransformY = matrix_identity_float4x4//frame.transform
-                planeTransformY.columns.3 -= transform.columns.2 * rk_eye_panel_depth
-                //planeTransformY.columns.3 += transform.columns.0 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y) * 0.8125
-                
-                var scaleX = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
-                scaleX *= rk_eye_panel_depth
-                scaleX.z = 5.0
-                planeTransformX.columns.3 -= transform.columns.1 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.724
-                planeTransformX.columns.3 += transform.columns.1 * rk_eye_panel_depth * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.22625
-                
-                var scaleY = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
-                scaleY *= rk_eye_panel_depth
-        
-                var orientationXY = /*simd_quatf(frame.transform) **/ simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
-                
-                if let surfaceMaterial = surfaceMaterialX {
-                    eyeXPlane.model?.materials = [surfaceMaterial]
-                }
-                
-                if let surfaceMaterial = surfaceMaterialY {
-                    //eyeYPlane.model?.materials = [surfaceMaterial]
-                }
-                
-                eyeXPlane.position = simd_float3(planeTransformX.columns.3.x, planeTransformX.columns.3.y, planeTransformX.columns.3.z)
-                eyeXPlane.orientation = orientationXY
-                eyeXPlane.scale = scaleX * 0.0
-                
-                eyeYPlane.position = simd_float3(planeTransformY.columns.3.x, planeTransformY.columns.3.y, planeTransformY.columns.3.z)
-                eyeYPlane.orientation = orientationXY
-                eyeYPlane.scale = scaleY
-                
-                /*if let commandBuffer = commandQueue.makeCommandBuffer() {
-                    //print(drawableX!.texture.mipmapLevelCount)
-                    for i in 0..<drawableX!.texture.mipmapLevelCount {
-                        //print(i, mipColorTexturesX[i].width, mipColorTexturesX[i].height, drawableX!.texture.width, drawableX!.texture.height)
-                        copyTextureToMipLevelRaw(commandBuffer, drawableX!.texture, mipColorTexturesX[i], i)
-                    }
-                    commandBuffer.commit()
-                    commandBuffer.waitUntilCompleted() // this is a load-bearing wait
-                }
-                drawableX!.presentOnSceneUpdate()
-                
-                if let commandBuffer = commandQueue.makeCommandBuffer() {
-                    for i in 0..<drawableY!.texture.mipmapLevelCount {
-                        copyTextureToMipLevelRaw(commandBuffer, drawableY!.texture, mipColorTexturesY[i], i)
-                    }
-                    commandBuffer.commit()
-                    commandBuffer.waitUntilCompleted() // this is a load-bearing wait
-                }
-                drawableY!.presentOnSceneUpdate()*/
-                
-                //
-                // end eye track
-                //
 
                 objc_sync_enter(rkFramePoolLock)
                 //print(texture.width, currentRenderWidth)
@@ -1256,7 +1047,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             renderer.fadeInOverlayAlpha = 0.0
         }
 
-        EventHandler.shared.lastQueuedFrame = queuedFrame
+        EventHandler.shared.lastQueuedFrame = queuedFrame // crashed once?
         EventHandler.shared.lastQueuedFramePose = framePreviouslyPredictedPose
         
         if metalFxEnabled {

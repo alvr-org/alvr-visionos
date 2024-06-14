@@ -9,7 +9,25 @@ import ReplayKit
 
 class SampleHandler: RPBroadcastSampleHandler {
 
+    var isUsingMipmapMethod = true
+    var lastHeartbeat = 0.0
+    var lastSentHeartbeat = 0.0
+
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
+        let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
+        CFNotificationCenterAddObserver(notificationCenter, Unmanaged.passUnretained(self).toOpaque(), { (center, observer, name, object, userInfo) in
+            let us = Unmanaged<SampleHandler>.fromOpaque(observer!).takeUnretainedValue()
+            us.isUsingMipmapMethod = false
+            us.lastHeartbeat = CACurrentMediaTime()
+            //NSLog("EYES: Using HoverEffect method")
+        }, "EyeTrackingInfo_UseHoverEffectMethod" as CFString, nil, .deliverImmediately)
+        CFNotificationCenterAddObserver(notificationCenter, Unmanaged.passUnretained(self).toOpaque(), { (center, observer, name, object, userInfo) in
+            let us = Unmanaged<SampleHandler>.fromOpaque(observer!).takeUnretainedValue()
+            us.isUsingMipmapMethod = true
+            us.lastHeartbeat = CACurrentMediaTime()
+            //NSLog("EYES: Using mipmap method")
+        }, "EyeTrackingInfo_UseMipmapMethod" as CFString, nil, .deliverImmediately)
+
         // User has requested to start the broadcast. Setup info from the UI extension can be supplied but optional.
         /*let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMddHHmmss"
@@ -64,17 +82,23 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
     
     private func processVideoSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
+        // Send a heartbeat back to the client, to let it know to activate the relevant overlays
+        if CACurrentMediaTime() - self.lastSentHeartbeat >= 1.0 {
+            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFNotificationName("EyeTrackingInfoServerHeartbeat" as CFString), nil, nil, true)
+            self.lastSentHeartbeat = CACurrentMediaTime()
+        }
+        
+        // If the client hasn't sent its heartbeat though, stop streaming.
+        if self.lastHeartbeat != 0.0 && CACurrentMediaTime() - self.lastHeartbeat > 5.0 {
+            let error = NSError(domain: "SampleHandler", code: -1, userInfo: [NSLocalizedDescriptionKey: "heartbeat timed out"])
+            self.finishBroadcastWithError(error)
+            return
+        }
+
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         // Lock the base address of the pixel buffer
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-
-        // Access the pixel buffer data
-        /*let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer)
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-        print(CVPixelBufferGetPixelFormatType(pixelBuffer).description)*/
         
         // Access the luminance (Y) plane
         let yPlane = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)
@@ -89,29 +113,17 @@ class SampleHandler: RPBroadcastSampleHandler {
         let uvBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
 
         // Process the pixel buffer data on the CPU
-        processNV12PixelBufferDataAlt(yPlane: yPlane, yWidth: yWidth, yHeight: yHeight, yBytesPerRow: yBytesPerRow,
-                                    uvPlane: uvPlane, uvWidth: uvWidth, uvHeight: uvHeight, uvBytesPerRow: uvBytesPerRow)
+        if isUsingMipmapMethod {
+            processNV12PixelBufferDataMipmap(yPlane: yPlane, yWidth: yWidth, yHeight: yHeight, yBytesPerRow: yBytesPerRow,
+                                        uvPlane: uvPlane, uvWidth: uvWidth, uvHeight: uvHeight, uvBytesPerRow: uvBytesPerRow)
+        }
+        else {
+            processNV12PixelBufferDataHoverEffect(yPlane: yPlane, yWidth: yWidth, yHeight: yHeight, yBytesPerRow: yBytesPerRow,
+                                        uvPlane: uvPlane, uvWidth: uvWidth, uvHeight: uvHeight, uvBytesPerRow: uvBytesPerRow)
+        }
 
         // Unlock the base address of the pixel buffer
         CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
-        
-        /*var cvMetalTexture: CVMetalTexture?
-        let status = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault,
-                                                               textureCache,
-                                                               pixelBuffer,
-                                                               nil,
-                                                               .rgba8Unorm_srgb,
-                                                               CVPixelBufferGetWidth(pixelBuffer),
-                                                               CVPixelBufferGetHeight(pixelBuffer),
-                                                               0,
-                                                               &cvMetalTexture)
-        
-        guard status == kCVReturnSuccess, let metalTexture = CVMetalTextureGetTexture(cvMetalTexture!) else {
-            print("Failed to create Metal texture")
-            return
-        }
-
-        currentViewRecorded = metalTexture*/
     }
     
     private func excavateValue(to: String, val: Float) {
@@ -128,11 +140,10 @@ class SampleHandler: RPBroadcastSampleHandler {
         }
     }
 
-    private func processNV12PixelBufferData(yPlane: UnsafeMutableRawPointer?, yWidth: Int, yHeight: Int, yBytesPerRow: Int,
+    private func processNV12PixelBufferDataMipmap(yPlane: UnsafeMutableRawPointer?, yWidth: Int, yHeight: Int, yBytesPerRow: Int,
                                         uvPlane: UnsafeMutableRawPointer?, uvWidth: Int, uvHeight: Int, uvBytesPerRow: Int) {
         guard let yPlane = yPlane, let uvPlane = uvPlane else { return }
 
-        //print(yBytesPerRow, uvBytesPerRow)
         // Example processing: Log pixel data
         var largestXStart = 0
         var largestXEnd = 0
@@ -160,7 +171,7 @@ class SampleHandler: RPBroadcastSampleHandler {
             let gClamped = min(max(Int(g), 0), 255)
             let bClamped = min(max(Int(b), 0), 255)
             
-            if gClamped < 230 {
+            if gClamped > 40 {
                 continue
             }
             
@@ -174,13 +185,6 @@ class SampleHandler: RPBroadcastSampleHandler {
             }
             else {
                 continuous = false
-            }
-
-            //if rClamped < 30 && gClamped > 240 && bClamped < 30 {
-            if rClamped != 42 && gClamped != 42 && bClamped != 42 {
-                //eyeXIdx = gClamped//Int((Float(x) / Float(yWidth)) * 255.0)
-                //print("Pixel at (\(x), \(y)): R=\(rClamped), G=\(gClamped), B=\(bClamped)")
-                //break
             }
         }
         
@@ -210,7 +214,7 @@ class SampleHandler: RPBroadcastSampleHandler {
             let gClamped = min(max(Int(g), 0), 255)
             let bClamped = min(max(Int(b), 0), 255)
             
-            if gClamped < 230 {
+            if gClamped > 40 {
                 continue
             }
             
@@ -225,13 +229,6 @@ class SampleHandler: RPBroadcastSampleHandler {
             else {
                 continuous = false
             }
-
-            //if rClamped < 30 && gClamped > 240 && bClamped < 30 {
-            if rClamped != 42 && gClamped != 42 && bClamped != 42 {
-                //eyeXIdx = gClamped//Int((Float(x) / Float(yWidth)) * 255.0)
-                //print("Pixel at (\(x), \(y)): R=\(rClamped), G=\(gClamped), B=\(bClamped)")
-                //break
-            }
         }
         
         let xPred = largestXStart + ((largestXEnd - largestXStart) / 2)
@@ -240,11 +237,25 @@ class SampleHandler: RPBroadcastSampleHandler {
         //let eyeXIdx = Int((Float(xPred) / Float(yWidth)) * Float(/*mipColorTextures2.count - 1*/ 255))
         //let eyeYIdx = Int((Float(yPred) / Float(yHeight)) * Float(/*mipColorTextures2.count - 1*/ 255))
         
-        excavateValue(to: "X", val: Float(xPred) / Float(yWidth))
-        excavateValue(to: "Y", val: Float(yPred) / Float(yHeight))
+        var eyeXRaw = (Float(xPred) / Float(yWidth)) * 1.0
+        var eyeYRaw = (1.0 - (Float(yPred) / Float(yHeight))) * 1.0
+        
+        // convert from 0.0~1.0 to -0.5~0.5
+        var eyeXCentered = (eyeXRaw - 0.5)
+        var eyeYCentered = (eyeYRaw - 0.5)
+        
+        // Fix it to match the HoverEffect tracking
+        eyeXCentered *= 2.0
+        eyeYCentered *= 2.0
+        
+        let eyeX = eyeXCentered + 0.5
+        let eyeY = eyeYCentered + 0.5
+        
+        excavateValue(to: "X", val: eyeX)
+        excavateValue(to: "Y", val: eyeY)
     }
     
-    private func processNV12PixelBufferDataAlt(yPlane: UnsafeMutableRawPointer?, yWidth: Int, yHeight: Int, yBytesPerRow: Int,
+    private func processNV12PixelBufferDataHoverEffect(yPlane: UnsafeMutableRawPointer?, yWidth: Int, yHeight: Int, yBytesPerRow: Int,
                                         uvPlane: UnsafeMutableRawPointer?, uvWidth: Int, uvHeight: Int, uvBytesPerRow: Int) {
         guard let yPlane = yPlane, let uvPlane = uvPlane else { return }
 

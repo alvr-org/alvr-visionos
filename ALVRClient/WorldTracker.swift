@@ -200,7 +200,6 @@ class WorldTracker {
     var pinchesAreFromRealityKit = false
     var eyeX: Float = 0.0
     var eyeY: Float = 0.0
-    private var notificationManager = NotificationManager()
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -1078,7 +1077,8 @@ class WorldTracker {
         }
 
         // Don't move SteamVR center/bounds when the headset recenters
-        let transform = self.worldTrackingSteamVRTransform.inverse * deviceAnchor.originFromAnchorTransform
+        let appleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
+        let transform = self.worldTrackingSteamVRTransform.inverse * appleOriginFromAnchor
         let leftTransform = transform * viewTransforms[0]
         let rightTransform = transform * viewTransforms[1]
         
@@ -1101,26 +1101,35 @@ class WorldTracker {
         
         eyeGazeLeftPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
         eyeGazeRightPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
-        
-        //let adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7389288)))
-        //let adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3(sin(Float(CACurrentMediaTime())), 0.0, 1.0)))
-        //let q = simd_quatf() * adjLeftRight * adjUpDown
-        //print(q)
-        
-        let xExtentRad = (atan(DummyMetalRenderer.renderTangents[0].x) + atan(DummyMetalRenderer.renderTangents[0].y)) * 0.5
-        let yExtentRad = (atan(DummyMetalRenderer.renderTangents[0].z) + atan(DummyMetalRenderer.renderTangents[0].w)) * 0.5
-        
-        //eyeX = sin(Float(CACurrentMediaTime()))
-        //eyeY = cos(Float(CACurrentMediaTime()))
-        
-        let q = simd_quatf(angle: -eyeX * xExtentRad, axis: SIMD3<Float>(0, 1, 0))
-    * simd_quatf(angle: -eyeY * yExtentRad, axis: SIMD3<Float>(1, 0, 0))
-        let qL = leftOrientation * q
-        let qR = rightOrientation * q
 
+        // TODO: Actually get this to be as accurate as the gaze ray, currently it is not.
         
-        eyeGazeLeftPtr?[0] = AlvrPose(qL, simd_float3(0.0,0.0,0.0))
-        eyeGazeRightPtr?[0] = AlvrPose(qR, simd_float3(0.0,0.0,0.0))
+        // To get the most accurate rotations, we have each eye look at the in-space coordinates
+        // we know the HoverEffect is reporting
+        let directionTarget = simd_float3(-eyeX * (DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y) * 0.5 * 50.0, eyeY * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.5 * 50.0, 50.0)
+        let directionL = viewTransforms[0].columns.3.asFloat3() - directionTarget
+        let directionR = viewTransforms[1].columns.3.asFloat3() - directionTarget
+        let orientL = simd_look(at: -directionL)
+        let orientR = simd_look(at: -directionR)
+        let qL = leftOrientation * simd_quaternion(orientL)
+        let qR = rightOrientation * simd_quaternion(orientR)
+
+        //print(eyeX, eyeY)
+        
+        // TODO: Attach SteamVR controller to eyes for input anticipation/hovers.
+        // Needs the gazes to be as accurate as the pinch events.
+#if false
+        let directionTargetApple = appleOriginFromAnchor * directionTarget.asFloat4_1()
+
+        leftSelectionRayOrigin = appleOriginFromAnchor.columns.3.asFloat3()
+        leftSelectionRayDirection = simd_normalize(appleOriginFromAnchor.columns.3.asFloat3() - directionTargetApple.asFloat3())
+        //leftPinchEyeDelta = simd_float3()
+        leftPinchStartPosition = simd_float3()
+        leftPinchCurrentPosition = simd_float3()
+#endif
+        
+        eyeGazeLeftPtr?[0] = AlvrPose(qL, leftTransform.columns.3.asFloat3())
+        eyeGazeRightPtr?[0] = AlvrPose(qR, rightTransform.columns.3.asFloat3())
         
         var handPoses = handTracking.latestAnchors
         if #available(visionOS 2.0, *) {
@@ -1267,8 +1276,6 @@ class WorldTracker {
         if delay == 0.0 {
             sendGamepadInputs()
         }
-        
-        print(eyeX, eyeY)
 
         Thread {
             //Thread.sleep(forTimeInterval: delay)
