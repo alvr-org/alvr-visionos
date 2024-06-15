@@ -43,8 +43,15 @@ class DummyMetalRenderer {
         DummyMetalRenderer.renderTangents.removeAll()
         DummyMetalRenderer.renderViewTransforms.removeAll()
         for view in drawable.views {
-            DummyMetalRenderer.renderTangents.append(view.tangents)
-            DummyMetalRenderer.renderViewTransforms.append(view.transform)
+            var tangents = view.tangents
+            tangents.x = max(view.tangents.x, view.tangents.y)
+            tangents.y = max(view.tangents.x, view.tangents.y)
+            tangents.z = max(view.tangents.z, view.tangents.w)
+            tangents.w = max(view.tangents.z, view.tangents.w)
+            DummyMetalRenderer.renderTangents.append(tangents)
+            var transform = matrix_identity_float4x4
+            transform.columns.3 = view.transform.columns.3
+            DummyMetalRenderer.renderViewTransforms.append(transform)
             
             averageViewTransformPositionalComponent += view.transform.columns.3
         }
