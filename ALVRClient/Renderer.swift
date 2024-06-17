@@ -492,6 +492,17 @@ class Renderer {
             print(Float(physCoordsL.x) / Float(physSizeL.width), Float(physCoordsL.y) / Float(physSizeL.height), ":::", Float(physCoordsR.x) / Float(physSizeR.width), Float(physCoordsR.y) / Float(physSizeR.height))
         }
     }
+    
+    func fixTransform(_ transform: simd_float4x4) -> simd_float4x4 {
+        var out = matrix_identity_float4x4
+        out.columns.3 = transform.columns.3 // 0.8 near, 1.3 far, makes it look correct again?
+        out.columns.3.w = 1.0
+        return out
+    }
+    
+    func fixTangents(_ tangents: simd_float4) -> simd_float4 {
+        return tangents
+    }
 
     var roundTripRenderTime: Double = 0.0
     var lastRoundTripRenderTimestamp: Double = 0.0
@@ -591,10 +602,12 @@ class Renderer {
             let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
             if abs(EventHandler.shared.lastIpd - ipd) > 0.001 {
                 print("Send view config")
+                
                 if EventHandler.shared.lastIpd != -1 {
                     print("IPD changed!", EventHandler.shared.lastIpd, "->", ipd)
                 }
                 else {
+                    print("IPD is", ipd)
                     EventHandler.shared.framesRendered = 0
                     lastReconfigureTime = CACurrentMediaTime()
                     
@@ -609,7 +622,7 @@ class Renderer {
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
                 let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
-                EventHandler.shared.viewTransforms = [drawable.views[0].transform, drawable.views.count > 1 ? drawable.views[1].transform : drawable.views[0].transform]
+                EventHandler.shared.viewTransforms = [fixTransform(drawable.views[0].transform), drawable.views.count > 1 ? fixTransform(drawable.views[1].transform) : fixTransform(drawable.views[0].transform)]
                 EventHandler.shared.lastIpd = ipd
                 
                 if #unavailable(visionOS 2.0) {
@@ -660,7 +673,7 @@ class Renderer {
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized {
             if #available(visionOS 2.0, *) {
-                EventHandler.shared.viewTransforms = [drawable.views[0].transform, drawable.views.count > 1 ? drawable.views[1].transform : drawable.views[0].transform]
+                EventHandler.shared.viewTransforms = [fixTransform(drawable.views[0].transform), drawable.views.count > 1 ? fixTransform(drawable.views[1].transform) : fixTransform(drawable.views[0].transform)]
             }
             // TODO: I suspect Apple changes view transforms every frame to account for pupil swim, figure out how to fit the latest view transforms in?
             // Since pupil swim is purely an axial thing, maybe we can just timewarp the view transforms as well idk
