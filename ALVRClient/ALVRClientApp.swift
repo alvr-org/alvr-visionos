@@ -72,6 +72,14 @@ struct ALVRClientApp: App {
     @State private var chromaKeyColor = Color(.sRGB, red: 0.98, green: 0.9, blue: 0.2)
     
     static let shared = ALVRClientApp()
+    static var showedChangelog = false
+    @State private var showChangelog = false
+    
+    let testChangelog = false
+    let changelogText = """
+    • TODO \n\
+    • TODO \n
+    """
     
     func saveSettings() {
         do {
@@ -88,6 +96,24 @@ struct ALVRClientApp: App {
             fatalError(error.localizedDescription)
         }
         chromaKeyColor = Color(.sRGB, red: Double(ALVRClientApp.gStore.settings.chromaKeyColorR), green: Double(ALVRClientApp.gStore.settings.chromaKeyColorG), blue: Double(ALVRClientApp.gStore.settings.chromaKeyColorB))
+        
+        // Check if the app version has changed and show a changelog if so
+        if let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+            if let buildVersionNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+                let currentVersion = appVersion + " build " + buildVersionNumber
+                print("Previous version:", ALVRClientApp.gStore.settings.lastUsedAppVersion)
+                print("Current version:", currentVersion)
+                if currentVersion != ALVRClientApp.gStore.settings.lastUsedAppVersion || (testChangelog && !ALVRClientApp.showedChangelog) {
+                    ALVRClientApp.gStore.settings.lastUsedAppVersion = currentVersion
+                    saveSettings()
+                    
+                    if !ALVRClientApp.showedChangelog {
+                        showChangelog = true
+                    }
+                    ALVRClientApp.showedChangelog = true
+                }
+            }
+        }
     }
 
     var body: some Scene {
@@ -112,6 +138,18 @@ struct ALVRClientApp: App {
             .environmentObject(EventHandler.shared)
             .environmentObject(ALVRClientApp.gStore)
             .fixedSize()
+            .alert(isPresented: $showChangelog) {
+                Alert(
+                    title: Text("Welcome to\nALVR v" + ALVRClientApp.gStore.settings.lastUsedAppVersion),
+                    message: Text("What's changed?\n\n" + changelogText),
+                    dismissButton: .default(
+                        Text("Dismiss"),
+                        action: {
+                            
+                        }
+                    )
+                )
+            }
         }
         .windowStyle(.plain)
         .windowResizability(.contentSize)

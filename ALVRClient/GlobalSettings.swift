@@ -23,6 +23,7 @@ struct GlobalSettings: Codable {
     var dontShowAWDLAlertAgain: Bool = false
     var fovRenderScale: Float = 1.0
     var forceMipmapEyeTracking = false
+    var lastUsedAppVersion = "never launched"
     
     init() {}
     
@@ -46,6 +47,7 @@ struct GlobalSettings: Codable {
         self.dontShowAWDLAlertAgain = try container.decodeIfPresent(Bool.self, forKey: .dontShowAWDLAlertAgain) ?? self.dontShowAWDLAlertAgain
         self.fovRenderScale = try container.decodeIfPresent(Float.self, forKey: .fovRenderScale) ?? self.fovRenderScale
         self.forceMipmapEyeTracking = try container.decodeIfPresent(Bool.self, forKey: .forceMipmapEyeTracking) ?? self.forceMipmapEyeTracking
+        self.lastUsedAppVersion = try container.decodeIfPresent(String.self, forKey: .lastUsedAppVersion) ?? self.lastUsedAppVersion
     }
 }
 
