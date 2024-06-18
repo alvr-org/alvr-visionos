@@ -99,6 +99,7 @@ struct ALVRClientApp: App {
     • Fixed a bunch of crash reports (AV1 causing a crash, a few other edge-case crashes).\n\
     • Fixed a bug in Experimental renderer where the previously-open launch window would secretly allocate large textures, steal frames, and schedule GPU work for no reason.\n\
     • Fixed visuals appearing too large or too small with chroma keyed passthrough in the Experimental Renderer.\n\
+    • Reduced entry wait visionOS-centered sessions (useful for Travel Mode and seated play).\n\
     \n\
     ________________________________\n\
     \n\

@@ -1025,15 +1025,17 @@ class WorldTracker {
         //
         // That aside, if we add an anchor at (0,0,0), we will get reports in processWorldTrackingUpdates()
         // every time the user recenters.
-        if !self.worldTrackingAddedOriginAnchor && sentPoses > 300 {
+        if (!self.worldTrackingAddedOriginAnchor && sentPoses > 300) || !ALVRClientApp.gStore.settings.keepSteamVRCenter {
             self.worldTrackingAddedOriginAnchor = true
             
-            Task {
-                do {
-                    try await worldTracking.addAnchor(self.worldOriginAnchor)
-                }
-                catch {
-                    // don't care
+            if ALVRClientApp.gStore.settings.keepSteamVRCenter {
+                Task {
+                    do {
+                        try await worldTracking.addAnchor(self.worldOriginAnchor)
+                    }
+                    catch {
+                        // don't care
+                    }
                 }
             }
         }
