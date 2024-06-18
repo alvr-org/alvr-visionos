@@ -100,8 +100,8 @@ struct ALVRClientApp: App {
     • Fixed a bug in Experimental renderer where the previously-open launch window would secretly allocate large textures, steal frames, and schedule GPU work for no reason.\n\
     • Fixed visuals appearing too large or too small with chroma keyed passthrough in the Experimental Renderer.\n\
     • Reduced entry wait visionOS-centered sessions (useful for Travel Mode and seated play).\n\
-    • Fixed a bug where the visionOS 2 eye comfort adjustments Near/Far would appear cross-eyed with the Experimental Renderer
-    • Fixed a bug where the Experimental Renderer would be missing the edge of its FoV.
+    • Fixed a bug where the visionOS 2 eye comfort adjustments Near/Far would appear cross-eyed with the Experimental Renderer\n\
+    • Fixed a bug where the Experimental Renderer would be missing the edge of its FoV.\n\
     \n\
     ________________________________\n\
     \n\
