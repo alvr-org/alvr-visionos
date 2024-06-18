@@ -8,7 +8,7 @@ import SwiftUI
 struct GlobalSettings: Codable {
     var keepSteamVRCenter: Bool = true
     var showHandsOverlaid: Bool = false
-    var setDisplayTo96Hz: Bool = false
+    var streamFPS: String = "90"
     var experimental40ppd: Bool = false
     var chromaKeyEnabled: Bool = false
     var chromaKeyDistRangeMin: Float = 0.35
@@ -32,7 +32,7 @@ struct GlobalSettings: Codable {
         
         self.keepSteamVRCenter = try container.decodeIfPresent(Bool.self, forKey: .keepSteamVRCenter) ?? self.keepSteamVRCenter
         self.showHandsOverlaid = try container.decodeIfPresent(Bool.self, forKey: .showHandsOverlaid) ?? self.showHandsOverlaid
-        self.setDisplayTo96Hz = try container.decodeIfPresent(Bool.self, forKey: .setDisplayTo96Hz) ?? self.setDisplayTo96Hz
+        self.streamFPS = try container.decodeIfPresent(String.self, forKey: .streamFPS) ?? self.streamFPS
         self.experimental40ppd = try container.decodeIfPresent(Bool.self, forKey: .experimental40ppd) ?? self.experimental40ppd
         self.chromaKeyEnabled = try container.decodeIfPresent(Bool.self, forKey: .chromaKeyEnabled) ?? self.chromaKeyEnabled
         self.chromaKeyDistRangeMin = try container.decodeIfPresent(Float.self, forKey: .chromaKeyDistRangeMin) ?? self.chromaKeyDistRangeMin
