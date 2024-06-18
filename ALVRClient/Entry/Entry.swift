@@ -14,6 +14,9 @@ struct Entry: View {
     @Environment(\.self) var environment
     let saveAction: ()->Void
     
+    let refreshRatesPost20 = ["90", "96", "100"]
+    let refreshRatesPre20 = ["90", "96"]
+    
     let chromaFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -40,6 +43,10 @@ struct Entry: View {
         }
         chromaRangeMaximum = gStore.settings.chromaKeyDistRangeMax
         saveAction()
+    }
+    
+    func applyStreamHz() {
+        VideoHandler.applyRefreshRate(videoFormat: EventHandler.shared.videoFormat)
     }
 
     var body: some View {
@@ -77,17 +84,41 @@ struct Entry: View {
                     }
                     .toggleStyle(.switch)
                     
-                    Toggle(isOn: $gStore.settings.setDisplayTo96Hz) {
-                        Text("Optimize refresh rate for 24P film*")
-                        Text("*May cause skipping when displaying 30P content, or while passthrough is active")
-                        .font(.system(size: 10))
-                    }
-                    .toggleStyle(.switch)
-                    
                     Toggle(isOn: $gStore.settings.emulatedPinchInteractions) {
                         Text("Emulate pinch interactions as controller inputs")
                     }
                     .toggleStyle(.switch)
+                    
+                    HStack {
+                        Text("Stream refresh rate*")
+                        Picker("Stream refresh rate", selection: $gStore.settings.streamFPS) {
+                            if #unavailable(visionOS 2.0) {
+                                ForEach(refreshRatesPre20, id: \.self) {
+                                    Text($0)
+                                }
+                            }
+                            else {
+                                ForEach(refreshRatesPost20, id: \.self) {
+                                    Text($0)
+                                }
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: gStore.settings.streamFPS) {
+                            applyStreamHz()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    if #unavailable(visionOS 2.0) {
+                        Text("*Higher refresh rates cause skipping when displaying 30P content, or judder while passthrough is active")
+                            .font(.system(size: 10))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    else {
+                        Text("*Higher refresh rates cause skipping when displaying 30P content")
+                            .font(.system(size: 10))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 .frame(minWidth: 450)
                 .padding()
@@ -134,10 +165,13 @@ struct Entry: View {
                     }
                     
                     Toggle(isOn: $gStore.settings.chromaKeyEnabled) {
-                        Text("Enable Chroma Keyed Passthrough*")
                         if #unavailable(visionOS 2.0) {
+                            Text("Enable Chroma Keyed Passthrough*")
                             Text("*Only works with 40PPD renderer")
                             .font(.system(size: 10))
+                        }
+                        else {
+                            Text("Enable Chroma Keyed Passthrough")
                         }
                     }
                     .toggleStyle(.switch)
@@ -303,6 +337,9 @@ struct Entry: View {
                 break
             }
         }
+        .task({
+            applyRangeSettings()
+        })
         
         EntryControls(saveAction: saveAction)
     }

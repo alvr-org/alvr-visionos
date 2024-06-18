@@ -92,6 +92,7 @@ struct EntryControls: View {
                     else {
                         await openImmersiveSpace(id: "MetalClient")
                     }
+                    VideoHandler.applyRefreshRate(videoFormat: EventHandler.shared.videoFormat)
                     if gStore.settings.dismissWindowOnEnter {
                         dismissWindow(id: "Entry")
                     }

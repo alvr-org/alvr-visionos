@@ -77,8 +77,36 @@ struct ALVRClientApp: App {
     
     let testChangelog = false
     let changelogText = """
-    • TODO \n\
-    • TODO \n
+    See the Help and Information tab for wiki links on setting up your PC and network for ALVR.\n\
+    \n\
+    ________________________________\n\
+    \n\
+    What's changed?\n\
+    \n\
+    • Updated client protocol to v20.8.2\n\
+    • Added support for 100Hz on visionOS 2\n\
+    • Added AWDL heuristic to show one-time notification if the network conditions are bad\n\
+    • Added support for visionOS 2 additions: Chroma keying for the default renderer, and high-Hz hand tracking\n\
+    • Added support for simulating visionOS gaze-pinch interactions as Index controller trigger presses. Can technically work in tandem with device-connected controllers.\n\
+    • Improved RealityKit render clarity by using bicubic filtering for quad and up/downscaling to client scale.\n\
+    • Frame pacing and render performance has been improved. Experimental renderer can now render at 37PPD (2.0x) without throttling, possibly higher.\n\
+    \n\
+    ________________________________\n\
+    \n\
+    Bug fixes:\n\
+    \n\
+    • Fixed a bunch of memory leaks.\n\
+    • Fixed a bunch of crash reports (AV1 causing a crash, a few other edge-case crashes).\n\
+    • Fixed a bug in Experimental renderer where the previously-open launch window would secretly allocate large textures, steal frames, and schedule GPU work for no reason.\n\
+    • Fixed visuals appearing too large or too small with chroma keyed passthrough in the Experimental Renderer.\n\
+    \n\
+    ________________________________\n\
+    \n\
+    Known issues:\n\
+    \n\
+    • On visionOS 2, with the default renderer and chroma keyed passthrough, eye comfort settings Near/Far may cause visuals to appear too small or too large.\n\
+    \n\
+    
     """
     
     func saveSettings() {
@@ -140,8 +168,8 @@ struct ALVRClientApp: App {
             .fixedSize()
             .alert(isPresented: $showChangelog) {
                 Alert(
-                    title: Text("Welcome to\nALVR v" + ALVRClientApp.gStore.settings.lastUsedAppVersion),
-                    message: Text("What's changed?\n\n" + changelogText),
+                    title: Text("ALVR v" + ALVRClientApp.gStore.settings.lastUsedAppVersion),
+                    message: Text(changelogText),
                     dismissButton: .default(
                         Text("Dismiss"),
                         action: {

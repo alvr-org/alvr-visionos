@@ -296,7 +296,19 @@ struct VideoHandler {
             .first
     }
     
-    static func createVideoDecoder(initialNals: Data, codec: Int, setDisplayTo96Hz: Bool) -> (VTDecompressionSession?, CMFormatDescription?) {
+    static func applyRefreshRate(videoFormat: CMFormatDescription?) {
+        if videoFormat == nil {
+            return
+        }
+        DispatchQueue.main.async {
+            if let window = currentKeyWindow() {
+                let avDisplayManager = window.avDisplayManager
+                avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: Float(ALVRClientApp.gStore.settings.streamFPS) ?? 90, formatDescription: videoFormat!)
+            }
+        }
+    }
+    
+    static func createVideoDecoder(initialNals: Data, codec: Int) -> (VTDecompressionSession?, CMFormatDescription?) {
         let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
         var videoFormat:CMFormatDescription? = nil
         var err:OSStatus = 0
@@ -428,15 +440,8 @@ struct VideoHandler {
             return (nil, nil)
         }
         
-        // Optimize display for 24P film viewing
-        if setDisplayTo96Hz {
-            DispatchQueue.main.async {
-                if let window = currentKeyWindow() {
-                    let avDisplayManager = window.avDisplayManager
-                    avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: 96.0, formatDescription: videoFormat!)
-                }
-            }
-        }
+        // Optimize display for 24P film viewing if selected
+        VideoHandler.applyRefreshRate(videoFormat: videoFormat)
         
         if decompressionSession == nil {
             print("no session??")
