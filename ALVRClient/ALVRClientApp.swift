@@ -83,10 +83,10 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Updated client protocol to v20.8.2\n\
-    • Added support for 100Hz on visionOS 2\n\
-    • Added AWDL heuristic to show one-time notification if the network conditions are bad\n\
-    • Added support for visionOS 2 additions: Chroma keying for the default renderer, and high-Hz hand tracking\n\
+    • Updated client protocol to v20.8.2.\n\
+    • Added support for 100Hz on visionOS 2.\n\
+    • Added AWDL heuristic to show one-time notification if the network conditions are bad.\n\
+    • Added support for visionOS 2 additions: Chroma keying for the default renderer, and high-Hz hand tracking.\n\
     • Added support for simulating visionOS gaze-pinch interactions as Index controller trigger presses. Can technically work in tandem with device-connected controllers.\n\
     • Improved RealityKit render clarity by using bicubic filtering for quad and up/downscaling to client scale.\n\
     • Frame pacing and render performance has been improved. Experimental renderer can now render at 37PPD (2.0x) without throttling, possibly higher.\n\
@@ -99,8 +99,8 @@ struct ALVRClientApp: App {
     • Fixed a bunch of crash reports (AV1 causing a crash, a few other edge-case crashes).\n\
     • Fixed a bug in Experimental renderer where the previously-open launch window would secretly allocate large textures, steal frames, and schedule GPU work for no reason.\n\
     • Fixed visuals appearing too large or too small with chroma keyed passthrough in the Experimental Renderer.\n\
-    • Reduced entry wait visionOS-centered sessions (useful for Travel Mode and seated play).\n\
-    • Fixed a bug where the visionOS 2 eye comfort adjustments Near/Far would appear cross-eyed with the Experimental Renderer\n\
+    • Reduced entry wait for visionOS-centered sessions (useful for Travel Mode and seated play).\n\
+    • Fixed a bug where the visionOS 2 eye comfort adjustments Near/Far would appear cross-eyed with the Experimental Renderer.\n\
     • Fixed a bug where the Experimental Renderer would be missing the edge of its FoV.\n\
     \n\
     ________________________________\n\
