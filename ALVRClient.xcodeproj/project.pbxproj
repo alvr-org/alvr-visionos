@@ -111,6 +111,8 @@
 		E7285AAD2B9C44CB0032514C /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
 		E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DummyMetalRenderer.swift; sourceTree = "<group>"; };
 		E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitClientSystem.swift; sourceTree = "<group>"; };
+		E7B122A42C24C7CB005E2758 /* AppStore.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AppStore.xcconfig; sourceTree = "<group>"; };
+		E7B122A52C24C7FD005E2758 /* Testflight.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Testflight.xcconfig; sourceTree = "<group>"; };
 		E7D606022C1B5D37009E3343 /* RealityKitEyeTrackingSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitEyeTrackingSystem.swift; sourceTree = "<group>"; };
 		E7D606042C1B646D009E3343 /* EyeTrackingMats.usda */ = {isa = PBXFileReference; lastKnownFileType = text; path = EyeTrackingMats.usda; sourceTree = "<group>"; };
 		E7F222412BE2F03800D10191 /* RealityKitClientView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKitClientView.swift; sourceTree = "<group>"; };
@@ -160,6 +162,8 @@
 			children = (
 				D68FA8042B73D5DD0052B7FF /* ALVRClient.xcconfig */,
 				D68FA8052B73D6260052B7FF /* Override.xcconfig */,
+				E7B122A42C24C7CB005E2758 /* AppStore.xcconfig */,
+				E7B122A52C24C7FD005E2758 /* Testflight.xcconfig */,
 				C5E5902C2B6379ED00328ED6 /* ALVRClient */,
 				E71DEFA62C192617008A2074 /* ALVREyeBroadcast */,
 				C5E5902B2B6379ED00328ED6 /* Products */,
@@ -456,7 +460,7 @@
 				SDKROOT = xros;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				XROS_DEPLOYMENT_TARGET = 1.0;
+				XROS_DEPLOYMENT_TARGET = 1.1;
 			};
 			name = Debug;
 		};
@@ -512,7 +516,7 @@
 				SDKROOT = xros;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
-				XROS_DEPLOYMENT_TARGET = 1.0;
+				XROS_DEPLOYMENT_TARGET = 1.1;
 			};
 			name = Release;
 		};

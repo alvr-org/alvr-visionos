@@ -227,7 +227,7 @@ struct Entry: View {
                        }
                        .frame(width: 100)
                    }
-                   
+#if XCODE_BETA_16
                    Toggle(isOn: $gStore.settings.forceMipmapEyeTracking) {
                         Text("Force visionOS 1.x eye tracking")
                         Text("*Eye tracking requires Experimental Renderer. Moves faster, but requires obstructing the left eye FoV.")
@@ -236,7 +236,7 @@ struct Entry: View {
                             .font(.system(size: 10))
                     }
                     .toggleStyle(.switch)
-                   
+#endif
                    Toggle(isOn: $gStore.settings.dismissWindowOnEnter) {
                         Text("Dismiss this window on entry")
                     }
