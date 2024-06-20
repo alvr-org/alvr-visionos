@@ -12,4 +12,4 @@ DEVELOPMENT_TEAM = 3D7RY439N
 PRODUCT_BUNDLE_IDENTIFIER = alvr.client
 
 #include? "Override.xcconfig"
-#include? "AppStore.xcconfig"
+#include? "Testflight.xcconfig"
