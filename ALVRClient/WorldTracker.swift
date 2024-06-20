@@ -1060,9 +1060,11 @@ class WorldTracker {
             leftPinchEyeDelta -= averageViewTransformPositionalComponent
             if !pinchesAreFromRealityKit {
                 leftPinchEyeDelta -= averageViewTransformPositionalComponent
+#if XCODE_BETA_16
                 if #available(visionOS 2.0, *) {
                     leftPinchEyeDelta += averageViewTransformPositionalComponent
                 }
+#endif
             }
             //print("left pinch eye delta", leftPinchEyeDelta)
         }
@@ -1071,9 +1073,11 @@ class WorldTracker {
             rightPinchEyeDelta -= averageViewTransformPositionalComponent
             if !pinchesAreFromRealityKit {
                 rightPinchEyeDelta -= averageViewTransformPositionalComponent
+#if XCODE_BETA_16
                 if #available(visionOS 2.0, *) {
                     rightPinchEyeDelta += averageViewTransformPositionalComponent
                 }
+#endif
             }
             //print("right pinch eye delta", rightPinchEyeDelta)
         }

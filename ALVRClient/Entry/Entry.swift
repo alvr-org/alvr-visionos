@@ -171,6 +171,7 @@ struct Entry: View {
                     }
                     
                     Toggle(isOn: $gStore.settings.chromaKeyEnabled) {
+#if XCODE_BETA_16
                         if #unavailable(visionOS 2.0) {
                             Text("Enable Chroma Keyed Passthrough*")
                             Text("*Only works with 40PPD renderer")
@@ -179,6 +180,11 @@ struct Entry: View {
                         else {
                             Text("Enable Chroma Keyed Passthrough")
                         }
+#else
+                        Text("Enable Chroma Keyed Passthrough*")
+                        Text("*Only works with 40PPD renderer")
+                            .font(.system(size: 10))
+#endif
                     }
                     .toggleStyle(.switch)
                     .onChange(of: gStore.settings.chromaKeyEnabled) {
