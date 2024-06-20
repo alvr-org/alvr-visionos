@@ -86,11 +86,11 @@ struct ALVRClientApp: App {
     • Updated client protocol to v20.8.2.\n\
     • Added support for 100Hz on visionOS 2.\n\
     • Added AWDL heuristic to show one-time notification if the network conditions are bad.\n\
-    • Added support for visionOS 2 additions: Chroma keying for the default renderer, and high-Hz hand tracking.\n\
     • Added support for simulating visionOS gaze-pinch interactions as Index controller trigger presses. Can technically work in tandem with device-connected controllers.\n\
     • Improved RealityKit render clarity by using bicubic filtering for quad and up/downscaling to client scale.\n\
     • Frame pacing and render performance has been improved. Experimental renderer can now render at 37PPD (2.0x) without throttling, possibly higher.\n\
     • Device hostname now shows correctly on the ALVR streamer application. You may need to re-trust your device.\n\
+    • Connection status is now shown under the ALVR version.\n\
     \n\
     ________________________________\n\
     \n\
@@ -108,7 +108,9 @@ struct ALVRClientApp: App {
     \n\
     Known issues:\n\
     \n\
-    • On visionOS 2, with the default renderer and chroma keyed passthrough, eye comfort settings Near/Far may cause visuals to appear too small or too large.\n\
+    • On visionOS 2 beta, high-Hz hands may not be present. Please use the testflight versions on visionOS 2 beta.
+    • On visionOS 2 beta, chroma key passthrough may not work with the default renderer. Please use the testflight versions on visionOS 2 beta.
+    • On visionOS 2 beta, with the default renderer and chroma keyed passthrough, eye comfort settings Near/Far may cause visuals to appear too small or too large. Please use the testflight versions on visionOS 2 beta for faster updates.
     \n\
     
     """
