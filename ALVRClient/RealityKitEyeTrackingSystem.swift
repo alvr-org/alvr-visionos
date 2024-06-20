@@ -310,6 +310,7 @@ class RealityKitEyeTrackingSystemCorrectlyAssociated : System {
         
         // Leave eye tracking overlays and such off if we haven't heard from the server.
         if CACurrentMediaTime() - RealityKitEyeTrackingSystem.notificationManager.lastHeartbeat < 5.0 {
+#if XCODE_BETA_16
             if #available(visionOS 2.0, *) {
                 eye2Plane.components.set(HoverEffectComponent(.shader(.default)))
                 if ALVRClientApp.gStore.settings.forceMipmapEyeTracking {
@@ -328,6 +329,11 @@ class RealityKitEyeTrackingSystemCorrectlyAssociated : System {
                 eyeYPlane.isEnabled = true
                 eye2Plane.isEnabled = false
             }
+#else
+            eyeXPlane.isEnabled = true
+            eyeYPlane.isEnabled = true
+            eye2Plane.isEnabled = false
+#endif
         }
         else {
             eyeXPlane.isEnabled = false
