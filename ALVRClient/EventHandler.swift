@@ -204,7 +204,7 @@ class EventHandler: ObservableObject {
             }
             
             if let listener = mdnsListener {
-                let txtRecord = NWTXTRecord(["protocol" : getMdnsProtocolId()])
+                let txtRecord = NWTXTRecord(["protocol" : getMdnsProtocolId(), "device_id" : getHostname()])
                 listener.service = NWListener.Service(name: "ALVR Apple Vision Pro", type: getMdnsService(), txtRecord: txtRecord)
 
                 // Handle errors if any

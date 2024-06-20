@@ -90,6 +90,7 @@ struct ALVRClientApp: App {
     • Added support for simulating visionOS gaze-pinch interactions as Index controller trigger presses. Can technically work in tandem with device-connected controllers.\n\
     • Improved RealityKit render clarity by using bicubic filtering for quad and up/downscaling to client scale.\n\
     • Frame pacing and render performance has been improved. Experimental renderer can now render at 37PPD (2.0x) without throttling, possibly higher.\n\
+    • Device hostname now shows correctly on the ALVR streamer application. You may need to re-trust your device.\n\
     \n\
     ________________________________\n\
     \n\
