@@ -333,12 +333,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     
     func createMetalFXUpscaler()
     {
+#if !targetEnvironment(simulator)
         if !metalFxEnabled {
             metalFxScaler = nil
             return
         }
 
-#if !targetEnvironment(simulator)
+
         let desc = MTLFXSpatialScalerDescriptor()
         desc.inputWidth = currentOffscreenRenderWidth
         desc.inputHeight = currentOffscreenRenderHeight*2

@@ -1134,9 +1134,11 @@ class WorldTracker {
         eyeGazeRightPtr?[0] = AlvrPose(qR, rightTransform.columns.3.asFloat3())
         
         var handPoses = handTracking.latestAnchors
+#if XCODE_BETA_16
         if #available(visionOS 2.0, *) {
             handPoses = handTracking.handAnchors(at: anchorTimestamp)
         }
+#endif
         if let leftHand = handPoses.leftHand {
             if !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 if leftHand.isTracked {
