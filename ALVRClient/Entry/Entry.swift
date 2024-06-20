@@ -67,6 +67,12 @@ struct Entry: View {
                     Text("Loading settings...")
                         .font(.system(size: 20, weight: .bold))
                 }
+                
+                VStack {
+                    Text(eventHandler.connectionFlavorText)
+                        .font(.system(size: 15))
+                }
+                .frame( maxWidth: .infinity, minHeight: 50, maxHeight: 50, alignment: .top)
             }
             .frame(minHeight: 200)
             

@@ -25,6 +25,7 @@ class EventHandler: ObservableObject {
     @Published var hostname: String = ""
     @Published var IP: String = ""
     @Published var alvrVersion: String = ""
+    @Published var connectionFlavorText: String = ""
     
     var renderStarted = false
     
@@ -627,8 +628,12 @@ class EventHandler: ObservableObject {
     }
 
     func parseMessage(_ message: String) {
+        var flavorText = ""
         let lines = message.components(separatedBy: "\n")
         for line in lines {
+            if line == "" {
+                continue
+            }
             if line.starts(with: "ALVR") {
                 let split = line.split(separator: " ")
                 if split.count == 2 {
@@ -647,6 +652,17 @@ class EventHandler: ObservableObject {
                     updateIP(value)
                 }
             }
+            else {
+                flavorText += line + "\n"
+            }
+        }
+        
+        if flavorText == "The stream will begin soon\nPlease wait...\n" {
+            flavorText = "The stream is ready."
+        }
+        
+        DispatchQueue.main.async {
+            self.connectionFlavorText = flavorText
         }
     }
 
