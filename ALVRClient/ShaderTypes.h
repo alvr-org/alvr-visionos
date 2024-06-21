@@ -25,6 +25,7 @@ typedef NS_ENUM(EnumBackingType, BufferIndex)
     BufferIndexUniforms      = 2,
     BufferIndexPlaneUniforms = 3,
     BufferIndexEncodingUniforms = 4,
+    BufferIndexVRR = 5,
 };
 
 typedef NS_ENUM(EnumBackingType, VertexAttribute)
@@ -80,4 +81,6 @@ typedef NS_ENUM(EnumBackingType, ALVRFunctionConstant)
     ALVRFunctionConstantChromaKeyLerpDistRange = 202,
     ALVRFunctionConstantRealityKitEnabled = 300,
     ALVRFunctionConstantMetalFXEnabled = 301,
+    ALVRFunctionConstantVRRScreenSize = 302,
+    ALVRFunctionConstantVRRPhysSize = 303,
 };

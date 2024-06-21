@@ -311,7 +311,9 @@ class Renderer {
     func buildCopyPipelineWithDevice(device: MTLDevice,
                                              colorFormat: MTLPixelFormat,
                                              vertexShaderName: String,
-                                             fragmentShaderName: String) throws -> MTLRenderPipelineState {
+                                             fragmentShaderName: String,
+                                             vrrScreenSize: MTLSize?,
+                                             vrrPhysSize: MTLSize?) throws -> MTLRenderPipelineState {
         /// Build a render state pipeline object
 
         let library = device.makeDefaultLibrary()
@@ -327,12 +329,16 @@ class Renderer {
         chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
         chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
 
+        var mutVrrScreenSize = simd_float2(Float(vrrScreenSize?.width ?? 1), Float(vrrScreenSize?.height ?? 1))
+        var mutVrrPhysSize = simd_float2(Float(vrrPhysSize?.width ?? 1), Float(vrrPhysSize?.height ?? 1))
         var chromaKeyColorLinear = NonlinearToLinearRGB(chromaKeyColor)
         fragmentConstants.setConstantValue(&chromaKeyEnabled, type: .bool, index: ALVRFunctionConstant.chromaKeyEnabled.rawValue)
         fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
         fragmentConstants.setConstantValue(&chromaKeyLerpDistRange, type: .float2, index: ALVRFunctionConstant.chromaKeyLerpDistRange.rawValue)
         fragmentConstants.setConstantValue(&isRealityKit, type: .bool, index: ALVRFunctionConstant.realityKitEnabled.rawValue)
         fragmentConstants.setConstantValue(&isUsingMetalFX, type: .bool, index: ALVRFunctionConstant.metalFXEnabled.rawValue)
+        fragmentConstants.setConstantValue(&mutVrrScreenSize, type: .float2, index: ALVRFunctionConstant.vrrScreenSize.rawValue)
+        fragmentConstants.setConstantValue(&mutVrrPhysSize, type: .float2, index: ALVRFunctionConstant.vrrPhysSize.rawValue)
 
         let vertexFunction = library?.makeFunction(name: vertexShaderName)
         let fragmentFunction = try! library?.makeFunction(name: fragmentShaderName, constantValues: fragmentConstants)
