@@ -88,7 +88,6 @@ constant bool CHROMAKEY_ENABLED [[ function_constant(ALVRFunctionConstantChromaK
 constant float3 CHROMAKEY_COLOR [[ function_constant(ALVRFunctionConstantChromaKeyColor) ]];
 constant float2 CHROMAKEY_LERP_DIST_RANGE [[ function_constant(ALVRFunctionConstantChromaKeyLerpDistRange) ]];
 constant bool REALITYKIT_ENABLED [[ function_constant(ALVRFunctionConstantRealityKitEnabled) ]];
-constant bool METALFX_ENABLED [[ function_constant(ALVRFunctionConstantMetalFXEnabled) ]];
 constant float2 VRR_SCREEN_SIZE [[ function_constant(ALVRFunctionConstantVRRScreenSize) ]];
 constant float2 VRR_PHYS_SIZE [[ function_constant(ALVRFunctionConstantVRRPhysSize) ]];
 
