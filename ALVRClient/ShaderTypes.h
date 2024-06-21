@@ -80,7 +80,6 @@ typedef NS_ENUM(EnumBackingType, ALVRFunctionConstant)
     ALVRFunctionConstantChromaKeyColor = 201,
     ALVRFunctionConstantChromaKeyLerpDistRange = 202,
     ALVRFunctionConstantRealityKitEnabled = 300,
-    ALVRFunctionConstantMetalFXEnabled = 301,
-    ALVRFunctionConstantVRRScreenSize = 302,
-    ALVRFunctionConstantVRRPhysSize = 303,
+    ALVRFunctionConstantVRRScreenSize = 301,
+    ALVRFunctionConstantVRRPhysSize = 302,
 };
