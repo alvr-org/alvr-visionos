@@ -89,6 +89,8 @@ constant float3 CHROMAKEY_COLOR [[ function_constant(ALVRFunctionConstantChromaK
 constant float2 CHROMAKEY_LERP_DIST_RANGE [[ function_constant(ALVRFunctionConstantChromaKeyLerpDistRange) ]];
 constant bool REALITYKIT_ENABLED [[ function_constant(ALVRFunctionConstantRealityKitEnabled) ]];
 constant bool METALFX_ENABLED [[ function_constant(ALVRFunctionConstantMetalFXEnabled) ]];
+constant float2 VRR_SCREEN_SIZE [[ function_constant(ALVRFunctionConstantVRRScreenSize) ]];
+constant float2 VRR_PHYS_SIZE [[ function_constant(ALVRFunctionConstantVRRPhysSize) ]];
 
 float2 TextureToEyeUV(float2 textureUV, bool isRightEye) {
     // flip distortion horizontally for right eye
@@ -323,10 +325,6 @@ fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], textur
     return float4(0.0, 0.0, 0.0, 0.0);
 }
 
-struct CopyVertexIn {
-    float4 position [[attribute(0)]];
-};
-
 struct CopyVertexOut {
     float4 position [[position]];
     float2 uv;
@@ -340,12 +338,17 @@ vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]]) {
     return out;
 }
 
-fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<half> in_tex) {
+fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<half> in_tex, constant rasterization_rate_map_data &vrr [[buffer(BufferIndexVRR)]]) {
     constexpr sampler colorSampler(coord::normalized,
                     address::clamp_to_edge,
                     filter::bicubic);
     
+    rasterization_rate_map_decoder map(vrr);
     float2 uv = in.uv;
+    uv = map.map_screen_to_physical_coordinates(uv * VRR_SCREEN_SIZE);
+    uv /= VRR_PHYS_SIZE;
+    
+    //float2 uv = in.uv;
     /*if (uv.y < 0.5) {
         discard_fragment();
     }*/
@@ -363,10 +366,12 @@ fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<half>
         }
         
         color = half4((color.rgb * mask) - (half3(CHROMAKEY_COLOR) * (1.0 - mask)), color.a * mask);
+        //color.rg = half2(uv);
         return color;
         //return float4(color.rgb, mask);
     }
     else {
+        //color.rg = half2(uv);
         return color;
     }
 }

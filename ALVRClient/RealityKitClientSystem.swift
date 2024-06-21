@@ -198,6 +198,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 #endif
     var metalFxEnabled = false
     
+    var vrrMap: MTLRasterizationRateMap? = nil
+    var vrrMapBuffer: MTLBuffer? = nil
     var currentRenderWidth: Int = Int(Double(renderWidth) * renderScale)
     var currentRenderHeight: Int = Int(Double(renderHeight) * renderScale)
     var currentRenderScale: Float = Float(renderScale)
@@ -324,11 +326,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     
     func createCopyShaderPipelines()
     {
-        self.passthroughPipelineState = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatSDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader")
-        self.passthroughPipelineStateHDR = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader")
+        self.passthroughPipelineState = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatSDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader", vrrScreenSize: vrrMap?.screenSize, vrrPhysSize: vrrMap?.physicalSize(layer: 0))
+        self.passthroughPipelineStateHDR = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader", vrrScreenSize: vrrMap?.screenSize, vrrPhysSize: vrrMap?.physicalSize(layer: 0))
         
-        self.passthroughPipelineStateWithAlpha = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatSDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShaderWithAlphaCopy")
-        self.passthroughPipelineStateWithAlphaHDR = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShaderWithAlphaCopy")
+        self.passthroughPipelineStateWithAlpha = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatSDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShaderWithAlphaCopy", vrrScreenSize: vrrMap?.screenSize, vrrPhysSize: vrrMap?.physicalSize(layer: 0))
+        self.passthroughPipelineStateWithAlphaHDR = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR, vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShaderWithAlphaCopy", vrrScreenSize: vrrMap?.screenSize, vrrPhysSize: vrrMap?.physicalSize(layer: 0))
     }
     
     func createMetalFXUpscaler()
@@ -353,8 +355,80 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 #endif
     }
     
+    func createVRR() {
+        let descriptor = MTLRasterizationRateMapDescriptor()
+        descriptor.label = "Offscreen VRR"
+
+        currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
+        currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
+
+
+        let layerWidth = Int(currentOffscreenRenderWidth / 256) * 256
+        let layerHeight = Int(currentOffscreenRenderHeight / 256) * 256 * 2
+        descriptor.screenSize = MTLSizeMake(layerWidth, layerHeight, 0)
+
+        let zoneCounts = MTLSizeMake(256, 512, 1)
+        let layerDescriptor = MTLRasterizationRateLayerDescriptor(sampleCount: zoneCounts)
+        
+        for row in 0..<zoneCounts.height/8 {
+            layerDescriptor.vertical[row] = 0.5
+        }
+        for row in (zoneCounts.height/8)..<(zoneCounts.height/8 + zoneCounts.height/4) {
+            layerDescriptor.vertical[row] = 1.0
+        }
+        for row in (zoneCounts.height/8 + zoneCounts.height/4)..<(zoneCounts.height/2) {
+            layerDescriptor.vertical[row] = 0.5
+        }
+        
+        for row in (zoneCounts.height/2)..<(zoneCounts.height/2)+(zoneCounts.height/8) {
+            layerDescriptor.vertical[row] = 0.5
+        }
+        for row in (zoneCounts.height/2)+(zoneCounts.height/8)..<(zoneCounts.height/2)+(zoneCounts.height/8 + zoneCounts.height/4) {
+            layerDescriptor.vertical[row] = 1.0
+        }
+        for row in (zoneCounts.height/2)+(zoneCounts.height/8 + zoneCounts.height/4)..<zoneCounts.height {
+            layerDescriptor.vertical[row] = 0.5
+        }
+        
+        
+        for column in 0..<zoneCounts.width/4 {
+            layerDescriptor.horizontal[column] = 0.5
+        }
+        for column in zoneCounts.width/4..<(zoneCounts.width/4 + zoneCounts.width/2) {
+            layerDescriptor.horizontal[column] = 1.0
+        }
+        for column in (zoneCounts.width/4 + zoneCounts.width/2)..<zoneCounts.width {
+            layerDescriptor.horizontal[column] = 0.5
+        }
+
+        descriptor.setLayer(layerDescriptor, at: 0)
+        vrrMap = device.makeRasterizationRateMap(descriptor: descriptor)
+        if vrrMap == nil {
+            return
+        }
+        
+        // Create a buffer for the rate map.
+        let rateMapParamSize = vrrMap!.parameterDataSizeAndAlign
+        if let rateMapData = device.makeBuffer(length: rateMapParamSize.size,
+                                       options: MTLResourceOptions.storageModeShared) {
+            // Copy the rate map's data into the buffer.
+            vrrMapBuffer = rateMapData
+            vrrMap!.copyParameterData(buffer: vrrMapBuffer!, offset: 0)
+        }
+
+        // Use phys coordinates for viewport.
+        renderViewports[0] = MTLViewport(originX: 0, originY: Double(Int(Float(vrrMap!.screenSize.height) / 2.0)), width: Double(vrrMap!.screenSize.width), height: Double(Int(Float(vrrMap!.screenSize.height) / 2.0)), znear: renderZNear, zfar: renderZFar)
+        renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(vrrMap!.screenSize.width), height: Double(Int(Float(vrrMap!.screenSize.height) / 2.0)), znear: renderZNear, zfar: renderZFar)
+        
+        currentOffscreenRenderWidth = vrrMap!.physicalSize(layer: 0).width
+        currentOffscreenRenderHeight = vrrMap!.physicalSize(layer: 0).height / Int(2.0)
+        
+        print("Offscreen render res foveated:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
+    }
+    
     func recreateFramePool() {
         createMetalFXUpscaler()
+        createVRR()
         
         objc_sync_enter(rkFramePoolLock)
         let cnt = rkFramePool.count
@@ -469,6 +543,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     }
     
     func copyTextureToTexture(_ commandBuffer: MTLCommandBuffer, _ from: MTLTexture, _ to: MTLTexture) {
+            vrrMap!.copyParameterData(buffer: vrrMapBuffer!, offset: 0)
+    
             // Create a render pass descriptor
             let renderPassDescriptor = MTLRenderPassDescriptor()
 
@@ -486,6 +562,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             renderEncoder.pushDebugGroup("Copy Texture to Texture")
             renderEncoder.setRenderPipelineState(to.pixelFormat == renderColorFormatDrawableHDR ? passthroughPipelineStateHDR! : passthroughPipelineState!)
             renderEncoder.setFragmentTexture(from, index: 0)
+            renderEncoder.setFragmentBuffer(vrrMapBuffer!, offset: 0, index: BufferIndex.VRR.rawValue)
             renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             renderEncoder.popDebugGroup()
             renderEncoder.endEncoding()
@@ -877,8 +954,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 self.renderer.rebuildRenderPipelines()
                 self.currentRenderColorFormat = self.renderer.currentRenderColorFormat
                 self.currentDrawableRenderColorFormat = self.renderer.currentDrawableRenderColorFormat
-                createCopyShaderPipelines()
                 self.recreateFramePool()
+                createCopyShaderPipelines()
             }
         }
         
@@ -962,7 +1039,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             let allViewports = renderViewports
             let allViewTransforms = DummyMetalRenderer.renderViewTransforms
             let allViewTangents = renderTangents
-            let rasterizationRateMap: MTLRasterizationRateMap? = nil
+            let rasterizationRateMap: MTLRasterizationRateMap? = vrrMap
 
             if let encoder = renderer.beginRenderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: allViewports, viewTransforms: allViewTransforms, viewTangents: allViewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor) {
                 for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
@@ -1014,7 +1091,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 let simdDeviceAnchor = deviceAnchor
                 let nearZ = renderZNear
                 let farZ = renderZFar
-                let rasterizationRateMap: MTLRasterizationRateMap? = nil
+                let rasterizationRateMap: MTLRasterizationRateMap? = vrrMap
                 
                 renderer.renderNothing(i, commandBuffer: commandBuffer, renderTargetColor: drawableTexture, renderTargetDepth: depthTexture, viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor)
                 
