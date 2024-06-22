@@ -354,8 +354,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             let innerEndY = (innerStartX + innerWidthY)
             
             let innerVal: Float = 1.0
-            let edgeValStepX: Float = 0.5/Float(innerStartY)
-            let edgeValStepY: Float = 0.5/Float(innerStartX)
+            let outerVal: Float = 1.0
+            let edgeValStepX: Float = outerVal/Float(innerStartY)
+            let edgeValStepY: Float = outerVal/Float(innerStartX)
             
             for row in 0..<innerStartY {
                 layerDescriptor.vertical[row] = Float(row) * edgeValStepY
@@ -537,10 +538,16 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var rkFillUp = 2
     func update(context: SceneUpdateContext) {
         let startUpdateTime = CACurrentMediaTime()
-        //objc_sync_enter(self.blitLock)
-        defer {
-            //objc_sync_exit(self.blitLock)
+        
+        if renderMultithreaded {
+            objc_sync_enter(self.blitLock)
         }
+        defer {
+            if renderMultithreaded {
+                objc_sync_exit(self.blitLock)
+            }
+        }
+
         // RealityKit automatically calls this every frame for every scene.
         guard let plane = context.scene.findEntity(named: "video_plane") as? ModelEntity else {
             return
