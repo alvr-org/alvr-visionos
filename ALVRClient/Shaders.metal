@@ -337,22 +337,22 @@ vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]]) {
     return out;
 }
 
-fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<half> in_tex, constant rasterization_rate_map_data &vrr [[buffer(BufferIndexVRR)]]) {
+fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array<half> in_tex, constant rasterization_rate_map_data &vrr [[buffer(BufferIndexVRR)]]) {
     constexpr sampler colorSampler(coord::normalized,
                     address::clamp_to_edge,
                     filter::bicubic);
+    uint idx = 1;
+    if (in.uv.y >= 0.5) {
+        idx = 0;
+    }
     
     rasterization_rate_map_decoder map(vrr);
     float2 uv = in.uv;
-    uv = map.map_screen_to_physical_coordinates(uv * VRR_SCREEN_SIZE);
+    uv.y = (fmod(uv.y, 0.5)) * 2.0;
+    uv = map.map_screen_to_physical_coordinates(uv * VRR_SCREEN_SIZE, idx);
     uv /= VRR_PHYS_SIZE;
     
-    //float2 uv = in.uv;
-    /*if (uv.y < 0.5) {
-        discard_fragment();
-    }*/
-    
-    half4 color = in_tex.sample(colorSampler, uv);
+    half4 color = in_tex.sample(colorSampler, uv, idx);
     if (color.a <= 0.0) {
         discard_fragment();
     }
@@ -370,23 +370,6 @@ fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d<half>
         //return float4(color.rgb, mask);
     }
     else {
-        //color.rg = half2(uv);
         return color;
     }
-}
-
-fragment half4 copyFragmentShaderWithAlphaCopy(CopyVertexOut in [[stage_in]], texture2d<half> in_tex, texture2d<half> in_tex_a) {
-    constexpr sampler colorSampler(mip_filter::none,
-                                   mag_filter::bicubic,
-                                   min_filter::bicubic);
-    
-    float2 uv = in.uv;
-
-    // Make right eye non-MetalFX for A/B testing
-    /*if (uv.y < 0.5) {
-        //discard_fragment();
-        return in_tex_a.sample(colorSampler, uv);
-    }*/
-    
-    return half4(in_tex.sample(colorSampler, uv).rgb, in_tex_a.sample(colorSampler, uv).a);
 }
