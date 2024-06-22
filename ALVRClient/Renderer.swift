@@ -309,10 +309,11 @@ class Renderer {
     
     func buildCopyPipelineWithDevice(device: MTLDevice,
                                              colorFormat: MTLPixelFormat,
-                                             vertexShaderName: String,
-                                             fragmentShaderName: String,
+                                             viewCount: Int,
                                              vrrScreenSize: MTLSize?,
-                                             vrrPhysSize: MTLSize?) throws -> MTLRenderPipelineState {
+                                             vrrPhysSize: MTLSize?,
+                                             vertexShaderName: String,
+                                             fragmentShaderName: String) throws -> MTLRenderPipelineState {
         /// Build a render state pipeline object
 
         let library = device.makeDefaultLibrary()
@@ -349,7 +350,7 @@ class Renderer {
         pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
         pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
 
-        pipelineDescriptor.maxVertexAmplificationCount = 1
+        pipelineDescriptor.maxVertexAmplificationCount = viewCount
         
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
@@ -1098,7 +1099,7 @@ class Renderer {
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: chromaKeyEnabled ? 0.0 : 1.0)
         renderPassDescriptor.rasterizationRateMap = rasterizationRateMap
         
-        renderPassDescriptor.renderTargetArrayLength = isRealityKit ? 1 : viewports.count
+        renderPassDescriptor.renderTargetArrayLength = viewports.count
         
         /// Final pass rendering code here
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
