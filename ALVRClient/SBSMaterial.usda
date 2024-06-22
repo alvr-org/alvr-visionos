@@ -495,7 +495,7 @@ def Xform "Root"
             color4f outputs:out
             float2 ui:nodegraph:node:pos = (-441.85236, -42.11212)
             float2 ui:nodegraph:node:size = (158.5, 235)
-            int ui:nodegraph:node:stackingOrder = 621
+            int ui:nodegraph:node:stackingOrder = 625
         }
 
         def Shader "Right"
@@ -512,7 +512,7 @@ def Xform "Root"
             color4f outputs:out
             float2 ui:nodegraph:node:pos = (-450.0672, 220.97772)
             float2 ui:nodegraph:node:size = (158.5, 235)
-            int ui:nodegraph:node:stackingOrder = 620
+            int ui:nodegraph:node:stackingOrder = 624
         }
 
         def Shader "UnlitSurface"

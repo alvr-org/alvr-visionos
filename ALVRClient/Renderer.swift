@@ -1031,6 +1031,7 @@ class Renderer {
         WorldTracker.shared.lockPlaneAnchors()
         
         // Render planes
+        var firstBind = true
         for plane in WorldTracker.shared.planeAnchors {
             let plane = plane.value
             let faces = plane.geometry.meshFaces
@@ -1042,7 +1043,12 @@ class Renderer {
             self.planeUniforms[0].planeTransform = plane.originFromAnchorTransform
             self.planeUniforms[0].planeColor = planeToColor(plane: plane)
             self.planeUniforms[0].planeDoProximity = 1.0
-            renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+            if firstBind {
+                renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                firstBind = false
+            } else {
+                renderEncoder.setVertexBufferOffset(planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+            }
             
             renderEncoder.setTriangleFillMode(.fill)
             renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
@@ -1064,7 +1070,7 @@ class Renderer {
             self.planeUniforms[0].planeTransform = plane.originFromAnchorTransform
             self.planeUniforms[0].planeColor = planeToLineColor(plane: plane)
             self.planeUniforms[0].planeDoProximity = 0.0
-            renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+            renderEncoder.setVertexBufferOffset(planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
             
             renderEncoder.setTriangleFillMode(.lines)
             renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
