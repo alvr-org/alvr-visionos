@@ -338,9 +338,9 @@ vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]]) {
 }
 
 fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array<half> in_tex, constant rasterization_rate_map_data &vrr [[buffer(BufferIndexVRR)]]) {
-    constexpr sampler colorSampler(coord::normalized,
+    constexpr sampler colorSampler(coord::pixel,
                     address::clamp_to_edge,
-                    filter::bicubic);
+                    filter::linear);
     uint idx = 1;
     if (in.uv.y >= 0.5) {
         idx = 0;
@@ -350,7 +350,7 @@ fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array
     float2 uv = in.uv;
     uv.y = (fmod(uv.y, 0.5)) * 2.0;
     uv = map.map_screen_to_physical_coordinates(uv * VRR_SCREEN_SIZE, idx);
-    uv /= VRR_PHYS_SIZE;
+    //uv /= VRR_PHYS_SIZE;
     
     half4 color = in_tex.sample(colorSampler, uv, idx);
     if (color.a <= 0.0) {
@@ -365,7 +365,6 @@ fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array
         }
         
         color = half4((color.rgb * mask) - (half3(CHROMAKEY_COLOR) * (1.0 - mask)), color.a * mask);
-        //color.rg = half2(uv);
         return color;
         //return float4(color.rgb, mask);
     }

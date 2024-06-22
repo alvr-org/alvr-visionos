@@ -987,7 +987,7 @@ class WorldTracker {
     // TODO: figure out how stable Apple's predictions are into the future
     // targetTimestamp: The timestamp of the pose we will send to ALVR--capped by how far we can predict forward.
     // realTargetTimestamp: The timestamp we tell ALVR, which always includes the full round-trip prediction.
-    func sendTracking(viewTransforms: [simd_float4x4], viewFovs: [AlvrFov], targetTimestamp: Double, reportedTargetTimestamp: Double, anchorTimestamp: Double, delay: Double) {
+    func sendTracking(viewTransforms: [simd_float4x4], viewFovs: [AlvrFov], targetTimestamp: Double, reportedTargetTimestamp: Double, anchorTimestamp: Double, delay: Double) -> simd_float4x4 {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
@@ -1016,7 +1016,7 @@ class WorldTracker {
                     EventHandler.shared.handleHeadsetRemoved()
                 }
             }
-            return
+            return matrix_identity_float4x4
         }
         
         // This is kinda fiddly: worldTracking doesn't have a way to get a list of existing anchors,
@@ -1295,6 +1295,8 @@ class WorldTracker {
             skeletonLeftPtr?.deallocate()
             skeletonRightPtr?.deallocate()
         }.start()
+        
+        return deviceAnchor.originFromAnchorTransform
     }
     
     // We want video frames ASAP, so we send a fake view pose/FOVs to keep the frames coming

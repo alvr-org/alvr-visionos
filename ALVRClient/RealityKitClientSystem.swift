@@ -27,6 +27,7 @@ let renderZNear = 0.001
 let renderZFar = 100.0
 let rkFramesInFlight = 3
 let renderDoStreamSSAA = true
+let renderMultithreaded = false
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
@@ -38,6 +39,7 @@ class VisionPro: NSObject, ObservableObject {
     var vsyncDelta: Double = (1.0 / 90.0)
     var vsyncLatency: Double = (1.0 / 90.0) * 2
     var lastVsyncTime: Double = 0.0
+    var rkAvgRenderTime: Double = 0.014
     
     var vsyncCallback: ((Double, Double)->Void)? = nil
     
@@ -56,8 +58,8 @@ class VisionPro: NSObject, ObservableObject {
         
         // The OS rounds up the frame time from the RealityKit render time (usually 14ms)
         // to the nearest vsync interval. So for 90Hz this is usually 2 * vsync
+        var rkRenderTime = rkAvgRenderTime
         var curVsyncLatency = 0.0
-        var rkRenderTime = 0.014
         while rkRenderTime > 0.0 {
             curVsyncLatency += frameDuration
             rkRenderTime -= frameDuration
@@ -225,6 +227,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     
     required init(scene: RealityKit.Scene) {
         print("system init")
+        self.device = MTLCreateSystemDefaultDevice()!
+        self.commandQueue = self.device.makeCommandQueue()!
+        
         self.renderer = Renderer(nil)
         self.renderer.fadeInOverlayAlpha = 1.0
         renderer.rebuildRenderPipelines()
@@ -260,8 +265,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
         }
         
-        currentRenderWidth = Int(Double(renderWidth) * Double(currentRenderScale))
-        currentRenderHeight = Int(Double(renderHeight) * Double(currentRenderScale))
+        let vrr = createVRR() // HACK
+        
+        currentRenderWidth = vrr.screenSize.width//Int(Double(renderWidth) * Double(currentRenderScale))
+        currentRenderHeight = vrr.screenSize.height//Int(Double(renderHeight) * Double(currentRenderScale))
+        currentRenderScale = Float(currentRenderWidth) / Float(renderWidth)
         
         currentRenderColorFormat = renderer.currentRenderColorFormat
         currentDrawableRenderColorFormat = renderer.currentDrawableRenderColorFormat
@@ -285,11 +293,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             )
         )
 
-        self.device = MTLCreateSystemDefaultDevice()!
-        self.commandQueue = self.device.makeCommandQueue()!
-
-        renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
-        renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
+        //renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
+        //renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
         
         Task {
             self.surfaceMaterial = try! await ShaderGraphMaterial(
@@ -309,6 +314,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         createCopyShaderPipelines()
         
         print("Offscreen render res:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
+        print("Offscreen render res foveated:", vrr.physicalSize(layer: 0).width, "x", vrr.physicalSize(layer: 0).height, "(", Float(vrr.physicalSize(layer: 0).width) / Float(renderWidth), ")")
         print("RK render res:", currentRenderWidth, "x", currentRenderHeight, "(", currentRenderScale, ")")
 
         EventHandler.shared.handleRenderStarted()
@@ -339,26 +345,36 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         for i in 0..<zoneCounts.depth {
             let layerDescriptor = MTLRasterizationRateLayerDescriptor(sampleCount: zoneCounts)
             
-            let edgeVal: Float = 0.5
-            for row in 0..<zoneCounts.height/4 {
-                layerDescriptor.vertical[row] = edgeVal
+            
+            let innerWidthX = 20//zoneCounts.width/2
+            let innerWidthY = 25//zoneCounts.height/2
+            let innerStartX = (zoneCounts.width - innerWidthX) / 2
+            let innerEndX = (innerStartX + innerWidthX)
+            let innerStartY = (zoneCounts.height - innerWidthY) / 2
+            let innerEndY = (innerStartX + innerWidthY)
+            
+            let innerVal: Float = 1.0
+            let edgeValStepX: Float = 0.5/Float(innerStartY)
+            let edgeValStepY: Float = 0.5/Float(innerStartX)
+            
+            for row in 0..<innerStartY {
+                layerDescriptor.vertical[row] = Float(row) * edgeValStepY
             }
-            for row in (zoneCounts.height/4)..<(zoneCounts.height/4 + zoneCounts.height/2) {
-                layerDescriptor.vertical[row] = 1.0
+            for row in innerStartY..<innerEndY {
+                layerDescriptor.vertical[row] = innerVal
             }
-            for row in (zoneCounts.height/4 + zoneCounts.height/2)..<zoneCounts.height {
-                layerDescriptor.vertical[row] = edgeVal
+            for row in innerEndY..<zoneCounts.height {
+                layerDescriptor.vertical[row] = Float(innerStartY - (row - innerEndY)) * edgeValStepY
             }
             
-            
-            for column in 0..<zoneCounts.width/4 {
-                layerDescriptor.horizontal[column] = edgeVal
+            for column in 0..<innerStartX {
+                layerDescriptor.horizontal[column] = Float(column) * edgeValStepX
             }
-            for column in zoneCounts.width/4..<(zoneCounts.width/4 + zoneCounts.width/2) {
-                layerDescriptor.horizontal[column] = 1.0
+            for column in innerStartX..<innerEndX {
+                layerDescriptor.horizontal[column] = innerVal
             }
-            for column in (zoneCounts.width/4 + zoneCounts.width/2)..<zoneCounts.width {
-                layerDescriptor.horizontal[column] = edgeVal
+            for column in innerEndX..<zoneCounts.width {
+                layerDescriptor.horizontal[column] = Float(innerStartX - (column - innerEndX)) * edgeValStepX
             }
 
             descriptor.setLayer(layerDescriptor, at: i)
@@ -375,8 +391,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         renderViewports[0] = MTLViewport(originX: 0, originY: 0.0, width: Double(vrrMap.screenSize.width), height: Double(Int(Float(vrrMap.screenSize.height) / 1.0)), znear: renderZNear, zfar: renderZFar)
         renderViewports[1] = MTLViewport(originX: 0, originY: 0.0, width: Double(vrrMap.screenSize.width), height: Double(Int(Float(vrrMap.screenSize.height) / 1.0)), znear: renderZNear, zfar: renderZFar)
         
-        currentOffscreenRenderWidth = vrrMap.physicalSize(layer: 0).width
-        currentOffscreenRenderHeight = vrrMap.physicalSize(layer: 0).height
+        // Keep a constant texture size, but allow the VRR to change the viewports
+        // TODO: per-frame viewports.
+        currentOffscreenRenderWidth = layerWidth//vrrMap.physicalSize(layer: 0).width
+        currentOffscreenRenderHeight = layerHeight//vrrMap.physicalSize(layer: 0).height
         
         //print("Offscreen render res foveated:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
         return vrrMap
@@ -471,6 +489,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     }
     
     func rkVsyncCallback(nextFrameTime: Double, vsyncLatency: Double) {
+        if !renderMultithreaded {
+            return
+        }
         Task {
             objc_sync_enter(self.rkFramePoolLock)
             if self.rkFramePool.isEmpty {
@@ -515,7 +536,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 
     var rkFillUp = 2
     func update(context: SceneUpdateContext) {
-        objc_sync_enter(self.blitLock)
+        let startUpdateTime = CACurrentMediaTime()
+        //objc_sync_enter(self.blitLock)
+        defer {
+            //objc_sync_exit(self.blitLock)
+        }
         // RealityKit automatically calls this every frame for every scene.
         guard let plane = context.scene.findEntity(named: "video_plane") as? ModelEntity else {
             return
@@ -525,6 +550,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         let settings = ALVRClientApp.gStore.settings
         
+        var commandBuffer: MTLCommandBuffer? = nil
+        var frame: RKQueuedFrame? = nil
+        
         do {
             if dynamicallyAdjustRenderScale && CACurrentMediaTime() - lastSubmit > 0.02 && lastSubmit - lastLastSubmit > 0.02 && CACurrentMediaTime() - lastFbChangeTime > 0.25 {
                 currentRenderScale -= 0.25
@@ -532,8 +560,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             // TODO: for some reason color format changes causes fps to drop to 45?
             if lastRenderScale != currentRenderScale || lastOffscreenRenderScale != currentOffscreenRenderScale || lastRenderColorFormat != currentRenderColorFormat {
-                currentRenderWidth = Int(Double(renderWidth) * Double(currentRenderScale))
-                currentRenderHeight = Int(Double(renderHeight) * Double(currentRenderScale))
+                currentRenderWidth = currentOffscreenRenderWidth//Int(Double(renderWidth) * Double(currentRenderScale))
+                currentRenderHeight = currentOffscreenRenderHeight//Int(Double(renderHeight) * Double(currentRenderScale))
                 
                 // TODO: SSAA after moving foveation out of frag shader?
                 if !renderDoStreamSSAA {
@@ -563,28 +591,70 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             lastOffscreenRenderScale = currentOffscreenRenderScale
             lastRenderColorFormat = currentRenderColorFormat
             
-            if rkFillUp > 0 {
-                rkFillUp -= 1
-                if rkFillUp <= 0 {
-                    rkFillUp = 0
-                    objc_sync_exit(self.blitLock)
+            if !renderMultithreaded {
+                objc_sync_enter(self.rkFramePoolLock)
+                if !self.rkFramePool.isEmpty {
+                    let (texture, depthTexture, vrrBuffer) = self.rkFramePool.removeFirst()
+                    objc_sync_exit(self.rkFramePoolLock)
+                    let pair = self.renderFrame(drawableTexture: texture, depthTexture: depthTexture, vrrBuffer: vrrBuffer)
+                    commandBuffer = pair?.0
+                    frame = pair?.1
+                    if commandBuffer == nil {
+                        self.rkFramePool.append((texture, depthTexture, vrrBuffer))
+                        //print("no frame")
+                    }
+                }
+                objc_sync_exit(self.rkFramePoolLock)
+            }
+            else {
+                if rkFillUp > 0 {
+                    rkFillUp -= 1
+                    if rkFillUp <= 0 {
+                        rkFillUp = 0
+                        return
+                    }
+                }
+
+                if rkFrameQueue.isEmpty {
+                    if CACurrentMediaTime() - lastFrameQueueFillTime > 0.25 {
+                        rkFillUp = 2
+                        lastFrameQueueFillTime = CACurrentMediaTime()
+                    }
                     return
                 }
-            }
-
-            if rkFrameQueue.isEmpty {
-                if CACurrentMediaTime() - lastFrameQueueFillTime > 0.25 {
-                    rkFillUp = 2
-                    lastFrameQueueFillTime = CACurrentMediaTime()
+                
+                if !rkFrameQueue.isEmpty {
+                    while rkFrameQueue.count > 1 {
+                        let pop = rkFrameQueue.removeFirst()
+#if !targetEnvironment(simulator)
+                        //pop.texture.setPurgeableState(.volatile)
+                        //pop.depthTexture.setPurgeableState(.volatile)
+#endif
+                        if pop.texture.pixelFormat == currentRenderColorFormat && pop.texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
+                            objc_sync_enter(self.rkFramePoolLock)
+                            rkFramePool.append((pop.texture, pop.depthTexture, pop.vrrBuffer))
+                            objc_sync_exit(self.rkFramePoolLock)
+                        }
+                    }
+        
+                    frame = rkFrameQueue.removeFirst()
                 }
-                objc_sync_exit(self.blitLock)
+            }
+            
+            //print(commandBuffer == nil, frame == nil, rkFramePool.count)
+            guard let frame = frame else {
+                //print("no frame")
                 return
             }
         
             let drawable = try drawableQueue?.nextDrawable()
             if drawable == nil {
-                objc_sync_exit(self.blitLock)
+                self.rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
                 return
+            }
+            
+            if renderMultithreaded && EventHandler.shared.lastSubmittedTimestamp != frame.timestamp {
+                alvr_report_compositor_start(frame.timestamp)
             }
 
             lastUpdateTime = CACurrentMediaTime()
@@ -600,127 +670,114 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 //EventHandler.shared.kickAlvr() // HACK: RealityKit kills the audio :/
             }
             
-            if !rkFrameQueue.isEmpty {
-                while rkFrameQueue.count > 1 {
-                    let pop = rkFrameQueue.removeFirst()
-#if !targetEnvironment(simulator)
-                    pop.texture.setPurgeableState(.volatile)
-                    pop.depthTexture.setPurgeableState(.volatile)
-#endif
-                    if pop.texture.pixelFormat == currentRenderColorFormat && pop.texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
-                        objc_sync_enter(self.rkFramePoolLock)
-                        rkFramePool.append((pop.texture, pop.depthTexture, pop.vrrBuffer))
-                        objc_sync_exit(self.rkFramePoolLock)
-                    }
-                }
-    
-                let frame = rkFrameQueue.removeFirst()
-                var planeTransform = frame.transform
-                let timestamp = frame.timestamp
-                let texture = frame.texture
-                let depthTexture = frame.depthTexture
-                var vsyncTime = frame.vsyncTime
-                let vrrBuffer = frame.vrrBuffer
-                
-                /*if frame.texture.width != drawable!.texture.width {
-                    objc_sync_enter(self.rkFramePoolLock)
-                    rkFramePool.append((texture, depthTexture))
-                    objc_sync_exit(self.rkFramePoolLock)
-                    objc_sync_exit(self.blitLock)
-                    return
-                }*/
-                
-                planeTransform.columns.3 -= planeTransform.columns.2 * rk_panel_depth
-                var scale = simd_float3(renderTangents[0].x + renderTangents[0].y, 1.0, renderTangents[0].z + renderTangents[0].w)
-                scale *= rk_panel_depth
-                let orientation = simd_quatf(planeTransform) * simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
-                let position = simd_float3(planeTransform.columns.3.x, planeTransform.columns.3.y, planeTransform.columns.3.z)
-                
-                guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-                    fatalError("Failed to create command buffer")
-                }
+
+            var planeTransform = frame.transform
+            let timestamp = frame.timestamp
+            let texture = frame.texture
+            let depthTexture = frame.depthTexture
+            var vsyncTime = frame.vsyncTime
+            let vrrBuffer = frame.vrrBuffer
+            
+            planeTransform.columns.3 -= planeTransform.columns.2 * rk_panel_depth
+            var scale = simd_float3(renderTangents[0].x + renderTangents[0].y, 1.0, renderTangents[0].z + renderTangents[0].w)
+            scale *= rk_panel_depth
+            let orientation = simd_quatf(planeTransform) * simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
+            let position = simd_float3(planeTransform.columns.3.x, planeTransform.columns.3.y, planeTransform.columns.3.z)
+            
+            if commandBuffer == nil {
+                commandBuffer = commandQueue.makeCommandBuffer()
+            }
+            
+            guard let commandBuffer = commandBuffer else {
+                fatalError("Failed to create command buffer")
+            }
 
 #if !targetEnvironment(simulator)
-                // Shouldn't be needed but just in case
-                texture.setPurgeableState(.nonVolatile)
-                depthTexture.setPurgeableState(.nonVolatile)
-                drawable!.texture.setPurgeableState(.nonVolatile)
+            // Shouldn't be needed but just in case
+            //texture.setPurgeableState(.nonVolatile)
+            //depthTexture.setPurgeableState(.nonVolatile)
+            //drawable!.texture.setPurgeableState(.nonVolatile)
+            //vrrBuffer.setPurgeableState(.nonVolatile)
 #endif
-                
-                copyTextureToTexture(commandBuffer, texture, drawable!.texture, vrrBuffer)
+            
+            copyTextureToTexture(commandBuffer, texture, drawable!.texture, vrrBuffer)
 
-                let submitTime = CACurrentMediaTime()
-                commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
-                    if EventHandler.shared.alvrInitialized /*&& EventHandler.shared.lastSubmittedTimestamp != timestamp*/ {
-                        vsyncTime = self.visionPro.nextFrameTime
-                        
-                        let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
-                        let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
-                        //print("Finished:", queuedFrame!.timestamp)
-                        //print((vsyncTime - CACurrentMediaTime()) * 1000.0)
-                        //print("blit", (CACurrentMediaTime() - submitTime) * 1000.0)
-                        Task {
-                            alvr_report_submit(timestamp, vsyncTimeNs &- currentTimeNs)
-                        }
-                        
-                        //print("blit roundtrip", CACurrentMediaTime() - self.lastUpdate, timestamp)
-                        self.lastUpdate = CACurrentMediaTime()
-                
-                        EventHandler.shared.lastSubmittedTimestamp = timestamp
+            let submitTime = CACurrentMediaTime()
+            commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
+                if EventHandler.shared.alvrInitialized /*&& EventHandler.shared.lastSubmittedTimestamp != timestamp*/ {
+                    vsyncTime = self.visionPro.nextFrameTime
+                    
+                    let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
+                    let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
+                    //print("Finished:", queuedFrame!.timestamp)
+                    //print((vsyncTime - CACurrentMediaTime()) * 1000.0)
+                    //print("blit", (CACurrentMediaTime() - submitTime) * 1000.0)
+                    let lastRenderTime = (CACurrentMediaTime() - startUpdateTime) + self.visionPro.vsyncDelta
+                    self.visionPro.rkAvgRenderTime = (self.visionPro.rkAvgRenderTime + lastRenderTime) * 0.5
+                    Task {
+                        alvr_report_submit(timestamp, vsyncTimeNs &- currentTimeNs)
                     }
+                    
+                    //print("blit roundtrip", CACurrentMediaTime() - self.lastUpdate, timestamp)
+                    self.lastUpdate = CACurrentMediaTime()
+            
+                    EventHandler.shared.lastSubmittedTimestamp = timestamp
                 }
-                commandBuffer.commit()
-                commandBuffer.waitUntilCompleted()
+            }
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            
+            plane.position = position
+            plane.orientation = orientation
+            plane.scale = scale
+            
+            if settings.chromaKeyEnabled {
+                backdrop.isEnabled = false
+            }
+            else {
+                // Place giant plane 1m behind the video feed
+                backdrop.position = simd_float3(0.0, 0.0, rk_panel_depth + 1)
+                backdrop.orientation = simd_quatf()
+                backdrop.scale = simd_float3(rk_panel_depth + 1, rk_panel_depth + 1, rk_panel_depth + 1) * 100.0
                 
-                plane.position = position
-                plane.orientation = orientation
-                plane.scale = scale
-                
-                if settings.chromaKeyEnabled {
+                // Hopefully these optimize into consts to avoid allocations
+                if renderer.fadeInOverlayAlpha >= 1.0 {
                     backdrop.isEnabled = false
                 }
+                else if renderer.fadeInOverlayAlpha <= 0.0 {
+                    backdrop.isEnabled = true
+                }
                 else {
-                    // Place giant plane 1m behind the video feed
-                    backdrop.position = simd_float3(0.0, 0.0, rk_panel_depth + 1)
-                    backdrop.orientation = simd_quatf()
-                    backdrop.scale = simd_float3(rk_panel_depth + 1, rk_panel_depth + 1, rk_panel_depth + 1) * 100.0
-                    
-                    // Hopefully these optimize into consts to avoid allocations
-                    if renderer.fadeInOverlayAlpha >= 1.0 {
-                        backdrop.isEnabled = false
-                    }
-                    else if renderer.fadeInOverlayAlpha <= 0.0 {
-                        backdrop.isEnabled = true
-                    }
-                    else {
-                        backdrop.isEnabled = false
-                    }
-                    
+                    backdrop.isEnabled = false
                 }
-                
-                //drawable!.texture.setPurgeableState(.volatile)
-                
-                drawable!.presentOnSceneUpdate()
-
-                objc_sync_enter(rkFramePoolLock)
-#if !targetEnvironment(simulator)
-                texture.setPurgeableState(.volatile)
-                depthTexture.setPurgeableState(.volatile)
-#endif
-                if texture.pixelFormat == currentRenderColorFormat && texture.width == currentOffscreenRenderWidth && rkFramePool.count < rkFramesInFlight {
-                    rkFramePool.append((texture, depthTexture, vrrBuffer))
-                }
-                objc_sync_exit(rkFramePoolLock)
             }
+            
+            //drawable!.texture.setPurgeableState(.volatile)
+            
+            drawable!.presentOnSceneUpdate()
+
+            objc_sync_enter(rkFramePoolLock)
+#if !targetEnvironment(simulator)
+            //texture.setPurgeableState(.volatile)
+            //depthTexture.setPurgeableState(.volatile)
+            //vrrBuffer.setPurgeableState(.volatile)
+#endif
+            if texture.pixelFormat == currentRenderColorFormat && texture.width == currentOffscreenRenderWidth /*&& rkFramePool.count < rkFramesInFlight*/ {
+                rkFramePool.append((texture, depthTexture, vrrBuffer))
+            }
+            //print("presented")
+            objc_sync_exit(rkFramePoolLock)
         }
         catch {
-        
+            if let frame = frame {
+                rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
+            }
         }
-        objc_sync_exit(self.blitLock)
+        print("totals", context.deltaTime, CACurrentMediaTime() - startUpdateTime)
     }
     
     // TODO: Share this with Renderer somehow
-    func renderFrame(drawableTexture: MTLTexture, depthTexture: MTLTexture, vrrBuffer: MTLBuffer) -> (UInt64, simd_float4x4)? {
+    func renderFrame(drawableTexture: MTLTexture, depthTexture: MTLTexture, vrrBuffer: MTLBuffer) -> (MTLCommandBuffer, RKQueuedFrame)? {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
         var streamingActiveForFrame = EventHandler.shared.streamingActive
@@ -752,7 +809,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 break
             }
             
-            if CACurrentMediaTime() - startPollTime > 0.005 {
+            if CACurrentMediaTime() - startPollTime > 0.001 {
                 //EventHandler.shared.framesRendered -= 1
                 break
             }
@@ -771,7 +828,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
-        if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
+        if !renderMultithreaded && queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
             alvr_report_compositor_start(queuedFrame!.timestamp)
         }
 
@@ -834,9 +891,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         let vsyncTime = visionPro.nextFrameTime
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
         var deviceAnchor = framePreviouslyPredictedPose ?? matrix_identity_float4x4
-        if renderer.fadeInOverlayAlpha > 0.0 || deviceAnchor == matrix_identity_float4x4 {
-            deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
-        }
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized {
@@ -849,8 +903,24 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             let handAnchorLatencyLimit = WorldTracker.maxPrediction //UInt64(Double(visionPro.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
             let targetTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
-            let anchorTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), handAnchorLatencyLimit)) / Double(NSEC_PER_SEC))
-            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)
+            var anchorTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), handAnchorLatencyLimit)) / Double(NSEC_PER_SEC))
+            
+            // Make overlay look smooth (at the cost of timewarp)
+            if renderer.fadeInOverlayAlpha > 0.0 {
+                anchorTimestamp = vsyncTime
+            }
+            
+            let sentAnchor = WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)
+            
+            // Make overlay look correct
+            if renderer.fadeInOverlayAlpha > 0.0 || deviceAnchor == matrix_identity_float4x4 {
+                deviceAnchor = sentAnchor
+            }
+        }
+        
+        // Fallback
+        if renderer.fadeInOverlayAlpha > 0.0 && deviceAnchor == matrix_identity_float4x4 {
+            deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
         }
         
         if currentRenderColorFormat != lastRenderColorFormat {
@@ -976,27 +1046,33 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         EventHandler.shared.lastQueuedFramePose = framePreviouslyPredictedPose
         
         let submitTime = CACurrentMediaTime()
-        commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
-            //print("render", (CACurrentMediaTime() - submitTime) * 1000.0)
-            let timestamp = queuedFrame?.timestamp ?? 0
-            let queuedFrame = RKQueuedFrame(texture: drawableTexture, depthTexture: depthTexture, timestamp: timestamp, transform: planeTransform, vsyncTime: self.visionPro.nextFrameTime, vrrMap: vrrMap, vrrBuffer: vrrBuffer)
-            
-            // Not sure why this needs to be a task
-            Task {
-                objc_sync_enter(self.blitLock)
-                if timestamp >= self.rkFrameQueue.last?.timestamp ?? timestamp {
-                    self.rkFrameQueue.append(queuedFrame)
+        
+        if renderMultithreaded {
+            commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
+                //print("render", (CACurrentMediaTime() - submitTime) * 1000.0)
+                let timestamp = queuedFrame?.timestamp ?? 0
+                let queuedFrame = RKQueuedFrame(texture: drawableTexture, depthTexture: depthTexture, timestamp: timestamp, transform: planeTransform, vsyncTime: self.visionPro.nextFrameTime, vrrMap: vrrMap, vrrBuffer: vrrBuffer)
+                
+                // Not sure why this needs to be a task
+                Task {
+                    objc_sync_enter(self.blitLock)
+                    if timestamp >= self.rkFrameQueue.last?.timestamp ?? timestamp {
+                        self.rkFrameQueue.append(queuedFrame)
+                    }
+                    objc_sync_exit(self.blitLock)
                 }
-                objc_sync_exit(self.blitLock)
             }
+            commandBuffer.commit()
         }
-        commandBuffer.commit()
         
         //print(submitTime - lastSubmit)
         
         lastLastSubmit = lastSubmit
         lastSubmit = submitTime
         
-        return (queuedFrame?.timestamp ?? 0, planeTransform)
+        let timestamp = queuedFrame?.timestamp ?? 0
+        let rkQueuedFrame = RKQueuedFrame(texture: drawableTexture, depthTexture: depthTexture, timestamp: timestamp, transform: planeTransform, vsyncTime: self.visionPro.nextFrameTime, vrrMap: vrrMap, vrrBuffer: vrrBuffer)
+        
+        return (commandBuffer, rkQueuedFrame)
     }
 }
