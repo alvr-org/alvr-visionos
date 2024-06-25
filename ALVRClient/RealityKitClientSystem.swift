@@ -28,6 +28,7 @@ let renderZFar = 100.0
 let rkFramesInFlight = 3
 let renderDoStreamSSAA = true
 let renderMultithreaded = false
+let realityKitRenderScale: Float = 2.25
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
@@ -319,8 +320,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             renderTangents[i] *= settings.fovRenderScale
         }
 
-        currentSetRenderScale = settings.realityKitRenderScale
-        if settings.realityKitRenderScale <= 0.0 {
+        currentSetRenderScale = realityKitRenderScale
+        if realityKitRenderScale <= 0.0 {
             currentRenderScale = Float(renderScale)
             dynamicallyAdjustRenderScale = true
         }
@@ -936,9 +937,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             let settings = ALVRClientApp.gStore.settings
             
-            if currentSetRenderScale != settings.realityKitRenderScale {
-                currentSetRenderScale = settings.realityKitRenderScale
-                if settings.realityKitRenderScale <= 0.0 {
+            /*if currentSetRenderScale != realityKitRenderScale {
+                currentSetRenderScale = realityKitRenderScale
+                if realityKitRenderScale <= 0.0 {
                     currentRenderScale = Float(renderScale)
                     dynamicallyAdjustRenderScale = true
                 }
@@ -946,7 +947,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                     currentRenderScale = currentSetRenderScale
                     dynamicallyAdjustRenderScale = false
                 }
-            }
+            }*/
 
             if CACurrentMediaTime() - renderer.lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != renderer.chromaKeyEnabled || settings.chromaKeyColorR != renderer.chromaKeyColor.x || settings.chromaKeyColorG != renderer.chromaKeyColor.y || settings.chromaKeyColorB != renderer.chromaKeyColor.z || settings.chromaKeyDistRangeMin != renderer.chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != renderer.chromaKeyLerpDistRange.y) {
                 renderer.lastReconfigureTime = CACurrentMediaTime()

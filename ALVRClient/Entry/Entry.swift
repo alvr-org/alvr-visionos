@@ -142,25 +142,6 @@ struct Entry: View {
                     }
                     .toggleStyle(.switch)
                     
-                    Text("Experimental Render Scale").frame(maxWidth: .infinity, alignment: .leading)
-                    HStack {
-                       Slider(value: $gStore.settings.realityKitRenderScale,
-                              in: 0...2.5,
-                              step: 0.25) {
-                           Text("Experimental Render Scale")
-                       }
-                       .onChange(of: gStore.settings.realityKitRenderScale) {
-                           applyRangeSettings()
-                       }
-                       TextField("Experimental Render Scale", value: $gStore.settings.realityKitRenderScale, formatter: chromaFormatter)
-                       .textFieldStyle(RoundedBorderTextFieldStyle())
-                       .onChange(of: gStore.settings.realityKitRenderScale) {
-                           applyRangeSettings()
-                       }
-                       .frame(width: 100)
-                    }
-                    
-                    
                     Toggle(isOn: $gStore.settings.chromaKeyEnabled) {
 #if XCODE_BETA_16
                         if #unavailable(visionOS 2.0) {
