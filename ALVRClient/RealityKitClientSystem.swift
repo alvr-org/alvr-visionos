@@ -170,10 +170,90 @@ class RealityKitClientSystem : System {
     }
 }
 
+class DrawableWrapper {
+    var wrapped: AnyObject? = nil
+    var drawable: AnyObject? = nil
+    var textureResource: TextureResource? = nil
+    
+    init(pixelFormat: MTLPixelFormat, width: Int, height: Int, usage: MTLTextureUsage) {
+        if #available(visionOS 2.0, *) {
+            let desc = LowLevelTexture.Descriptor(textureType: .type2D, pixelFormat: pixelFormat, width: width, height: height, depth: 1, mipmapLevelCount: 1, arrayLength: 1, textureUsage: usage)
+            let tex = try? LowLevelTexture(descriptor: desc)
+            self.wrapped = tex
+        }
+        else {
+            let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: pixelFormat, width: width, height: height, usage: [usage], mipmapsMode: .none)
+            let queue = try? TextureResource.DrawableQueue(desc)
+            queue!.allowsNextDrawableTimeout = true
+            self.wrapped = queue
+        }
+    }
+    
+    func makeTextureResource() -> TextureResource? {
+        if #available(visionOS 2.0, *) {
+            if let tex = wrapped as? LowLevelTexture {
+                self.textureResource = try! TextureResource(from: tex)
+                return self.textureResource
+            }
+        }
+        
+        if let queue = wrapped as? TextureResource.DrawableQueue {
+            if self.textureResource == nil {
+                let data = Data([0x00, 0x00, 0x00, 0xFF])
+                self.textureResource = try! TextureResource(
+                    dimensions: .dimensions(width: 1, height: 1),
+                    format: .raw(pixelFormat: .bgra8Unorm),
+                    contents: .init(
+                        mipmapLevels: [
+                            .mip(data: data, bytesPerRow: 4),
+                        ]
+                    )
+                )
+            }
+            self.textureResource?.replace(withDrawables: queue)
+            
+            return self.textureResource
+        }
+        
+        return nil
+    }
+    
+    func nextTexture(commandBuffer: MTLCommandBuffer) -> MTLTexture? {
+        if #available(visionOS 2.0, *) {
+            if let tex = wrapped as? LowLevelTexture {
+                let writeTexture: MTLTexture = tex.replace(using: commandBuffer)
+                return writeTexture
+            }
+        }
+        
+        if let queue = wrapped as? TextureResource.DrawableQueue {
+            self.drawable = try? queue.nextDrawable()
+            return self.drawable?.texture
+        }
+        
+        return nil
+    }
+    
+    @MainActor func present(commandBuffer: MTLCommandBuffer) {
+        if #available(visionOS 2.0, *) {
+            if let tex = wrapped as? LowLevelTexture {
+                commandBuffer.commit()
+                //commandBuffer.waitUntilCompleted()
+                return
+            }
+        }
+        if let drawable = self.drawable as? TextureResource.Drawable {
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            drawable.presentOnSceneUpdate()
+        }
+    }
+}
+
 class RealityKitClientSystemCorrectlyAssociated : System {
     let visionPro = VisionPro()
     var lastUpdateTime = 0.0
-    var drawableQueue: TextureResource.DrawableQueue? = nil
+    var drawableQueue: DrawableWrapper? = nil
     private(set) var surfaceMaterial: ShaderGraphMaterial? = nil
     private var textureResource: TextureResource? = nil
     var passthroughPipelineState: MTLRenderPipelineState? = nil
@@ -277,21 +357,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         lastRenderScale = currentRenderScale
         lastOffscreenRenderScale = currentOffscreenRenderScale
 
-        let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], mipmapsMode: .none)
-        self.drawableQueue = try? TextureResource.DrawableQueue(desc)
-        self.drawableQueue!.allowsNextDrawableTimeout = true
+        self.drawableQueue = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: .renderTarget)
         
         // Dummy texture
-        let data = Data([0x00, 0x00, 0x00, 0xFF])
-        self.textureResource = try! TextureResource(
-            dimensions: .dimensions(width: 1, height: 1),
-            format: .raw(pixelFormat: .bgra8Unorm),
-            contents: .init(
-                mipmapLevels: [
-                    .mip(data: data, bytesPerRow: 4),
-                ]
-            )
-        )
+        self.textureResource = self.drawableQueue!.makeTextureResource()
 
         //renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
         //renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
@@ -305,7 +374,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 name: "texture",
                 value: .textureResource(self.textureResource!)
             )
-            textureResource!.replace(withDrawables: drawableQueue!)
         }
 
         self.visionPro.vsyncCallback = rkVsyncCallback
@@ -579,10 +647,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
             
                 // Recreate framebuffer
-                let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], mipmapsMode: .none)
-                self.drawableQueue = try? TextureResource.DrawableQueue(desc)
-                self.drawableQueue!.allowsNextDrawableTimeout = true
-                self.textureResource!.replace(withDrawables: self.drawableQueue!)
+                self.drawableQueue = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget])
+                self.textureResource = self.drawableQueue!.makeTextureResource()
+                
+                try! self.surfaceMaterial!.setParameter(
+                    name: "texture",
+                    value: .textureResource(self.textureResource!)
+                )
                 
                 renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
                 renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
@@ -653,9 +724,17 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 //print("no frame")
                 return
             }
+            
+            if commandBuffer == nil {
+                commandBuffer = commandQueue.makeCommandBuffer()
+            }
+            
+            guard let commandBuffer = commandBuffer else {
+                fatalError("Failed to create command buffer")
+            }
         
-            let drawable = try drawableQueue?.nextDrawable()
-            if drawable == nil {
+            guard let drawable = drawableQueue?.nextTexture(commandBuffer: commandBuffer) else {
+                print("no drawable")
                 self.rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
                 return
             }
@@ -667,6 +746,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             lastUpdateTime = CACurrentMediaTime()
             
             if let surfaceMaterial = surfaceMaterial {
+            //pixelFormat: , width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], mipmapsMode: .none
                 plane.model?.materials = [surfaceMaterial]
             }
             
@@ -690,14 +770,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             scale *= rk_panel_depth
             let orientation = simd_quatf(planeTransform) * simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
             let position = simd_float3(planeTransform.columns.3.x, planeTransform.columns.3.y, planeTransform.columns.3.z)
-            
-            if commandBuffer == nil {
-                commandBuffer = commandQueue.makeCommandBuffer()
-            }
-            
-            guard let commandBuffer = commandBuffer else {
-                fatalError("Failed to create command buffer")
-            }
 
 #if !targetEnvironment(simulator)
             // Shouldn't be needed but just in case
@@ -707,7 +779,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             //vrrBuffer.setPurgeableState(.nonVolatile)
 #endif
             
-            copyTextureToTexture(commandBuffer, texture, drawable!.texture, vrrBuffer)
+            copyTextureToTexture(commandBuffer, texture, drawable, vrrBuffer)
 
             let submitTime = CACurrentMediaTime()
             commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
@@ -731,8 +803,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                     EventHandler.shared.lastSubmittedTimestamp = timestamp
                 }
             }
-            commandBuffer.commit()
-            commandBuffer.waitUntilCompleted()
             
             plane.position = position
             plane.orientation = orientation
@@ -761,7 +831,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             //drawable!.texture.setPurgeableState(.volatile)
             
-            drawable!.presentOnSceneUpdate()
+            drawableQueue!.present(commandBuffer: commandBuffer)
 
             objc_sync_enter(rkFramePoolLock)
 #if !targetEnvironment(simulator)
@@ -776,11 +846,12 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             objc_sync_exit(rkFramePoolLock)
         }
         catch {
+            print("error when rendering to RK, \(error)")
             if let frame = frame {
                 rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
             }
         }
-        print("totals", context.deltaTime, CACurrentMediaTime() - startUpdateTime)
+        //print("totals", context.deltaTime, CACurrentMediaTime() - startUpdateTime)
     }
     
     // TODO: Share this with Renderer somehow
