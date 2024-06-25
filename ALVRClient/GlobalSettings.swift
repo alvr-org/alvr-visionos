@@ -17,7 +17,6 @@ struct GlobalSettings: Codable {
     var chromaKeyColorG: Float = 124.0 / 255.0
     var chromaKeyColorB: Float = 16.0 / 255.0
     var dismissWindowOnEnter: Bool = true
-    var realityKitRenderScale: Float = 1.75
     var emulatedPinchInteractions: Bool = false
     var dontShowAWDLAlertAgain: Bool = false
     var fovRenderScale: Float = 1.0
@@ -40,7 +39,6 @@ struct GlobalSettings: Codable {
         self.chromaKeyColorG = try container.decodeIfPresent(Float.self, forKey: .chromaKeyColorG) ?? self.chromaKeyColorG
         self.chromaKeyColorB = try container.decodeIfPresent(Float.self, forKey: .chromaKeyColorB) ?? self.chromaKeyColorB
         self.dismissWindowOnEnter = try container.decodeIfPresent(Bool.self, forKey: .dismissWindowOnEnter) ?? self.dismissWindowOnEnter
-        self.realityKitRenderScale = try container.decodeIfPresent(Float.self, forKey: .realityKitRenderScale) ?? self.realityKitRenderScale
         self.emulatedPinchInteractions = try container.decodeIfPresent(Bool.self, forKey: .emulatedPinchInteractions) ?? self.emulatedPinchInteractions
         self.dontShowAWDLAlertAgain = try container.decodeIfPresent(Bool.self, forKey: .dontShowAWDLAlertAgain) ?? self.dontShowAWDLAlertAgain
         self.fovRenderScale = try container.decodeIfPresent(Float.self, forKey: .fovRenderScale) ?? self.fovRenderScale
