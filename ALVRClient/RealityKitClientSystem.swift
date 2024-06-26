@@ -292,6 +292,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var rkFrameQueue = [RKQueuedFrame]()
     var rkFramePoolLock = NSObject()
     var blitLock = NSObject()
+    var setPlaneMaterial = false
     
     var reprojectedFramesInARow: Int = 0
     
@@ -370,10 +371,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             self.surfaceMaterial = try! await ShaderGraphMaterial(
                 named: "/Root/SBSMaterial",
                 from: "SBSMaterial.usda"
-            )
-            try! self.surfaceMaterial!.setParameter(
-                name: "texture",
-                value: .textureResource(self.textureResource!)
             )
         }
 
@@ -651,10 +648,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 self.drawableQueue = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget])
                 self.textureResource = self.drawableQueue!.makeTextureResource()
                 
-                try! self.surfaceMaterial!.setParameter(
-                    name: "texture",
-                    value: .textureResource(self.textureResource!)
-                )
+                self.setPlaneMaterial = false
                 
                 renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
                 renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
@@ -746,9 +740,18 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 
             lastUpdateTime = CACurrentMediaTime()
             
-            if let surfaceMaterial = surfaceMaterial {
-            //pixelFormat: , width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], mipmapsMode: .none
-                plane.model?.materials = [surfaceMaterial]
+            if !self.setPlaneMaterial {
+                if self.surfaceMaterial != nil {
+                    if self.textureResource != nil {
+                        try! self.surfaceMaterial!.setParameter(
+                            name: "texture",
+                            value: .textureResource(self.textureResource!)
+                        )
+                        
+                        plane.model?.materials = [self.surfaceMaterial!]
+                        self.setPlaneMaterial = true
+                    }
+                }
             }
             
             if lastSubmit == 0.0 {
@@ -807,7 +810,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             plane.position = position
             plane.orientation = orientation
-            plane.scale = scale
+            
+            // Prevent flashbang at start
+            if self.setPlaneMaterial {
+                plane.scale = scale
+            }
             
             if settings.chromaKeyEnabled {
                 backdrop.isEnabled = false
@@ -978,15 +985,16 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             let viewFovs = EventHandler.shared.viewFovs
             let viewTransforms = EventHandler.shared.viewTransforms
             
-            let rkLatencyLimit = WorldTracker.maxPredictionRK //UInt64(Double(visionPro.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
+            let rkLatencyLimit = max(WorldTracker.maxPredictionRK, UInt64(visionPro.vsyncLatency * Double(NSEC_PER_SEC))) //UInt64(Double(visionPro.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
             let handAnchorLatencyLimit = WorldTracker.maxPrediction //UInt64(Double(visionPro.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
-            let targetTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
+            var targetTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
             var anchorTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), handAnchorLatencyLimit)) / Double(NSEC_PER_SEC))
             
             // Make overlay look smooth (at the cost of timewarp)
             if renderer.fadeInOverlayAlpha > 0.0 {
-                anchorTimestamp = vsyncTime
+                anchorTimestamp = vsyncTime + visionPro.vsyncLatency
+                targetTimestamp = vsyncTime + visionPro.vsyncLatency
             }
             
             let sentAnchor = WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)
