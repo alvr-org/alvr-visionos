@@ -85,12 +85,15 @@ struct ALVRClientApp: App {
     \n\
     • Improved wireframe stability with Experimental Renderer.\n\
     • Improved tracking stability while throttled.\n\
+    • Removed MetalFX due to performance issues, and to simplify rendering.\n\
+    • Added basic variable rasterization rate drawing in periphery to attempt to save power.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
     • Fixed Experimental Renderer on visionOS 2.0 beta 2.\n\
+    • Fixed flicker-judder in Experimental Renderer.\n\
     \n\
     ________________________________\n\
     \n\
@@ -98,6 +101,8 @@ struct ALVRClientApp: App {
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
     • On visionOS 2 beta, with the default renderer and chroma keyed passthrough, eye comfort settings Near/Far may cause visuals to appear too small or too large.\n\
+    • On visionOS 2 beta 1, low FPS due to throttling may be more common.\n\
+    • On visionOS 2 beta 2, low FPS due to throttling may be even more common than beta 1.\n\
     
     """
     
