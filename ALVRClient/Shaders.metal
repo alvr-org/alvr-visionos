@@ -158,19 +158,19 @@ ColorInOut videoFrameVertexShaderCommon(uint vertexID [[vertex_id]],
     ColorInOut out;
 
     float2 uv = float2(float((vertexID << uint(1)) & 2u) * 0.5, 1.0 - (float(vertexID & 2u) * 0.5));
-    float4 position = float4((uv * float2(2.0, -2.0)) + float2(-1.0, 1.0), -1.0, 1.0);
+    float4 position = float4((uv * float2(2.0, -2.0)) + float2(-1.0, 1.0), -500.0, 1.0);
 
     if (position.x < 1.0) {
-        position.x *= tangents[0];
+        position.x *= tangents[0] * 500.0;
     }
     else {
-        position.x *= tangents[1];
+        position.x *= tangents[1] * 500.0;
     }
     if (position.y < 1.0) {
-        position.y *= tangents[3];
+        position.y *= tangents[3] * 500.0;
     }
     else {
-        position.y *= tangents[2];
+        position.y *= tangents[2] * 500.0;
     }
     out.position = projectionMatrix * modelViewMatrixFrame * position;
     if (which == 0) {
