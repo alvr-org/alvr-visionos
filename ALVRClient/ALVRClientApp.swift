@@ -94,13 +94,13 @@ struct ALVRClientApp: App {
     \n\
     • Fixed Experimental Renderer on visionOS 2.0 beta 2.\n\
     • Fixed flicker-judder in Experimental Renderer.\n\
+    • Fixed view comfort settings in visionOS 2.0 causing visuals to appear too small or too large.\n\
     \n\
     ________________________________\n\
     \n\
     Known issues:\n\
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
-    • On visionOS 2 beta, with the default renderer and chroma keyed passthrough, eye comfort settings Near/Far may cause visuals to appear too small or too large.\n\
     • On visionOS 2 beta 1, low FPS due to throttling may be more common.\n\
     • On visionOS 2 beta 2, low FPS due to throttling may be even more common than beta 1.\n\
     
