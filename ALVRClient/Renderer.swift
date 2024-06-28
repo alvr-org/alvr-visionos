@@ -445,7 +445,7 @@ class Renderer {
         planeUniforms = UnsafeMutableRawPointer(dynamicPlaneUniformBuffer.contents() + planeUniformBufferOffset).bindMemory(to:PlaneUniform.self, capacity:1)
     }
 
-    private func updateGameStateForVideoFrame(_ whichIdx: Int, viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
+    private func updateGameStateForVideoFrame(_ whichIdx: Int, drawable: LayerRenderer.Drawable?, viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
         let settings = ALVRClientApp.gStore.settings
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
             let tangents = viewTangents[viewIndex]
@@ -455,22 +455,34 @@ class Renderer {
             framePoseNoTranslation.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
             simdDeviceAnchorNoTranslation.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
             let viewMatrix = (simdDeviceAnchor * viewTransforms[viewIndex]).inverse
-            let viewMatrixFrame = (framePoseNoTranslation.inverse * simdDeviceAnchorNoTranslation).inverse
-            let projection = isRealityKit ? ProjectiveTransform3D(leftTangent: (Double(tangents[0]) + Double(tangents[1])) * 0.5,
-                                                   rightTangent: (Double(tangents[0]) + Double(tangents[1])) * 0.5,
-                                                   topTangent: (Double(tangents[2]) + Double(tangents[3])) * 0.5,
-                                                   bottomTangent: (Double(tangents[2]) + Double(tangents[3])) * 0.5,
-                                                   nearZ: renderZNear,
-                                                   farZ: renderZFar,
-                                                   reverseZ: true)
-                                          : ProjectiveTransform3D(leftTangent: Double(tangents[0]),
-                                                   rightTangent: Double(tangents[1]),
-                                                   topTangent: Double(tangents[2]),
-                                                   bottomTangent: Double(tangents[3]),
-                                                   nearZ: nearZ,
-                                                   farZ: farZ,
-                                                   reverseZ: true)
-            return Uniforms(projectionMatrix: .init(projection), modelViewMatrixFrame: viewMatrixFrame, modelViewMatrix: viewMatrix, tangents: tangents * (isRealityKit ? 1.0 : settings.fovRenderScale))
+            let viewMatrixFrame = (framePoseNoTranslation.inverse * simdDeviceAnchorNoTranslation * viewTransforms[viewIndex]).inverse
+            let viewMatrixFrameRk = (framePoseNoTranslation.inverse * simdDeviceAnchorNoTranslation).inverse // RealityKit implicitly applies the view transforms when we draw the quad entity
+            var projection = matrix_identity_float4x4
+            if #available(visionOS 2.0, *), drawable != nil {
+#if XCODE_BETA_16
+                projection = drawable!.computeProjection(viewIndex: viewIndex)
+#else
+                let p = ProjectiveTransform3D(leftTangent: Double(tangents[0]),
+                          rightTangent: Double(tangents[1]),
+                          topTangent: Double(tangents[2]),
+                          bottomTangent: Double(tangents[3]),
+                          nearZ: nearZ,
+                          farZ: farZ,
+                          reverseZ: true)
+                projection = matrix_float4x4(p)
+#endif
+            }
+            else {
+                let p = ProjectiveTransform3D(leftTangent: Double(tangents[0]),
+                          rightTangent: Double(tangents[1]),
+                          topTangent: Double(tangents[2]),
+                          bottomTangent: Double(tangents[3]),
+                          nearZ: nearZ,
+                          farZ: farZ,
+                          reverseZ: true)
+                projection = matrix_float4x4(p)
+            }
+            return Uniforms(projectionMatrix: projection, modelViewMatrixFrame: isRealityKit ? viewMatrixFrameRk : viewMatrixFrame, modelViewMatrix: viewMatrix, tangents: tangents * (isRealityKit ? 1.0 : settings.fovRenderScale))
         }
         
         self.uniforms[0].uniforms.0 = uniforms(forViewIndex: 0)
@@ -741,11 +753,11 @@ class Renderer {
         
         if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
             //print("render")
-            if let encoder = beginRenderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor) {
+            if let encoder = beginRenderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable) {
                 renderStreamingFrame(0, commandBuffer: commandBuffer, renderEncoder: encoder, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
                 endRenderStreamingFrame(renderEncoder: encoder)
             }
-            renderStreamingFrameOverlays(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+            renderStreamingFrameOverlays(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
             
             if isReprojected && useApplesReprojection {
                 LayerRenderer.Clock().wait(until: drawable.frameTiming.renderingDeadline)
@@ -767,7 +779,7 @@ class Renderer {
 
             let noFramePose = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
             // TODO: draw a cool loading logo
-            renderNothing(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor)
+            renderNothing(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
             
             if EventHandler.shared.totalFramesRendered > 300 {
                 fadeInOverlayAlpha += 0.02
@@ -930,13 +942,13 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func renderNothing(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
+    func renderNothing(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4, drawable: LayerRenderer.Drawable?) {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return
         }
         self.updateDynamicBufferState()
         
-        self.updateGameStateForVideoFrame(whichIdx, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+        self.updateGameStateForVideoFrame(whichIdx, drawable: drawable, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
@@ -1084,7 +1096,7 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func beginRenderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) -> (any MTLRenderCommandEncoder)? {
+    func beginRenderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4, drawable: LayerRenderer.Drawable?) -> (any MTLRenderCommandEncoder)? {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return nil
         }
@@ -1096,7 +1108,7 @@ class Renderer {
     
         self.updateDynamicBufferState()
         
-        self.updateGameStateForVideoFrame(whichIdx, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+        self.updateGameStateForVideoFrame(whichIdx, drawable: drawable, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
@@ -1192,14 +1204,14 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
-    func renderStreamingFrameOverlays(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
+    func renderStreamingFrameOverlays(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4, drawable: LayerRenderer.Drawable?) {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return
         }
     
         self.updateDynamicBufferState()
         
-        self.updateGameStateForVideoFrame(whichIdx, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+        self.updateGameStateForVideoFrame(whichIdx, drawable: drawable, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
         
         if fadeInOverlayAlpha > 0.0 {
             // Not super kosher--we need the depth to be correct for the video frame box, but we can't have the view
