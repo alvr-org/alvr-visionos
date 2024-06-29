@@ -270,8 +270,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     private var textureResourceB: TextureResource? = nil
     var passthroughPipelineState: MTLRenderPipelineState? = nil
     var passthroughPipelineStateHDR: MTLRenderPipelineState? = nil
-    var passthroughPipelineStateWithAlpha: MTLRenderPipelineState? = nil
-    var passthroughPipelineStateWithAlphaHDR: MTLRenderPipelineState? = nil
     
     public let device: MTLDevice
     let commandQueue: MTLCommandQueue
