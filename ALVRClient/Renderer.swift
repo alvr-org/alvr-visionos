@@ -1162,6 +1162,9 @@ class Renderer {
             guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage")
             }
+            if !(metalTexture.debugDescription?.contains("decompressedPixelFormat") ?? true) && EventHandler.shared.totalFramesRendered % 90*5 == 0 {
+                print("NO COMPRESSION ON VT FRAME!!!! AAAAAAAAA go file feedback again :(")
+            }
             renderEncoder.setFragmentTexture(metalTexture, index: i)
         }
         

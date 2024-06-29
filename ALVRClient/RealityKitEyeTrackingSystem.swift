@@ -118,10 +118,20 @@ class RealityKitEyeTrackingSystem : System {
     }
     
     static func setup(_ content: RealityViewContent) async {
-        let hoverEffectTrackerMat = try! await ShaderGraphMaterial(
-            named: "/Root/HoverEdgeTracker",
-            from: "EyeTrackingMats.usda"
-        )
+        var hoverEffectTrackerMat: ShaderGraphMaterial? = nil
+        
+        if #available(visionOS 2.0, *) {
+            hoverEffectTrackerMat = try! await ShaderGraphMaterial(
+                named: "/Root/HoverEdgeTracker",
+                from: "EyeTrackingMats.usda"
+            )
+        }
+        else {
+            hoverEffectTrackerMat = try! await ShaderGraphMaterial(
+                named: "/Root/LeftEyeOnly",
+                from: "EyeTrackingMats.usda"
+            )
+        }
         
         let leftEyeOnlyMat = try! await ShaderGraphMaterial(
             named: "/Root/LeftEyeOnly",
@@ -141,7 +151,7 @@ class RealityKitEyeTrackingSystem : System {
             eyeYPlane.scale = simd_float3(0.0, 0.0, 0.0)
             eyeYPlane.components.set(MagicRealityKitEyeTrackingSystemComponent())
 
-            let eye2Plane = ModelEntity(mesh: planeMesh, materials: [hoverEffectTrackerMat])
+            let eye2Plane = ModelEntity(mesh: planeMesh, materials: [hoverEffectTrackerMat!])
             eye2Plane.name = "eye_2_plane"
             eye2Plane.scale = simd_float3(0.0, 0.0, 0.0)
             eye2Plane.components.set(MagicRealityKitEyeTrackingSystemComponent())
