@@ -236,8 +236,9 @@ class DrawableWrapper {
         }
         
         if let queue = wrapped as? TextureResource.DrawableQueue {
-            self.drawable = try? queue.nextDrawable()
-            return self.drawable?.texture
+            let drawable = try? queue.nextDrawable()
+            self.drawable = drawable
+            return drawable?.texture
         }
         
         return nil
@@ -753,25 +754,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
             rkFramesRendered += 1
             let whichRkFrame = rkFramesRendered % 2
-        
-            var drawable: MTLTexture? = nil
-            if whichRkFrame == 0 {
-                drawable = drawableQueueA?.nextTexture(commandBuffer: commandBuffer)
-            }
-            else {
-                drawable = drawableQueueB?.nextTexture(commandBuffer: commandBuffer)
-            }
-            guard let drawable = drawable else {
-                print("no drawable")
-                self.rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
-                return
-            }
-            
-            if renderMultithreaded && EventHandler.shared.lastSubmittedTimestamp != frame.timestamp {
-                alvr_report_compositor_start(frame.timestamp)
-            }
-
-            lastUpdateTime = CACurrentMediaTime()
             
             if !self.setPlaneMaterialA {
                 if self.surfaceMaterialA != nil {
@@ -799,6 +781,29 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                     }
                 }
             }
+            if !self.setPlaneMaterialA || !self.setPlaneMaterialB {
+                rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
+                return
+            }
+        
+            var drawable: MTLTexture? = nil
+            if whichRkFrame == 0 {
+                drawable = drawableQueueA?.nextTexture(commandBuffer: commandBuffer)
+            }
+            else {
+                drawable = drawableQueueB?.nextTexture(commandBuffer: commandBuffer)
+            }
+            guard let drawable = drawable else {
+                print("no drawable")
+                self.rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
+                return
+            }
+            
+            if renderMultithreaded && EventHandler.shared.lastSubmittedTimestamp != frame.timestamp {
+                alvr_report_compositor_start(frame.timestamp)
+            }
+
+            lastUpdateTime = CACurrentMediaTime()
             
             if lastSubmit == 0.0 {
                 lastSubmit = CACurrentMediaTime() - visionPro.vsyncDelta
