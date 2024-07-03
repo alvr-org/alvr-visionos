@@ -427,7 +427,7 @@ struct VideoHandler {
             pixelFormat = isFullRange ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
         }
         
-        let videoDecoderSpecification:[NSString: AnyObject] = [kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder:kCFBooleanTrue]
+        let videoDecoderSpecification:[NSString: AnyObject] = [kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder:kCFBooleanTrue]
         var destinationImageBufferAttributes:[NSString: AnyObject] = [kCVPixelBufferMetalCompatibilityKey: true as NSNumber, kCVPixelBufferPoolMinimumBufferCountKey: 3 as NSNumber]
         if pixelFormat != nil {
             destinationImageBufferAttributes[kCVPixelBufferPixelFormatTypeKey] = pixelFormat! as NSNumber
