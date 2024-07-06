@@ -9,6 +9,22 @@ import AVKit
 let H264_NAL_TYPE_SPS = 7
 let HEVC_NAL_TYPE_VPS = 32
 
+// https://github.com/WebKit/WebKit/blob/f86d3400c875519b3f3c368f1ea9a37ed8a1d11b/Source/WebGPU/WebGPU/BindGroup.mm#L43
+let kCVPixelFormatType_420YpCbCr10PackedBiPlanarFullRange = 0x70663230 as OSType // pf20
+let kCVPixelFormatType_422YpCbCr10PackedBiPlanarFullRange = 0x70663232 as OSType // pf22
+let kCVPixelFormatType_444YpCbCr10PackedBiPlanarFullRange = 0x70663434 as OSType // pf44
+
+let kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange = 0x70343230 as OSType // p420
+let kCVPixelFormatType_422YpCbCr10PackedBiPlanarVideoRange = 0x70343232 as OSType // p422
+let kCVPixelFormatType_444YpCbCr10PackedBiPlanarVideoRange = 0x70343434 as OSType // p444
+
+// Apparently kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange is known as kCVPixelFormatType_AGX_420YpCbCr8BiPlanarVideoRange in WebKit.
+
+// Other formats Apple forgot
+let kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarFullRange = 0x2D786630 as OSType // -xf0
+let kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarFullRange = 0x26786632 as OSType // &xf2
+let kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarFullRange = 0x2D786632 as OSType // -xf2
+
 struct VideoHandler {
     // Useful for debugging.
     static let coreVideoPixelFormatToStr: [OSType:String] = [
@@ -84,15 +100,19 @@ struct VideoHandler {
         kCVPixelFormatType_DisparityFloat16: "DisparityFloat16",
         kCVPixelFormatType_DisparityFloat32: "DisparityFloat32",
         kCVPixelFormatType_Lossless_32BGRA: "32BGRA",
-        kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange: "420YpCbCr10PackedBiPlanarVideoRange",
-        kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange: "420YpCbCr8BiPlanarFullRange",
-        kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange: "420YpCbCr8BiPlanarVideoRange",
-        kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarVideoRange: "422YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange: "Lossless_420YpCbCr10PackedBiPlanarFullRange",
+        kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange: "Lossless_420YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange: "Lossless_420YpCbCr8BiPlanarFullRange",
+        kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange: "Lossless_420YpCbCr8BiPlanarVideoRange",
+        kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarVideoRange: "Lossless_422YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarFullRange: "Lossless_422YpCbCr10PackedBiPlanarFullRange",
         kCVPixelFormatType_Lossy_32BGRA: "32BGRA",
-        kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarVideoRange: "420YpCbCr10PackedBiPlanarVideoRange",
-        kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange: "420YpCbCr8BiPlanarFullRange",
-        kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange: "420YpCbCr8BiPlanarVideoRange",
-        kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarVideoRange: "422YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarFullRange: "Lossy_420YpCbCr10PackedBiPlanarFullRange",
+        kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarVideoRange: "Lossy_420YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange: "Lossy_420YpCbCr8BiPlanarFullRange",
+        kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange: "Lossy_420YpCbCr8BiPlanarVideoRange",
+        kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarFullRange: "Lossy_422YpCbCr10PackedBiPlanarFullRange",
+        kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarVideoRange: "Lossy_422YpCbCr10PackedBiPlanarVideoRange",
         kCVPixelFormatType_OneComponent10: "OneComponent10",
         kCVPixelFormatType_OneComponent12: "OneComponent12",
         kCVPixelFormatType_OneComponent16: "OneComponent16",
@@ -103,6 +123,13 @@ struct VideoHandler {
         kCVPixelFormatType_TwoComponent16Half: "TwoComponent16Half",
         kCVPixelFormatType_TwoComponent32Float: "TwoComponent32Float",
         kCVPixelFormatType_TwoComponent8: "TwoComponent8",
+        
+        kCVPixelFormatType_420YpCbCr10PackedBiPlanarFullRange: "420YpCbCr10PackedBiPlanarFullRange",
+        kCVPixelFormatType_422YpCbCr10PackedBiPlanarFullRange: "kCVPixelFormatType_422YpCbCr10PackedBiPlanarFullRange",
+        kCVPixelFormatType_444YpCbCr10PackedBiPlanarFullRange: "kCVPixelFormatType_444YpCbCr10PackedBiPlanarFullRange",
+        kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange: "kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_422YpCbCr10PackedBiPlanarVideoRange: "kCVPixelFormatType_422YpCbCr10PackedBiPlanarVideoRange",
+        kCVPixelFormatType_444YpCbCr10PackedBiPlanarVideoRange: "kCVPixelFormatType_444YpCbCr10PackedBiPlanarVideoRange",
         
         // Internal formats?
         0x61766331: "NonDescriptH264",
@@ -141,21 +168,71 @@ struct VideoHandler {
                 return [MTLPixelFormat.r8Unorm, MTLPixelFormat.rg8Unorm]
 
             // 10-bit biplanar
+            case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+                 kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
+                 kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange,
+                 kCVPixelFormatType_422YpCbCr10BiPlanarFullRange,
+                 kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange,
+                 kCVPixelFormatType_444YpCbCr10BiPlanarFullRange:
+                return [MTLPixelFormat.r16Unorm, MTLPixelFormat.rg16Unorm]
+
+            //
+            // If it's good enough for WebKit, it's good enough for me.
+            // https://github.com/WebKit/WebKit/blob/f86d3400c875519b3f3c368f1ea9a37ed8a1d11b/Source/WebGPU/WebGPU/MetalSPI.h#L30
+            // https://github.com/WebKit/WebKit/blob/f86d3400c875519b3f3c368f1ea9a37ed8a1d11b/Source/WebGPU/WebGPU/BindGroup.mm#L43
+            // https://github.com/WebKit/WebKit/blob/ef1916c078676dca792cef30502a765d398dcc18/Source/WebGPU/WebGPU/BindGroup.mm#L416
+            //
+            // 10-bit packed biplanar 4:2:0
             case kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange,
-                 kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
-                 kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
-                 kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_420YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange:
+                return [MTLPixelFormat.init(rawValue: 508)!, MTLPixelFormat.invalid] // MTLPixelFormatYCBCR10_420_2P_PACKED
+            
+            // 10-bit packed biplanar 4:2:2
+            case kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarVideoRange,
-                 kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange,
-                 kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange:
-                return [MTLPixelFormat.r16Unorm, MTLPixelFormat.rg16Unorm]
+                 kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_422YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_422YpCbCr10PackedBiPlanarVideoRange:
+            return [MTLPixelFormat.init(rawValue: 509)!, MTLPixelFormat.invalid] // MTLPixelFormatYCBCR10_422_2P_PACKED
+            
+            // 10-bit packed biplanar 4:4:4
+            case kCVPixelFormatType_444YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_444YpCbCr10PackedBiPlanarVideoRange:
+                return [MTLPixelFormat.init(rawValue: 510)!, MTLPixelFormat.invalid] // MTLPixelFormatYCBCR10_444_2P_PACKED
 
             // Guess 8-bit biplanar otherwise
             default:
                 let formatStr = coreVideoPixelFormatToStr[format, default: "unknown"]
                 print("Warning: Pixel format \(formatStr) (\(format)) is not currently accounted for! Returning 8-bit vals")
                 return [MTLPixelFormat.r8Unorm, MTLPixelFormat.rg8Unorm]
+        }
+    }
+    
+    static func isFormatSecret(_ format: OSType) -> Bool
+    {
+        switch(format) {
+            case kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_420YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_422YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_444YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_422YpCbCr10PackedBiPlanarVideoRange,
+                 kCVPixelFormatType_444YpCbCr10PackedBiPlanarVideoRange:
+                return true
+            default:
+                return false
         }
     }
     
@@ -423,8 +500,10 @@ struct VideoHandler {
         let isFullRange = getIsFullRangeForVideoFormat(videoFormat!)
         
         // TODO: figure out how to check for 422/444, CVImageBufferChromaLocationBottomField?
+        // On visionOS 2, setting pixelFormat *at all* causes a copy to an uncompressed MTLTexture buffer, so we are avoiding it for now.
         if bpc == 10 {
-            pixelFormat = isFullRange ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            //pixelFormat = isFullRange ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            //pixelFormat = isFullRange ? kCVPixelFormatType_420YpCbCr10PackedBiPlanarFullRange : kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange // default
         }
         
         let videoDecoderSpecification:[NSString: AnyObject] = [kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder:kCFBooleanTrue]
