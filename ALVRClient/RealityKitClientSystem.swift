@@ -600,7 +600,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 
         // Configure the render pass descriptor
         renderPassDescriptor.colorAttachments[0].texture = to // Set the destination texture as the render target
-        renderPassDescriptor.colorAttachments[0].loadAction = .clear // .load for partial copy
+        renderPassDescriptor.colorAttachments[0].loadAction = .dontCare // .load for partial copy
         renderPassDescriptor.colorAttachments[0].storeAction = .store // Store the render target after rendering
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
 

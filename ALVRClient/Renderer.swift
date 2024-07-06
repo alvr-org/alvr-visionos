@@ -78,6 +78,7 @@ class Renderer {
     var metalTextureCache: CVMetalTextureCache!
     let mtlVertexDescriptor: MTLVertexDescriptor
     var videoFramePipelineState_YpCbCrBiPlanar: MTLRenderPipelineState!
+    var videoFramePipelineState_SecretYpCbCrFormats: MTLRenderPipelineState!
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
     var encodingGamma: Float = 1.0
@@ -223,6 +224,14 @@ class Renderer {
                             viewCount: layerRenderer?.properties.viewCount ?? renderViewCount,
                             foveationVars: foveationVars,
                             variantName: "YpCbCrBiPlanar"
+        )
+        videoFramePipelineState_SecretYpCbCrFormats = try! buildRenderPipelineForVideoFrameWithDevice(
+                            device: device,
+                            mtlVertexDescriptor: mtlVertexDescriptor,
+                            colorFormat: layerRenderer?.configuration.colorFormat ?? currentRenderColorFormat,
+                            viewCount: layerRenderer?.properties.viewCount ?? renderViewCount,
+                            foveationVars: foveationVars,
+                            variantName: "SecretYpCbCrFormats"
         )
         
         do {
@@ -606,7 +615,9 @@ class Renderer {
             averageViewTransformPositionalComponent.w = 0.0
             
             WorldTracker.shared.averageViewTransformPositionalComponent = averageViewTransformPositionalComponent.asFloat3()
+#if !targetEnvironment(simulator)
             print("Average offset shared between eyes:", WorldTracker.shared.averageViewTransformPositionalComponent)
+#endif
         }
         
         if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
@@ -1112,7 +1123,7 @@ class Renderer {
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
-        renderPassDescriptor.colorAttachments[0].loadAction = whichIdx == 0 ? .clear : .load
+        renderPassDescriptor.colorAttachments[0].loadAction = whichIdx == 0 ? (isRealityKit ? .dontCare : .clear) : .load
         renderPassDescriptor.colorAttachments[0].storeAction = .store
         renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: chromaKeyEnabled ? 0.0 : 1.0)
         renderPassDescriptor.rasterizationRateMap = rasterizationRateMap
@@ -1128,41 +1139,54 @@ class Renderer {
         renderEncoder.pushDebugGroup("Draw ALVR Frames")
         renderEncoder.setCullMode(.back)
         renderEncoder.setFrontFacing(.counterClockwise)
-        renderEncoder.setRenderPipelineState(videoFramePipelineState_YpCbCrBiPlanar)
         
         guard let queuedFrame = queuedFrame else {
             renderEncoder.endEncoding()
             return nil
         }
         
-        let pixelBuffer = queuedFrame.imageBuffer
         // https://cs.android.com/android/platform/superproject/main/+/main:external/webrtc/sdk/objc/components/renderer/metal/RTCMTLNV12Renderer.mm;l=108;drc=a81e9c82fc3fbc984f0f110407d1e44c9c01958a
-        // TODO(zhuowei): yolo
-        //TODO: prevailing wisdom on stackoverflow says that the CVMetalTextureRef has to be held until
-        // rendering is complete, or the MtlTexture will be invalid?
+        let pixelBuffer = queuedFrame.imageBuffer
+        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        let formatStr = VideoHandler.coreVideoPixelFormatToStr[format, default: "unknown"]
         
+        if VideoHandler.isFormatSecret(format) {
+            renderEncoder.setRenderPipelineState(videoFramePipelineState_SecretYpCbCrFormats)
+        }
+        else {
+            renderEncoder.setRenderPipelineState(videoFramePipelineState_YpCbCrBiPlanar)
+        }
+        
+        //print("Pixel format \(formatStr) (\(format))")
         let textureTypes = VideoHandler.getTextureTypesForFormat(CVPixelBufferGetPixelFormatType(pixelBuffer))
+        let realWidth = CVPixelBufferGetWidth(pixelBuffer)
+        let realHeight = CVPixelBufferGetHeight(pixelBuffer)
         for i in 0...1 {
             var textureOut:CVMetalTexture! = nil
             var err:OSStatus = 0
-            let width = CVPixelBufferGetWidth(pixelBuffer)
-            let height = CVPixelBufferGetHeight(pixelBuffer)
-            if i == 0 {
-                err = CVMetalTextureCacheCreateTextureFromImage(
-                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
-                    width, height, 0, &textureOut);
-            } else {
-                err = CVMetalTextureCacheCreateTextureFromImage(
-                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
-                    width/2, height/2, 1, &textureOut);
+            var width = realWidth
+            var height = realHeight
+            
+            if textureTypes[i] == MTLPixelFormat.invalid {
+                break
             }
+            
+            if i == 1 {
+                width /= 2
+                height /= 2
+            }
+            
+            err = CVMetalTextureCacheCreateTextureFromImage(
+                    nil, metalTextureCache, pixelBuffer, nil, textureTypes[i],
+                    width, height, i, &textureOut);
+            
             if err != 0 {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage \(err)")
             }
             guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage")
             }
-            if !(metalTexture.debugDescription?.contains("decompressedPixelFormat") ?? true) && EventHandler.shared.totalFramesRendered % 90*5 == 0 {
+            if !((metalTexture.debugDescription?.contains("decompressedPixelFormat") ?? true) || (metalTexture.debugDescription?.contains("isCompressed = 1") ?? true)) && EventHandler.shared.totalFramesRendered % 90*5 == 0 {
                 print("NO COMPRESSION ON VT FRAME!!!! AAAAAAAAA go file feedback again :(")
             }
             renderEncoder.setFragmentTexture(metalTexture, index: i)
