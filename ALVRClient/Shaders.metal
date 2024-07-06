@@ -268,34 +268,16 @@ half3 rgb2hsv(half3 rgb) {
     return hsv;
 }
 
-fragment half4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<half> in_tex_y, texture2d<half> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
-// https://developer.apple.com/documentation/arkit/arkit_in_ios/displaying_an_ar_experience_with_metal
-    
-    float2 sampleCoord;
-    if (FFR_ENABLED) {
-        sampleCoord = decompressAxisAlignedCoord(in.texCoord);
-    } else {
-        sampleCoord = in.texCoord;
-    }
-    
-    constexpr sampler colorSampler(mip_filter::none,
-                                   mag_filter::linear,
-                                   min_filter::linear);
-    half4 ySample = in_tex_y.sample(colorSampler, sampleCoord);
-    half4 uvSample = in_tex_uv.sample(colorSampler, sampleCoord);
-    half4 ycbcr = half4(ySample.r, uvSample.rg, 1.0f);
-    
-    half3 rgb_uncorrect = half3((matrix_half4x4(encodingUniform.yuvTransform) * ycbcr).rgb);
-    
+half4 videoFrameFragmentShader_common(half3 rgb_uncorrect, constant EncodingUniform & encodingUniform) {
     half3 color = NonlinearToLinearRGB_half(rgb_uncorrect);
     color = EncodingNonlinearToLinearRGB_half(color, encodingUniform.encodingGamma);
     
     half4 colorOut = half4(color.rgb, 1.0);
-    if (CHROMAKEY_ENABLED && !REALITYKIT_ENABLED) {
+    if (CHROMAKEY_ENABLED) {
         half4 chromaKeyHSV = half4(rgb2hsv(half3(CHROMAKEY_COLOR)), 1.0);
         half4 newHSV = half4(rgb2hsv(color.rgb), 1.0);
         half mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, half2(CHROMAKEY_LERP_DIST_RANGE));
-        if (mask <= 0.0) {
+        if (!REALITYKIT_ENABLED && mask <= 0.0) {
             discard_fragment();
         }
         
@@ -318,6 +300,45 @@ fragment half4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]
     
     //technically not accurate, since sRGB is below 1.0, but it makes colors pop a bit
     //color = linearToDisplayP3 * color;
+}
+
+fragment half4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<half> in_tex_y, texture2d<half> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
+    
+    float2 sampleCoord;
+    if (FFR_ENABLED) {
+        sampleCoord = decompressAxisAlignedCoord(in.texCoord);
+    } else {
+        sampleCoord = in.texCoord;
+    }
+    
+    constexpr sampler colorSampler(mip_filter::none,
+                                   mag_filter::linear,
+                                   min_filter::linear);
+    half4 ySample = in_tex_y.sample(colorSampler, sampleCoord);
+    half4 uvSample = in_tex_uv.sample(colorSampler, sampleCoord);
+    half4 ycbcr = half4(ySample.r, uvSample.rg, 1.0f);
+    
+    half3 rgb_uncorrect = half3((matrix_half4x4(encodingUniform.yuvTransform) * ycbcr).rgb);
+    
+    return videoFrameFragmentShader_common(rgb_uncorrect, encodingUniform);
+}
+
+fragment half4 videoFrameFragmentShader_SecretYpCbCrFormats(ColorInOut in [[stage_in]], texture2d<half> in_tex_y, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
+    
+    float2 sampleCoord;
+    if (FFR_ENABLED) {
+        sampleCoord = decompressAxisAlignedCoord(in.texCoord);
+    } else {
+        sampleCoord = in.texCoord;
+    }
+    
+    constexpr sampler colorSampler(mip_filter::none,
+                                   mag_filter::linear,
+                                   min_filter::linear);
+    
+    half3 rgb_uncorrect = in_tex_y.sample(colorSampler, sampleCoord).rgb;
+    
+    return videoFrameFragmentShader_common(rgb_uncorrect, encodingUniform);
 }
 
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {
@@ -353,10 +374,10 @@ fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array
     //uv /= VRR_PHYS_SIZE;
     
     half4 color = in_tex.sample(colorSampler, uv, idx);
-    if (color.a <= 0.0) {
-        discard_fragment();
-    }
-    if (CHROMAKEY_ENABLED) {
+    //if (color.a <= 0.0) {
+    //    discard_fragment();
+    //}
+    /*if (CHROMAKEY_ENABLED) {
         half4 chromaKeyHSV = half4(rgb2hsv(half3(CHROMAKEY_COLOR)), 1.0);
         half4 newHSV = half4(rgb2hsv(color.rgb), 1.0);
         half mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, half2(CHROMAKEY_LERP_DIST_RANGE));
@@ -370,5 +391,6 @@ fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array
     }
     else {
         return color;
-    }
+    }*/
+    return color;
 }
