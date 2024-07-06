@@ -62,7 +62,6 @@ typedef struct
 typedef struct
 {
     matrix_float4x4 yuvTransform;
-    float encodingGamma;
 } EncodingUniform;
 
 #endif /* ShaderTypes_h */
@@ -82,4 +81,9 @@ typedef NS_ENUM(EnumBackingType, ALVRFunctionConstant)
     ALVRFunctionConstantRealityKitEnabled = 300,
     ALVRFunctionConstantVRRScreenSize = 301,
     ALVRFunctionConstantVRRPhysSize = 302,
+    ALVRFunctionConstantEncodingGamma = 303,
+    ALVRFunctionConstantEncodingYUVTransform0 = 304,
+    ALVRFunctionConstantEncodingYUVTransform1 = 305,
+    ALVRFunctionConstantEncodingYUVTransform2 = 306,
+    ALVRFunctionConstantEncodingYUVTransform3 = 307,
 };
