@@ -1012,6 +1012,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             }
             
             let settings = ALVRClientApp.gStore.settings
+            if let otherSettings = Settings.getAlvrSettings() {
+                if otherSettings.video.encoderConfig.encodingGamma != renderer.encodingGamma {
+                    needsPipelineRebuild = true
+                }
+            }
             
             /*if currentSetRenderScale != realityKitRenderScale {
                 currentSetRenderScale = realityKitRenderScale
@@ -1028,6 +1033,14 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             if CACurrentMediaTime() - renderer.lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != renderer.chromaKeyEnabled || settings.chromaKeyColorR != renderer.chromaKeyColor.x || settings.chromaKeyColorG != renderer.chromaKeyColor.y || settings.chromaKeyColorB != renderer.chromaKeyColor.z || settings.chromaKeyDistRangeMin != renderer.chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != renderer.chromaKeyLerpDistRange.y) {
                 renderer.lastReconfigureTime = CACurrentMediaTime()
                 needsPipelineRebuild = true
+            }
+            
+            if let videoFormat = EventHandler.shared.videoFormat {
+                let nextYuvTransform = VideoHandler.getYUVTransformForVideoFormat(videoFormat)
+                if nextYuvTransform != renderer.currentYuvTransform {
+                    needsPipelineRebuild = true
+                }
+                renderer.currentYuvTransform = nextYuvTransform
             }
             
             if needsPipelineRebuild {
@@ -1107,10 +1120,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         if EventHandler.shared.videoFormat == nil {
             frameIsSuitableForDisplaying = false
             print("Missing video format, no frame")
-        }
-        
-        if let videoFormat = EventHandler.shared.videoFormat {
-            renderer.currentYuvTransform = VideoHandler.getYUVTransformForVideoFormat(videoFormat)
         }
         
         // TODO: why does this cause framerate to go down to 45?
