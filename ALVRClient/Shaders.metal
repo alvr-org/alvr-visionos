@@ -90,6 +90,11 @@ constant float2 CHROMAKEY_LERP_DIST_RANGE [[ function_constant(ALVRFunctionConst
 constant bool REALITYKIT_ENABLED [[ function_constant(ALVRFunctionConstantRealityKitEnabled) ]];
 constant float2 VRR_SCREEN_SIZE [[ function_constant(ALVRFunctionConstantVRRScreenSize) ]];
 constant float2 VRR_PHYS_SIZE [[ function_constant(ALVRFunctionConstantVRRPhysSize) ]];
+constant float ENCODING_GAMMA [[ function_constant(ALVRFunctionConstantEncodingGamma) ]];
+constant float4 ENCODING_YUV_TRANSFORM_0 [[ function_constant(ALVRFunctionConstantEncodingYUVTransform0) ]];
+constant float4 ENCODING_YUV_TRANSFORM_1 [[ function_constant(ALVRFunctionConstantEncodingYUVTransform1) ]];
+constant float4 ENCODING_YUV_TRANSFORM_2 [[ function_constant(ALVRFunctionConstantEncodingYUVTransform2) ]];
+constant float4 ENCODING_YUV_TRANSFORM_3 [[ function_constant(ALVRFunctionConstantEncodingYUVTransform3) ]];
 
 float2 TextureToEyeUV(float2 textureUV, bool isRightEye) {
     // flip distortion horizontally for right eye
@@ -268,9 +273,8 @@ half3 rgb2hsv(half3 rgb) {
     return hsv;
 }
 
-half4 videoFrameFragmentShader_common(half3 rgb_uncorrect, constant EncodingUniform & encodingUniform) {
-    half3 color = NonlinearToLinearRGB_half(rgb_uncorrect);
-    color = EncodingNonlinearToLinearRGB_half(color, encodingUniform.encodingGamma);
+half4 videoFrameFragmentShader_common(half3 color_in) {
+    half3 color = EncodingNonlinearToLinearRGB_half(color_in, ENCODING_GAMMA);
     
     half4 colorOut = half4(color.rgb, 1.0);
     if (CHROMAKEY_ENABLED) {
@@ -302,7 +306,7 @@ half4 videoFrameFragmentShader_common(half3 rgb_uncorrect, constant EncodingUnif
     //color = linearToDisplayP3 * color;
 }
 
-fragment half4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<half> in_tex_y, texture2d<half> in_tex_uv, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
+fragment half4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]], texture2d<half> in_tex_y, texture2d<half> in_tex_uv) {
     
     float2 sampleCoord;
     if (FFR_ENABLED) {
@@ -318,12 +322,20 @@ fragment half4 videoFrameFragmentShader_YpCbCrBiPlanar(ColorInOut in [[stage_in]
     half4 uvSample = in_tex_uv.sample(colorSampler, sampleCoord);
     half4 ycbcr = half4(ySample.r, uvSample.rg, 1.0f);
     
-    half3 rgb_uncorrect = half3((matrix_half4x4(encodingUniform.yuvTransform) * ycbcr).rgb);
+    const matrix_half4x4 transform = matrix_half4x4(
+        half4(ENCODING_YUV_TRANSFORM_0),
+        half4(ENCODING_YUV_TRANSFORM_1),
+        half4(ENCODING_YUV_TRANSFORM_2),
+        half4(ENCODING_YUV_TRANSFORM_3)
+    );
     
-    return videoFrameFragmentShader_common(rgb_uncorrect, encodingUniform);
+    half3 rgb_uncorrect = half3((transform * ycbcr).rgb);
+    half3 color = NonlinearToLinearRGB_half(rgb_uncorrect);
+    
+    return videoFrameFragmentShader_common(color);
 }
 
-fragment half4 videoFrameFragmentShader_SecretYpCbCrFormats(ColorInOut in [[stage_in]], texture2d<half> in_tex_y, constant EncodingUniform & encodingUniform [[ buffer(BufferIndexEncodingUniforms) ]]) {
+fragment half4 videoFrameFragmentShader_SecretYpCbCrFormats(ColorInOut in [[stage_in]], texture2d<half> in_tex_y) {
     
     float2 sampleCoord;
     if (FFR_ENABLED) {
@@ -336,9 +348,9 @@ fragment half4 videoFrameFragmentShader_SecretYpCbCrFormats(ColorInOut in [[stag
                                    mag_filter::linear,
                                    min_filter::linear);
     
-    half3 rgb_uncorrect = in_tex_y.sample(colorSampler, sampleCoord).rgb;
+    half3 color = in_tex_y.sample(colorSampler, sampleCoord).rgb;
     
-    return videoFrameFragmentShader_common(rgb_uncorrect, encodingUniform);
+    return videoFrameFragmentShader_common(color);
 }
 
 fragment float4 videoFrameDepthFragmentShader(ColorInOut in [[stage_in]], texture2d<float> in_tex_y, texture2d<float> in_tex_uv) {

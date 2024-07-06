@@ -13,7 +13,6 @@ import ObjectiveC
 // The 256 byte aligned size of our uniform structure
 let alignedUniformsSize = (MemoryLayout<UniformsArray>.size + 0xFF) & -0x100
 let alignedPlaneUniformSize = (MemoryLayout<PlaneUniform>.size + 0xFF) & -0x100
-let alignedEncodingUniformSize = (MemoryLayout<EncodingUniform>.size + 0xFF) & -0x100
 
 let maxBuffersInFlight = 6
 let maxPlanesDrawn = 512
@@ -68,11 +67,6 @@ class Renderer {
     var planeUniformBufferOffset = 0
     var planeUniformBufferIndex = 0
     var planeUniforms: UnsafeMutablePointer<PlaneUniform>
-    
-    var dynamicEncodingUniformBuffer: MTLBuffer
-    var encodingUniformBufferOffset = 0
-    var encodingUniformBufferIndex = 0
-    var encodingUniforms: UnsafeMutablePointer<EncodingUniform>
 
     let layerRenderer: LayerRenderer?
     var metalTextureCache: CVMetalTextureCache!
@@ -148,12 +142,6 @@ class Renderer {
         self.dynamicPlaneUniformBuffer.label = "PlaneUniformBuffer"
         planeUniforms = UnsafeMutableRawPointer(dynamicPlaneUniformBuffer.contents()).bindMemory(to:PlaneUniform.self, capacity:1)
         
-        let encodingUniformBufferSize = alignedEncodingUniformSize * maxBuffersInFlight
-        self.dynamicEncodingUniformBuffer = self.device.makeBuffer(length:encodingUniformBufferSize,
-                                                           options:[MTLResourceOptions.storageModeShared])!
-        self.dynamicEncodingUniformBuffer.label = "EncodingUniformBuffer"
-        encodingUniforms = UnsafeMutableRawPointer(dynamicEncodingUniformBuffer.contents()).bindMemory(to:EncodingUniform.self, capacity:1)
-
         mtlVertexDescriptor = Renderer.buildMetalVertexDescriptor()
 
         do {
@@ -418,6 +406,11 @@ class Renderer {
         fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
         fragmentConstants.setConstantValue(&chromaKeyLerpDistRange, type: .float2, index: ALVRFunctionConstant.chromaKeyLerpDistRange.rawValue)
         fragmentConstants.setConstantValue(&isRealityKit, type: .bool, index: ALVRFunctionConstant.realityKitEnabled.rawValue)
+        fragmentConstants.setConstantValue(&encodingGamma, type: .float, index: ALVRFunctionConstant.encodingGamma.rawValue)
+        fragmentConstants.setConstantValue(&currentYuvTransform.columns.0, type: .float4, index: ALVRFunctionConstant.encodingYUVTransform0.rawValue)
+        fragmentConstants.setConstantValue(&currentYuvTransform.columns.1, type: .float4, index: ALVRFunctionConstant.encodingYUVTransform1.rawValue)
+        fragmentConstants.setConstantValue(&currentYuvTransform.columns.2, type: .float4, index: ALVRFunctionConstant.encodingYUVTransform2.rawValue)
+        fragmentConstants.setConstantValue(&currentYuvTransform.columns.3, type: .float4, index: ALVRFunctionConstant.encodingYUVTransform3.rawValue)
         
         let fragmentFunction = try library?.makeFunction(name: "videoFrameFragmentShader_" + variantName, constantValues: fragmentConstants)
 
@@ -440,10 +433,6 @@ class Renderer {
         uniformBufferIndex = (uniformBufferIndex + 1) % maxBuffersInFlight
         uniformBufferOffset = alignedUniformsSize * uniformBufferIndex
         uniforms = UnsafeMutableRawPointer(dynamicUniformBuffer.contents() + uniformBufferOffset).bindMemory(to:UniformsArray.self, capacity:1)
-        
-        encodingUniformBufferIndex = (encodingUniformBufferIndex + 1) % maxBuffersInFlight
-        encodingUniformBufferOffset = alignedEncodingUniformSize * encodingUniformBufferIndex
-        encodingUniforms = UnsafeMutableRawPointer(dynamicEncodingUniformBuffer.contents() + encodingUniformBufferOffset).bindMemory(to:EncodingUniform.self, capacity:1)
     }
     
     private func selectNextPlaneUniformBuffer() {
@@ -676,8 +665,27 @@ class Renderer {
                 }
             }
             
+            var needsPipelineRebuild = false
+            if let otherSettings = Settings.getAlvrSettings() {
+                if otherSettings.video.encoderConfig.encodingGamma != encodingGamma {
+                    needsPipelineRebuild = true
+                }
+            }
             
-            if CACurrentMediaTime() - lastReconfigureTime > 1.0 && (/*settings.chromaKeyEnabled != chromaKeyEnabled ||*/ settings.chromaKeyColorR != chromaKeyColor.x || settings.chromaKeyColorG != chromaKeyColor.y || settings.chromaKeyColorB != chromaKeyColor.z || settings.chromaKeyDistRangeMin != chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != chromaKeyLerpDistRange.y) {
+            if CACurrentMediaTime() - lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != chromaKeyEnabled || settings.chromaKeyColorR != chromaKeyColor.x || settings.chromaKeyColorG != chromaKeyColor.y || settings.chromaKeyColorB != chromaKeyColor.z || settings.chromaKeyDistRangeMin != chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != chromaKeyLerpDistRange.y) {
+                lastReconfigureTime = CACurrentMediaTime()
+                needsPipelineRebuild = true
+            }
+            
+            if let videoFormat = EventHandler.shared.videoFormat {
+                let nextYuvTransform = VideoHandler.getYUVTransformForVideoFormat(videoFormat)
+                if nextYuvTransform != currentYuvTransform {
+                    needsPipelineRebuild = true
+                }
+                currentYuvTransform = nextYuvTransform
+            }
+            
+            if needsPipelineRebuild {
                 lastReconfigureTime = CACurrentMediaTime()
                 let rebuildThread = Thread {
                     self.rebuildRenderPipelines()
@@ -746,10 +754,6 @@ class Renderer {
         if EventHandler.shared.videoFormat == nil {
             frameIsSuitableForDisplaying = false
             print("Missing video format, no frame")
-        }
-        
-        if let videoFormat = EventHandler.shared.videoFormat {
-            currentYuvTransform = VideoHandler.getYUVTransformForVideoFormat(videoFormat)
         }
         
         // TODO: check layerRenderer.configuration.layout == .layered ?
@@ -990,7 +994,6 @@ class Renderer {
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
-        renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue) // unused
         
         renderEncoder.setViewports(viewports)
         
@@ -1038,7 +1041,6 @@ class Renderer {
         renderEncoder.setViewports(viewports)
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
-        renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue) // unused
         
         if viewports.count > 1 {
             var viewMappings = (0..<viewports.count).map {
@@ -1192,15 +1194,31 @@ class Renderer {
             renderEncoder.setFragmentTexture(metalTexture, index: i)
         }
         
+        // Snoop for pixel formats
+        /*for idx in 620..<0xFFFF {
+            guard let format = MTLPixelFormat.init(rawValue: UInt(idx)) else {
+                continue
+            }
+            do {
+                var desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: MTLPixelFormat.invalid, width: 1, height:1, mipmapped: false)
+                desc.pixelFormat = format
+                for line in desc.debugDescription.split(separator: "\n") {
+                    if line.contains("pixelFormat") {
+                        print(idx, line)
+                        break
+                    }
+                }
+            }
+            catch {
+                continue
+            }
+        }*/
+        
         renderEncoder.setCullMode(.back)
         renderEncoder.setFrontFacing(.counterClockwise)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
-        
-        self.encodingUniforms[0].yuvTransform = currentYuvTransform
-        self.encodingUniforms[0].encodingGamma = encodingGamma
-        renderEncoder.setFragmentBuffer(dynamicEncodingUniformBuffer, offset:encodingUniformBufferOffset, index: BufferIndex.encodingUniforms.rawValue)
-        
+
         return renderEncoder
     }
     
