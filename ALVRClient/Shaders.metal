@@ -154,7 +154,7 @@ float2 decompressAxisAlignedCoord(float2 uv) {
 
 // VERTEX_SHADER
 
-ColorInOut videoFrameVertexShaderCommon(uint vertexID [[vertex_id]],
+ColorInOut videoFrameVertexShaderCommon(ushort vertexID [[vertex_id]],
                                int which,
                                matrix_float4x4 projectionMatrix,
                                matrix_float4x4 modelViewMatrixFrame,
@@ -162,7 +162,7 @@ ColorInOut videoFrameVertexShaderCommon(uint vertexID [[vertex_id]],
 {
     ColorInOut out;
 
-    float2 uv = float2(float((vertexID << uint(1)) & 2u) * 0.5, 1.0 - (float(vertexID & 2u) * 0.5));
+    float2 uv = float2(float((vertexID << ushort(1)) & 2u) * 0.5, 1.0 - (float(vertexID & ushort(2)) * 0.5));
     float4 position = float4((uv * float2(2.0, -2.0)) + float2(-1.0, 1.0), -500.0, 1.0);
 
     if (position.x < 1.0) {
@@ -187,7 +187,7 @@ ColorInOut videoFrameVertexShaderCommon(uint vertexID [[vertex_id]],
     return out;
 }
 
-vertex ColorInOut videoFrameVertexShader(uint vertexID [[vertex_id]],
+vertex ColorInOut videoFrameVertexShader(ushort vertexID [[vertex_id]],
                                ushort amp_id [[amplification_id]],
                                constant UniformsArray & uniformsArray [[ buffer(BufferIndexUniforms) ]])
 {
@@ -221,12 +221,9 @@ half3 NonlinearToLinearRGB_half(half3 color) {
     const half DIV12 = 1. / 12.92;
     const half DIV1 = 1. / 1.055;
     const half THRESHOLD = 0.04045;
-    const half3 GAMMA = half3(2.4);
-        
-    half3 condition = half3(color.r < THRESHOLD, color.g < THRESHOLD, color.b < THRESHOLD);
-    half3 lowValues = color * DIV12;
-    half3 highValues = pow((color + 0.055) * DIV1, GAMMA);
-    return condition * lowValues + (1.0 - condition) * highValues;
+    const half GAMMA = 2.4;
+      
+    return half3(color.r < THRESHOLD ? (color.r * DIV12) : pow((color.r + 0.055h) * DIV1, GAMMA), color.g < THRESHOLD ? (color.g * DIV12) : pow((color.g + 0.055h) * DIV1, GAMMA), color.b < THRESHOLD ? (color.b * DIV12) : pow((color.b + 0.055h) * DIV1, GAMMA));
 }
 
 half3 EncodingNonlinearToLinearRGB_half(half3 color, half gamma) {
@@ -362,11 +359,12 @@ struct CopyVertexOut {
     float2 uv;
 };
 
-vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]]) {
+vertex CopyVertexOut copyVertexShader(ushort vertexID [[vertex_id]]) {
     CopyVertexOut out;
-    float2 uv = float2(float((vertexID << uint(1)) & 2u), float(vertexID & 2u));
-    out.position = float4((uv * float2(2.0, -2.0)) + float2(-1.0, 1.0), 0.0, 1.0);
-    out.uv = uv;
+    float otherEye = (vertexID & 4u) ? 1.0 : 0.0;
+    float2 uv = float2(float((vertexID << ushort(1)) & 2u), float(vertexID & ushort(2)) * 0.5);
+    out.position = float4((uv * float2(2.0, -1.0)) + float2(-1.0, otherEye), otherEye, 1.0);
+    out.uv = uv * VRR_SCREEN_SIZE;
     return out;
 }
 
@@ -374,16 +372,10 @@ fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array
     constexpr sampler colorSampler(coord::pixel,
                     address::clamp_to_edge,
                     filter::linear);
-    uint idx = 1;
-    if (in.uv.y >= 0.5) {
-        idx = 0;
-    }
+    ushort idx = in.position.z != 0.0 ? 1 : 0;
     
     rasterization_rate_map_decoder map(vrr);
     float2 uv = in.uv;
-    uv.y = (fmod(uv.y, 0.5)) * 2.0;
-    uv = map.map_screen_to_physical_coordinates(uv * VRR_SCREEN_SIZE, idx);
-    //uv /= VRR_PHYS_SIZE;
     
     half4 color = in_tex.sample(colorSampler, uv, idx);
     //if (color.a <= 0.0) {

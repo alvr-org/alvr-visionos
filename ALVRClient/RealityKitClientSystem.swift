@@ -477,8 +477,12 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         // Keep a constant texture size, but allow the VRR to change the viewports
         // TODO: per-frame viewports.
-        currentOffscreenRenderWidth = layerWidth//vrrMap.physicalSize(layer: 0).width
-        currentOffscreenRenderHeight = layerHeight//vrrMap.physicalSize(layer: 0).height
+        currentOffscreenRenderWidth = layerWidth
+        currentOffscreenRenderHeight = layerHeight
+        
+        //currentOffscreenRenderWidth = vrrMap.physicalSize(layer: 0).width
+        //currentOffscreenRenderHeight = vrrMap.physicalSize(layer: 0).height
+        
         
         //print("Offscreen render res foveated:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
         return vrrMap
@@ -613,7 +617,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         renderEncoder.setRenderPipelineState(to.pixelFormat == renderColorFormatDrawableHDR ? passthroughPipelineStateHDR! : passthroughPipelineState!)
         renderEncoder.setFragmentTexture(from, index: 0)
         renderEncoder.setFragmentBuffer(vrrMapBuffer, offset: 0, index: BufferIndex.VRR.rawValue)
+        renderEncoder.setCullMode(.none)
+        renderEncoder.setFrontFacing(.counterClockwise)
+        
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 4, vertexCount: 4)
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
     }
