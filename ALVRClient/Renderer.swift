@@ -336,7 +336,7 @@ class Renderer {
         fragmentConstants.setConstantValue(&mutVrrScreenSize, type: .float2, index: ALVRFunctionConstant.vrrScreenSize.rawValue)
         fragmentConstants.setConstantValue(&mutVrrPhysSize, type: .float2, index: ALVRFunctionConstant.vrrPhysSize.rawValue)
 
-        let vertexFunction = library?.makeFunction(name: vertexShaderName)
+        let vertexFunction = try! library?.makeFunction(name: vertexShaderName, constantValues: fragmentConstants)
         let fragmentFunction = try! library?.makeFunction(name: fragmentShaderName, constantValues: fragmentConstants)
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
@@ -1052,6 +1052,7 @@ class Renderer {
         
         renderEncoder.setRenderPipelineState(pipelineState)
         renderEncoder.setDepthStencilState(depthStateGreater)
+        renderEncoder.setDepthClipMode(.clamp)
         
         WorldTracker.shared.lockPlaneAnchors()
         
@@ -1139,8 +1140,6 @@ class Renderer {
         
         renderEncoder.label = "Primary Render Encoder"
         renderEncoder.pushDebugGroup("Draw ALVR Frames")
-        renderEncoder.setCullMode(.back)
-        renderEncoder.setFrontFacing(.counterClockwise)
         
         guard let queuedFrame = queuedFrame else {
             renderEncoder.endEncoding()
@@ -1161,21 +1160,15 @@ class Renderer {
         
         //print("Pixel format \(formatStr) (\(format))")
         let textureTypes = VideoHandler.getTextureTypesForFormat(CVPixelBufferGetPixelFormatType(pixelBuffer))
-        let realWidth = CVPixelBufferGetWidth(pixelBuffer)
-        let realHeight = CVPixelBufferGetHeight(pixelBuffer)
+        
         for i in 0...1 {
             var textureOut:CVMetalTexture! = nil
             var err:OSStatus = 0
-            var width = realWidth
-            var height = realHeight
+            let width = CVPixelBufferGetWidthOfPlane(pixelBuffer, i)
+            let height = CVPixelBufferGetHeightOfPlane(pixelBuffer, i)
             
             if textureTypes[i] == MTLPixelFormat.invalid {
                 break
-            }
-            
-            if i == 1 {
-                width /= 2
-                height /= 2
             }
             
             err = CVMetalTextureCacheCreateTextureFromImage(
@@ -1214,7 +1207,7 @@ class Renderer {
             }
         }*/
         
-        renderEncoder.setCullMode(.back)
+        renderEncoder.setCullMode(.none)
         renderEncoder.setFrontFacing(.counterClockwise)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)

@@ -6,6 +6,8 @@ import Foundation
 import VideoToolbox
 import AVKit
 
+let forceFastSecretTextureFormats = true
+
 let H264_NAL_TYPE_SPS = 7
 let HEVC_NAL_TYPE_VPS = 32
 
@@ -253,7 +255,7 @@ struct VideoHandler {
                  kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
                  kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange,
                  kCVPixelFormatType_444YpCbCr8BiPlanarFullRange:
-                return [MTLPixelFormat.r8Unorm, MTLPixelFormat.rg8Unorm]
+                return forceFastSecretTextureFormats ? [MTLPixelFormat.init(rawValue: MTLPixelFormatYCBCR8_420_2P_sRGB)!, MTLPixelFormat.invalid] : [MTLPixelFormat.r8Unorm, MTLPixelFormat.rg8Unorm]
 
             // 10-bit biplanar
             case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
@@ -262,7 +264,7 @@ struct VideoHandler {
                  kCVPixelFormatType_422YpCbCr10BiPlanarFullRange,
                  kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange,
                  kCVPixelFormatType_444YpCbCr10BiPlanarFullRange:
-                return [MTLPixelFormat.r16Unorm, MTLPixelFormat.rg16Unorm]
+                return forceFastSecretTextureFormats ? [MTLPixelFormat.init(rawValue: MTLPixelFormatYCBCR10_420_2P_sRGB)!, MTLPixelFormat.invalid] : [MTLPixelFormat.r16Unorm, MTLPixelFormat.rg16Unorm]
 
             //
             // If it's good enough for WebKit, it's good enough for me.
@@ -286,7 +288,7 @@ struct VideoHandler {
                  kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarFullRange,
                  kCVPixelFormatType_422YpCbCr10PackedBiPlanarFullRange,
                  kCVPixelFormatType_422YpCbCr10PackedBiPlanarVideoRange:
-            return [MTLPixelFormat.init(rawValue: MTLPixelFormatYCBCR10_422_2P_PACKED_sRGB)!, MTLPixelFormat.invalid] // MTLPixelFormatYCBCR10_422_2P_PACKED
+                return [MTLPixelFormat.init(rawValue: MTLPixelFormatYCBCR10_422_2P_PACKED_sRGB)!, MTLPixelFormat.invalid] // MTLPixelFormatYCBCR10_422_2P_PACKED
             
             // 10-bit packed biplanar 4:4:4
             case kCVPixelFormatType_444YpCbCr10PackedBiPlanarFullRange,
@@ -304,6 +306,7 @@ struct VideoHandler {
     static func isFormatSecret(_ format: OSType) -> Bool
     {
         switch(format) {
+            // Packed formats, requires secret MTLTexture pixel formats
             case kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarFullRange,
@@ -318,7 +321,31 @@ struct VideoHandler {
                  kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_422YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_444YpCbCr10PackedBiPlanarVideoRange:
-                return true
+            return true;
+            
+            // Not packed, but there's still a nice pixel format for them that's a
+            // few hundred microseconds faster.
+            case kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange, // 8-bit
+                 kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange,
+                 kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                 kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_422YpCbCr8BiPlanarVideoRange,
+                 kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                 kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange,
+                 kCVPixelFormatType_444YpCbCr8BiPlanarFullRange,
+                 
+                 // 10-bit
+                 kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+                 kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
+                 kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange,
+                 kCVPixelFormatType_422YpCbCr10BiPlanarFullRange,
+                 kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange,
+                 kCVPixelFormatType_444YpCbCr10BiPlanarFullRange:
+                return forceFastSecretTextureFormats
             default:
                 return false
         }
