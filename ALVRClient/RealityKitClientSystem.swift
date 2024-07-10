@@ -12,6 +12,7 @@ import MetalKit
 import Spatial
 import AVFoundation
 
+let vrrGridSize = 128
 let renderWidthReal = Int(1920)
 let renderHeightReal = Int(1824)
 let renderWidth = Int(renderWidthReal+256+32+8+2) // TODO just use VRR to fix this, we have 256x80 pixels unused at the edges (IPD dependent?)
@@ -420,11 +421,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
 
 
-        let layerWidth = Int(currentOffscreenRenderWidth / 256) * 256
-        let layerHeight = Int(currentOffscreenRenderHeight / 256) * 256
+        let layerWidth = Int(currentOffscreenRenderWidth / vrrGridSize) * vrrGridSize
+        let layerHeight = Int(currentOffscreenRenderHeight / vrrGridSize) * vrrGridSize
         descriptor.screenSize = MTLSizeMake(layerWidth, layerHeight, 2)
 
-        let zoneCounts = MTLSizeMake(256, 256, 2)
+        let zoneCounts = MTLSizeMake(vrrGridSize, vrrGridSize, 2)
         for i in 0..<zoneCounts.depth {
             let layerDescriptor = MTLRasterizationRateLayerDescriptor(sampleCount: zoneCounts)
             
@@ -616,12 +617,14 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         renderEncoder.pushDebugGroup("Copy Texture to Texture")
         renderEncoder.setRenderPipelineState(to.pixelFormat == renderColorFormatDrawableHDR ? passthroughPipelineStateHDR! : passthroughPipelineState!)
         renderEncoder.setFragmentTexture(from, index: 0)
-        renderEncoder.setFragmentBuffer(vrrMapBuffer, offset: 0, index: BufferIndex.VRR.rawValue)
+        renderEncoder.setVertexBuffer(vrrMapBuffer, offset: 0, index: BufferIndex.VRR.rawValue)
         renderEncoder.setCullMode(.none)
         renderEncoder.setFrontFacing(.counterClockwise)
-        
-        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 4, vertexCount: 4)
+
+        for i in 0..<(vrrGridSize*2)-1 {
+            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: i*vrrGridSize*2, vertexCount: vrrGridSize*2)
+        }
+
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
     }
