@@ -71,6 +71,7 @@ class Renderer {
     let layerRenderer: LayerRenderer?
     var metalTextureCache: CVMetalTextureCache!
     let mtlVertexDescriptor: MTLVertexDescriptor
+    let mtlVertexDescriptorNoUV: MTLVertexDescriptor
     var videoFramePipelineState_YpCbCrBiPlanar: MTLRenderPipelineState!
     var videoFramePipelineState_SecretYpCbCrFormats: MTLRenderPipelineState!
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
@@ -143,6 +144,7 @@ class Renderer {
         planeUniforms = UnsafeMutableRawPointer(dynamicPlaneUniformBuffer.contents()).bindMemory(to:PlaneUniform.self, capacity:1)
         
         mtlVertexDescriptor = Renderer.buildMetalVertexDescriptor()
+        mtlVertexDescriptorNoUV = Renderer.buildMetalVertexDescriptorNoUV()
 
         do {
             pipelineState = try Renderer.buildRenderPipelineWithDevice(device: device,
@@ -267,6 +269,23 @@ class Renderer {
 
         return mtlVertexDescriptor
     }
+    
+    class func buildMetalVertexDescriptorNoUV() -> MTLVertexDescriptor {
+        // Create a Metal vertex descriptor specifying how vertices will by laid out for input into our render
+        //   pipeline and how we'll layout our Model IO vertices
+
+        let mtlVertexDescriptor = MTLVertexDescriptor()
+
+        mtlVertexDescriptor.attributes[VertexAttribute.position.rawValue].format = MTLVertexFormat.float3
+        mtlVertexDescriptor.attributes[VertexAttribute.position.rawValue].offset = 0
+        mtlVertexDescriptor.attributes[VertexAttribute.position.rawValue].bufferIndex = BufferIndex.meshPositions.rawValue
+
+        mtlVertexDescriptor.layouts[BufferIndex.meshPositions.rawValue].stride = 12
+        mtlVertexDescriptor.layouts[BufferIndex.meshPositions.rawValue].stepRate = 1
+        mtlVertexDescriptor.layouts[BufferIndex.meshPositions.rawValue].stepFunction = MTLVertexStepFunction.perVertex
+
+        return mtlVertexDescriptor
+    }
 
     class func buildRenderPipelineWithDevice(device: MTLDevice,
                                              mtlVertexDescriptor: MTLVertexDescriptor,
@@ -343,6 +362,7 @@ class Renderer {
         pipelineDescriptor.label = "RenderPipeline"
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
+        pipelineDescriptor.vertexDescriptor = mtlVertexDescriptorNoUV
 
         pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
         pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
