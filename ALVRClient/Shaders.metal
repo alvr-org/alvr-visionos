@@ -364,16 +364,16 @@ struct CopyVertexOut {
     float2 uv;
 };
 
-vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]], constant rasterization_rate_map_data &vrr [[buffer(BufferIndexVRR)]]) {
+vertex CopyVertexOut copyVertexShader(constant VertexPosOnly* inArr [[buffer(BufferIndexMeshPositions)]], uint vertexID [[vertex_id]], constant rasterization_rate_map_data &vrr [[buffer(BufferIndexVRR)]]) {
     CopyVertexOut out;
     rasterization_rate_map_decoder map(vrr);
     
-    // TODO: maybe just use a vertex buffer lol
-    const uint gridSize = 128;
+    // generate vertices in-shader, not sure if fast or slow tbh
+    /*const uint gridSize = 128;
 
     ushort x = (vertexID >> 1) % gridSize;
-    ushort y = (vertexID & 1) + (((vertexID >> 1) / gridSize) % gridSize);
-    ushort idx = (vertexID >= gridSize*gridSize*2) ? 1 : 0;
+    ushort y = (vertexID & 1) + (((vertexID >> 1) / gridSize) % (gridSize-1));
+    ushort idx = (vertexID >= (gridSize-1)*gridSize*2) ? 1 : 0;
     float otherEye = idx ? 1.0 : 0.0;
 
     // Normalize coordinates to the range [0, 1]
@@ -383,6 +383,12 @@ vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]], constant rast
     );
 
     // Normalize coordinates to the range [-1, 1]ish
+    out.position = float4((uv * float2(2.0, -1.0)) + float2(-1.0, otherEye), otherEye, 1.0);
+    out.uv = map.map_screen_to_physical_coordinates(uv * VRR_SCREEN_SIZE, idx);*/
+    
+    float2 uv = inArr[vertexID].position.xy;
+    float otherEye = inArr[vertexID].position.z;
+    ushort idx = (otherEye != 0.0) ? 1.0 : 0.0;
     out.position = float4((uv * float2(2.0, -1.0)) + float2(-1.0, otherEye), otherEye, 1.0);
     out.uv = map.map_screen_to_physical_coordinates(uv * VRR_SCREEN_SIZE, idx);
     
@@ -396,28 +402,8 @@ fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array
                     filter::linear);
     ushort idx = in.position.z != 0.0 ? 1 : 0;
     
-    //rasterization_rate_map_decoder map(vrr);
-    //float2 uv = map.map_screen_to_physical_coordinates(in.uv, idx);
-    
     half4 color = in_tex.sample(colorSampler, in.uv, idx);
     //half4 color = half4(in.uv.x, in.uv.y, 0.0, 1.0);
-    //if (color.a <= 0.0) {
-    //    discard_fragment();
-    //}
-    /*if (CHROMAKEY_ENABLED) {
-        half4 chromaKeyHSV = half4(rgb2hsv(half3(CHROMAKEY_COLOR)), 1.0);
-        half4 newHSV = half4(rgb2hsv(color.rgb), 1.0);
-        half mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, half2(CHROMAKEY_LERP_DIST_RANGE));
-        if (mask <= 0.0) {
-            discard_fragment();
-        }
-        
-        color = half4((color.rgb * mask) - (half3(CHROMAKEY_COLOR) * (1.0 - mask)), color.a * mask);
-        return color;
-        //return float4(color.rgb, mask);
-    }
-    else {
-        return color;
-    }*/
+
     return color;
 }
