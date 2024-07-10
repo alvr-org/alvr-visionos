@@ -439,41 +439,73 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         let layerHeight = Int(currentOffscreenRenderHeight / vrrGridSize) * vrrGridSize
         descriptor.screenSize = MTLSizeMake(layerWidth, layerHeight, 2)
 
+        // i==0 => left eye, i==1 -> right eye
         let zoneCounts = MTLSizeMake(vrrGridSize, vrrGridSize, 2)
         for i in 0..<zoneCounts.depth {
             let layerDescriptor = MTLRasterizationRateLayerDescriptor(sampleCount: zoneCounts)
             
-            
-            let innerWidthX = 5//zoneCounts.width/2
-            let innerWidthY = 7//zoneCounts.height/2
-            let innerStartX = (zoneCounts.width - innerWidthX) / 2
+            // These are all hardcoded for 64 zones atm
+            let innerWidthX = 7//zoneCounts.width/2
+            let innerWidthY = 14//zoneCounts.height/2
+            let innerShiftX = i == 0 ? 0 : -2
+            let innerShiftY = 4
+            let innerStartX = ((zoneCounts.width - innerWidthX) / 2) + innerShiftX
             let innerEndX = (innerStartX + innerWidthX)
-            let innerStartY = (zoneCounts.height - innerWidthY) / 2
-            let innerEndY = (innerStartX + innerWidthY)
+            let innerStartY = ((zoneCounts.height - innerWidthY) / 2) + innerShiftY
+            let innerEndY = (innerStartY + innerWidthY)
+            let cutoffStartX = min(i == 0 ? 2 : 14, innerStartX) // TODO: remove when I do per-eye transforms
+            let cutoffEndX = min(i == 0 ? 14 : 2, zoneCounts.width-innerEndX) // TODO: remove when I do per-eye transforms
             
             let innerVal: Float = 1.0
             let outerVal: Float = 1.0
-            let edgeValStepX: Float = outerVal/Float(innerStartY)
-            let edgeValStepY: Float = outerVal/Float(innerStartX)
+            let edgeValStepY1: Float = outerVal/Float(innerStartY)
+            let edgeValStepY2: Float = outerVal/Float(zoneCounts.height-innerEndY)
+            let edgeValStepX1: Float = outerVal/Float(innerStartX-cutoffStartX)
+            let edgeValStepX2: Float = outerVal/Float(zoneCounts.width-innerEndX-cutoffEndX)
             
+            //print("asdf", i, cutoffStartX, cutoffEndX, innerStartX, innerEndX, edgeValStepX1, edgeValStepX2)
+            
+            // Initialize Just In Case(tm)
+            for row in 0..<zoneCounts.height {
+                layerDescriptor.vertical[row] = 1.0/256.0
+            }
+            for column in 0..<zoneCounts.width {
+                layerDescriptor.horizontal[column] = 1.0/256.0
+            }
+            
+            // Vertical rates
             for row in 0..<innerStartY {
-                layerDescriptor.vertical[row] = Float(row) * edgeValStepY
+                layerDescriptor.vertical[row] = Float(row) * edgeValStepY1
             }
             for row in innerStartY..<innerEndY {
                 layerDescriptor.vertical[row] = innerVal
             }
             for row in innerEndY..<zoneCounts.height {
-                layerDescriptor.vertical[row] = Float(innerStartY - (row - innerEndY)) * edgeValStepY
+                layerDescriptor.vertical[row] = Float(zoneCounts.height - row) * edgeValStepY2
             }
             
-            for column in 0..<innerStartX {
-                layerDescriptor.horizontal[column] = Float(column) * edgeValStepX
+            // Horizontal Rates
+            for column in cutoffStartX..<innerStartX {
+                layerDescriptor.horizontal[column] = Float(column-cutoffStartX) * edgeValStepX1
             }
             for column in innerStartX..<innerEndX {
                 layerDescriptor.horizontal[column] = innerVal
             }
-            for column in innerEndX..<zoneCounts.width {
-                layerDescriptor.horizontal[column] = Float(innerStartX - (column - innerEndX)) * edgeValStepX
+            for column in innerEndX..<zoneCounts.width-cutoffEndX {
+                layerDescriptor.horizontal[column] = Float((zoneCounts.width-cutoffEndX) - column) * edgeValStepX2
+            }
+            
+            for row in 0..<zoneCounts.height {
+                if layerDescriptor.vertical[row] <= 0.0 {
+                    layerDescriptor.vertical[row] = 1.0 / 256.0
+                }
+                //print("row", row, layerDescriptor.vertical[row])
+            }
+            for column in 0..<zoneCounts.width {
+                if layerDescriptor.horizontal[column] <= 0.0 {
+                    layerDescriptor.horizontal[column] = 1.0 / 256.0
+                }
+                //print("col", column, layerDescriptor.horizontal[column])
             }
 
             descriptor.setLayer(layerDescriptor, at: i)
