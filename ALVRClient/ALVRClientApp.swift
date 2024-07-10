@@ -87,6 +87,7 @@ struct ALVRClientApp: App {
     • Improved tracking stability while throttled.\n\
     • Removed MetalFX due to performance issues, and to simplify rendering.\n\
     • Added basic variable rasterization rate drawing in periphery to attempt to save power.\n\
+    • Significantly improved rendering performance, allowing higher resolutions with less power draw.\n\
     \n\
     ________________________________\n\
     \n\
