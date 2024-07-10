@@ -20,6 +20,11 @@ typedef struct
 
 typedef struct
 {
+    float3 position [[attribute(VertexAttributePosition)]];
+} VertexPosOnly;
+
+typedef struct
+{
     float4 position [[position]];
     float4 viewPosition;
     float4 color;
@@ -359,25 +364,43 @@ struct CopyVertexOut {
     float2 uv;
 };
 
-vertex CopyVertexOut copyVertexShader(ushort vertexID [[vertex_id]]) {
+vertex CopyVertexOut copyVertexShader(uint vertexID [[vertex_id]], constant rasterization_rate_map_data &vrr [[buffer(BufferIndexVRR)]]) {
     CopyVertexOut out;
-    float otherEye = (vertexID & 4u) ? 1.0 : 0.0;
-    float2 uv = float2(float((vertexID << ushort(1)) & 2u), float(vertexID & ushort(2)) * 0.5);
+    rasterization_rate_map_decoder map(vrr);
+    
+    // TODO: maybe just use a vertex buffer lol
+    const uint gridSize = 128;
+
+    ushort x = (vertexID >> 1) % gridSize;
+    ushort y = (vertexID & 1) + (((vertexID >> 1) / gridSize) % gridSize);
+    ushort idx = (vertexID >= gridSize*gridSize*2) ? 1 : 0;
+    float otherEye = idx ? 1.0 : 0.0;
+
+    // Normalize coordinates to the range [0, 1]
+    float2 uv = float2(
+        (float(x) / float(gridSize - 1)),
+        (float(y) / float(gridSize - 1))
+    );
+
+    // Normalize coordinates to the range [-1, 1]ish
     out.position = float4((uv * float2(2.0, -1.0)) + float2(-1.0, otherEye), otherEye, 1.0);
-    out.uv = uv * VRR_SCREEN_SIZE;
+    out.uv = map.map_screen_to_physical_coordinates(uv * VRR_SCREEN_SIZE, idx);
+    
     return out;
 }
 
-fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array<half> in_tex, constant rasterization_rate_map_data &vrr [[buffer(BufferIndexVRR)]]) {
+//constant rasterization_rate_map_data &vrr [[buffer(BufferIndexVRR)]]
+fragment half4 copyFragmentShader(CopyVertexOut in [[stage_in]], texture2d_array<half> in_tex) {
     constexpr sampler colorSampler(coord::pixel,
                     address::clamp_to_edge,
                     filter::linear);
     ushort idx = in.position.z != 0.0 ? 1 : 0;
     
-    rasterization_rate_map_decoder map(vrr);
-    float2 uv = in.uv;
+    //rasterization_rate_map_decoder map(vrr);
+    //float2 uv = map.map_screen_to_physical_coordinates(in.uv, idx);
     
-    half4 color = in_tex.sample(colorSampler, uv, idx);
+    half4 color = in_tex.sample(colorSampler, in.uv, idx);
+    //half4 color = half4(in.uv.x, in.uv.y, 0.0, 1.0);
     //if (color.a <= 0.0) {
     //    discard_fragment();
     //}
