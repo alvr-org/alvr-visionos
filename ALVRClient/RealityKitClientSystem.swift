@@ -12,7 +12,7 @@ import MetalKit
 import Spatial
 import AVFoundation
 
-let vrrGridSize = 128
+let vrrGridSize = 64
 let renderWidthReal = Int(1920)
 let renderHeightReal = Int(1824)
 let renderWidth = Int(renderWidthReal+256+32+8+2) // TODO just use VRR to fix this, we have 256x80 pixels unused at the edges (IPD dependent?)
@@ -318,6 +318,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var renderer: Renderer
     
     var renderTangents = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
+    var copyVertices = [simd_float3](repeating: simd_float3(), count: ((vrrGridSize-1)*vrrGridSize*2)*2)
+    var copyVerticesBuffer: MTLBuffer? = nil
     
     required init(scene: RealityKit.Scene) {
         print("system init")
@@ -331,6 +333,18 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         renderTangents = DummyMetalRenderer.renderTangents
         for i in 0..<renderTangents.count {
             renderTangents[i] *= settings.fovRenderScale
+        }
+        
+        // Generate VRR mesh
+        for vertexID in 0..<((vrrGridSize-1)*vrrGridSize*2)*2 {
+            var x = (vertexID >> 1) % vrrGridSize
+            var y = (vertexID & 1) + (((vertexID >> 1) / vrrGridSize) % (vrrGridSize-1))
+            var which = (vertexID >= (vrrGridSize-1)*vrrGridSize*2) ? 1 : 0
+            
+            copyVertices[vertexID] = simd_float3((Float(x) / Float(vrrGridSize - 1)), (Float(y) / Float(vrrGridSize - 1)), (which != 0) ? 1.0 : 0.0)
+        }
+        copyVertices.withUnsafeBytes {
+            copyVerticesBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
         }
 
         currentSetRenderScale = realityKitRenderScale
@@ -430,8 +444,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             let layerDescriptor = MTLRasterizationRateLayerDescriptor(sampleCount: zoneCounts)
             
             
-            let innerWidthX = 20//zoneCounts.width/2
-            let innerWidthY = 25//zoneCounts.height/2
+            let innerWidthX = 5//zoneCounts.width/2
+            let innerWidthY = 7//zoneCounts.height/2
             let innerStartX = (zoneCounts.width - innerWidthX) / 2
             let innerEndX = (innerStartX + innerWidthX)
             let innerStartY = (zoneCounts.height - innerWidthY) / 2
@@ -621,7 +635,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         renderEncoder.setCullMode(.none)
         renderEncoder.setFrontFacing(.counterClockwise)
 
-        for i in 0..<(vrrGridSize*2)-1 {
+        renderEncoder.setVertexBuffer(copyVerticesBuffer, offset: 0, index: VertexAttribute.position.rawValue)
+
+        for i in 0..<(vrrGridSize*2)-2 {
             renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: i*vrrGridSize*2, vertexCount: vrrGridSize*2)
         }
 
