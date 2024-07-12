@@ -13,10 +13,8 @@ import Spatial
 import AVFoundation
 
 let vrrGridSize = 64
-let renderWidthReal = Int(1920)
-let renderHeightReal = Int(1824)
-let renderWidth = Int(renderWidthReal+256+32+8+2) // TODO just use VRR to fix this, we have 256x80 pixels unused at the edges (IPD dependent?)
-let renderHeight = Int(renderHeightReal+80+4)
+let renderWidth = Int(1920)
+let renderHeight = Int(1824)
 let renderScale = 1.75
 let renderColorFormatSDR = MTLPixelFormat.bgra8Unorm_srgb // rgba8Unorm, rgba8Unorm_srgb, bgra8Unorm, bgra8Unorm_srgb, rgba16Float
 let renderColorFormatHDR = MTLPixelFormat.rgba16Float // bgr10_xr_srgb? rg11b10Float? rgb9e5?--rgb9e5 is probably not renderable.
@@ -121,19 +119,33 @@ class RealityKitClientSystem : System {
             anchor.name = "backdrop_headanchor"
             anchor.position = simd_float3(0.0, 0.0, 0.0)
             
-            let videoPlaneA = ModelEntity(mesh: videoPlaneMesh, materials: [material])
-            videoPlaneA.name = "video_plane_a"
-            videoPlaneA.components.set(MagicRealityKitClientSystemComponent())
-            videoPlaneA.components.set(InputTargetComponent())
-            videoPlaneA.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
-            videoPlaneA.scale = simd_float3(0.0, 0.0, 0.0)
+            let videoPlaneA_L = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            videoPlaneA_L.name = "video_plane_a_L"
+            videoPlaneA_L.components.set(MagicRealityKitClientSystemComponent())
+            videoPlaneA_L.components.set(InputTargetComponent())
+            videoPlaneA_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            videoPlaneA_L.scale = simd_float3(0.0, 0.0, 0.0)
             
-            let videoPlaneB = ModelEntity(mesh: videoPlaneMesh, materials: [material])
-            videoPlaneB.name = "video_plane_b"
-            videoPlaneB.components.set(MagicRealityKitClientSystemComponent())
-            videoPlaneB.components.set(InputTargetComponent())
-            videoPlaneB.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
-            videoPlaneB.scale = simd_float3(0.0, 0.0, 0.0)
+            let videoPlaneB_L = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            videoPlaneB_L.name = "video_plane_b_L"
+            videoPlaneB_L.components.set(MagicRealityKitClientSystemComponent())
+            videoPlaneB_L.components.set(InputTargetComponent())
+            videoPlaneB_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            videoPlaneB_L.scale = simd_float3(0.0, 0.0, 0.0)
+            
+            let videoPlaneA_R = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            videoPlaneA_R.name = "video_plane_a_R"
+            videoPlaneA_R.components.set(MagicRealityKitClientSystemComponent())
+            videoPlaneA_R.components.set(InputTargetComponent())
+            videoPlaneA_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            videoPlaneA_R.scale = simd_float3(0.0, 0.0, 0.0)
+            
+            let videoPlaneB_R = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            videoPlaneB_R.name = "video_plane_b_R"
+            videoPlaneB_R.components.set(MagicRealityKitClientSystemComponent())
+            videoPlaneB_R.components.set(InputTargetComponent())
+            videoPlaneB_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            videoPlaneB_R.scale = simd_float3(0.0, 0.0, 0.0)
 
             let backdrop = ModelEntity(mesh: videoPlaneMesh, materials: [material2])
             backdrop.name = "backdrop_plane"
@@ -141,8 +153,10 @@ class RealityKitClientSystem : System {
             
             anchor.addChild(backdrop)
 
-            content.add(videoPlaneA)
-            content.add(videoPlaneB)
+            content.add(videoPlaneA_L)
+            content.add(videoPlaneB_L)
+            content.add(videoPlaneA_R)
+            content.add(videoPlaneB_R)
             content.add(anchor)
         }
     }
@@ -265,11 +279,17 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     let visionPro = VisionPro()
     var lastUpdateTime = 0.0
     var drawableQueueA: DrawableWrapper? = nil
-    private(set) var surfaceMaterialA: ShaderGraphMaterial? = nil
-    private var textureResourceA: TextureResource? = nil
     var drawableQueueB: DrawableWrapper? = nil
-    private(set) var surfaceMaterialB: ShaderGraphMaterial? = nil
+    private var textureResourceA: TextureResource? = nil
     private var textureResourceB: TextureResource? = nil
+    private(set) var surfaceMaterialA_L: ShaderGraphMaterial? = nil
+    private(set) var surfaceMaterialB_L: ShaderGraphMaterial? = nil
+    private(set) var surfaceMaterialA_R: ShaderGraphMaterial? = nil
+    private(set) var surfaceMaterialB_R: ShaderGraphMaterial? = nil
+    var setPlaneMaterialA_L = false
+    var setPlaneMaterialB_L = false
+    var setPlaneMaterialA_R = false
+    var setPlaneMaterialB_R = false
     var passthroughPipelineState: MTLRenderPipelineState? = nil
     var passthroughPipelineStateHDR: MTLRenderPipelineState? = nil
     
@@ -303,8 +323,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var rkFrameQueue = [RKQueuedFrame]()
     var rkFramePoolLock = NSObject()
     var blitLock = NSObject()
-    var setPlaneMaterialA = false
-    var setPlaneMaterialB = false
     
     var reprojectedFramesInARow: Int = 0
     
@@ -360,7 +378,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         // TODO: SSAA after moving foveation out of frag shader?
         if renderDoStreamSSAA {
             if let event = EventHandler.shared.streamEvent?.STREAMING_STARTED {
-                currentOffscreenRenderScale = Float(event.view_width) / Float(renderWidthReal)
+                currentOffscreenRenderScale = Float(event.view_width) / Float(renderWidth)
                 
                 currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
                 currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
@@ -396,14 +414,30 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         //renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
         
         Task {
-            self.surfaceMaterialA = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterial",
+            self.surfaceMaterialA_L = try! await ShaderGraphMaterial(
+                named: "/Root/SBSMaterialBicubic_L",
                 from: "SBSMaterial.usda"
             )
-            self.surfaceMaterialB = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterial",
+            self.surfaceMaterialB_L = try! await ShaderGraphMaterial(
+                named: "/Root/SBSMaterialBicubic_L",
                 from: "SBSMaterial.usda"
             )
+            
+            self.surfaceMaterialA_R = try! await ShaderGraphMaterial(
+                named: "/Root/SBSMaterialBicubic_R",
+                from: "SBSMaterial.usda"
+            )
+            self.surfaceMaterialB_R = try! await ShaderGraphMaterial(
+                named: "/Root/SBSMaterialBicubic_R",
+                from: "SBSMaterial.usda"
+            )
+            
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialA_L?.readsDepth = false
+                self.surfaceMaterialB_L?.readsDepth = false
+                self.surfaceMaterialA_R?.readsDepth = false
+                self.surfaceMaterialB_R?.readsDepth = false
+            }
         }
 
         self.visionPro.vsyncCallback = rkVsyncCallback
@@ -453,8 +487,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             let innerEndX = (innerStartX + innerWidthX)
             let innerStartY = ((zoneCounts.height - innerWidthY) / 2) + innerShiftY
             let innerEndY = (innerStartY + innerWidthY)
-            let cutoffStartX = min(i == 0 ? 2 : 14, innerStartX) // TODO: remove when I do per-eye transforms
-            let cutoffEndX = min(i == 0 ? 14 : 2, zoneCounts.width-innerEndX) // TODO: remove when I do per-eye transforms
+            let cutoffStartX = min(i == 0 ? 2 : 4, innerStartX) // TODO: verify this asymmetry is ok
+            let cutoffEndX = min(i == 0 ? 4 : 2, zoneCounts.width-innerEndX) // TODO: verify this asymmetry is ok
             
             let innerVal: Float = 1.0
             let outerVal: Float = 1.0
@@ -692,10 +726,16 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
 
         // RealityKit automatically calls this every frame for every scene.
-        guard let planeA = context.scene.findEntity(named: "video_plane_a") as? ModelEntity else {
+        guard let planeA_L = context.scene.findEntity(named: "video_plane_a_L") as? ModelEntity else {
             return
         }
-        guard let planeB = context.scene.findEntity(named: "video_plane_b") as? ModelEntity else {
+        guard let planeB_L = context.scene.findEntity(named: "video_plane_b_L") as? ModelEntity else {
+            return
+        }
+        guard let planeA_R = context.scene.findEntity(named: "video_plane_a_R") as? ModelEntity else {
+            return
+        }
+        guard let planeB_R = context.scene.findEntity(named: "video_plane_b_R") as? ModelEntity else {
             return
         }
         guard let backdrop = context.scene.findEntity(named: "backdrop_plane") as? ModelEntity else {
@@ -730,8 +770,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 self.drawableQueueB = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget])
                 self.textureResourceB = self.drawableQueueB!.makeTextureResource()
                 
-                self.setPlaneMaterialA = false
-                self.setPlaneMaterialB = false
+                self.setPlaneMaterialA_L = false
+                self.setPlaneMaterialB_L = false
+                self.setPlaneMaterialA_R = false
+                self.setPlaneMaterialB_R = false
                 
                 renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
                 renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
@@ -814,33 +856,61 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             rkFramesRendered += 1
             let whichRkFrame = rkFramesRendered % 2
             
-            if !self.setPlaneMaterialA {
-                if self.surfaceMaterialA != nil {
+            if !self.setPlaneMaterialA_L {
+                if self.surfaceMaterialA_L != nil {
                     if self.textureResourceA != nil {
-                        try! self.surfaceMaterialA!.setParameter(
+                        try! self.surfaceMaterialA_L!.setParameter(
                             name: "texture",
                             value: .textureResource(self.textureResourceA!)
                         )
                         
-                        planeA.model?.materials = [self.surfaceMaterialA!]
-                        self.setPlaneMaterialA = true
+                        planeA_L.model?.materials = [self.surfaceMaterialA_L!]
+                        self.setPlaneMaterialA_L = true
                     }
                 }
             }
-            if !self.setPlaneMaterialB {
-                if self.surfaceMaterialB != nil {
+            if !self.setPlaneMaterialB_L {
+                if self.surfaceMaterialB_L != nil {
                     if self.textureResourceB != nil {
-                        try! self.surfaceMaterialB!.setParameter(
+                        try! self.surfaceMaterialB_L!.setParameter(
                             name: "texture",
                             value: .textureResource(self.textureResourceB!)
                         )
                         
-                        planeB.model?.materials = [self.surfaceMaterialB!]
-                        self.setPlaneMaterialB = true
+                        planeB_L.model?.materials = [self.surfaceMaterialB_L!]
+                        self.setPlaneMaterialB_L = true
                     }
                 }
             }
-            if !self.setPlaneMaterialA || !self.setPlaneMaterialB {
+            
+            if !self.setPlaneMaterialA_R {
+                if self.surfaceMaterialA_R != nil {
+                    if self.textureResourceA != nil {
+                        try! self.surfaceMaterialA_R!.setParameter(
+                            name: "texture",
+                            value: .textureResource(self.textureResourceA!)
+                        )
+                        
+                        planeA_R.model?.materials = [self.surfaceMaterialA_R!]
+                        self.setPlaneMaterialA_R = true
+                    }
+                }
+            }
+            if !self.setPlaneMaterialB_R {
+                if self.surfaceMaterialB_R != nil {
+                    if self.textureResourceB != nil {
+                        try! self.surfaceMaterialB_R!.setParameter(
+                            name: "texture",
+                            value: .textureResource(self.textureResourceB!)
+                        )
+                        
+                        planeB_R.model?.materials = [self.surfaceMaterialB_R!]
+                        self.setPlaneMaterialB_R = true
+                    }
+                }
+            }
+            
+            if !self.setPlaneMaterialA_L || !self.setPlaneMaterialB_L || !self.setPlaneMaterialA_R || !self.setPlaneMaterialB_R {
                 rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
                 return
             }
@@ -872,18 +942,43 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             }
             
 
-            var planeTransform = frame.transform
+            var planeTransform_L = frame.transform * DummyMetalRenderer.renderViewTransforms[0]
+            var planeTransform_R = frame.transform * DummyMetalRenderer.renderViewTransforms[1]
             let timestamp = frame.timestamp
             let texture = frame.texture
             let depthTexture = frame.depthTexture
             var vsyncTime = frame.vsyncTime
             let vrrBuffer = frame.vrrBuffer
             
-            planeTransform.columns.3 -= planeTransform.columns.2 * rk_panel_depth
-            var scale = simd_float3(renderTangents[0].x + renderTangents[0].y, 1.0, renderTangents[0].z + renderTangents[0].w)
-            scale *= rk_panel_depth
-            let orientation = simd_quatf(planeTransform) * simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
-            let position = simd_float3(planeTransform.columns.3.x, planeTransform.columns.3.y, planeTransform.columns.3.z)
+            // HACK: keep the depths separate to avoid z fighting
+            let rk_panel_depth_L = rk_panel_depth
+            let rk_panel_depth_R = rk_panel_depth - 10
+            
+            // TL;DR  each eye has asymmetric render tangents, but we can't scale each half individually so we
+            // have to do some math to move the center of the plane where it should be.
+            var scale_L = simd_float3(renderTangents[0].x + renderTangents[0].y, 1.0, renderTangents[0].z + renderTangents[0].w)
+            scale_L *= rk_panel_depth_L
+            
+            var scale_R = simd_float3(renderTangents[1].x + renderTangents[1].y, 1.0, renderTangents[1].z + renderTangents[1].w)
+            scale_R *= rk_panel_depth_R
+            
+            let diffLR_L = (renderTangents[0].x - renderTangents[0].y) * 0.5
+            let diffUD_L = (renderTangents[0].z - renderTangents[0].w) * 0.5
+            let diffLR_R = (renderTangents[1].x - renderTangents[1].y) * 0.5
+            let diffUD_R = (renderTangents[1].z - renderTangents[1].w) * 0.5
+            //print(diffLR, scale_L.x / rk_panel_depth_L)
+            
+            planeTransform_L.columns.3 -= planeTransform_L.columns.2 * rk_panel_depth_L
+            planeTransform_L.columns.3 += planeTransform_L.columns.1 * rk_panel_depth_L * diffUD_L
+            planeTransform_L.columns.3 -= planeTransform_L.columns.0 * rk_panel_depth_L * diffLR_L
+            let orientation_L = simd_quatf(planeTransform_L) * simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
+            let position_L = simd_float3(planeTransform_L.columns.3.x, planeTransform_L.columns.3.y, planeTransform_L.columns.3.z)
+            
+            planeTransform_R.columns.3 -= planeTransform_R.columns.2 * rk_panel_depth_R
+            planeTransform_R.columns.3 += planeTransform_R.columns.1 * rk_panel_depth_R * diffUD_R
+            planeTransform_R.columns.3 -= planeTransform_R.columns.0 * rk_panel_depth_R * diffLR_R
+            let orientation_R = simd_quatf(planeTransform_R) * simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
+            let position_R = simd_float3(planeTransform_R.columns.3.x, planeTransform_R.columns.3.y, planeTransform_R.columns.3.z)
 
 #if !targetEnvironment(simulator)
             // Shouldn't be needed but just in case
@@ -919,24 +1014,46 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             }
             
             if whichRkFrame == 0 {
-                planeA.position = position
-                planeA.orientation = orientation
+                // left eye
+                planeA_L.position = position_L
+                planeA_L.orientation = orientation_L
                 
                 // Prevent flashbang at start
-                if self.setPlaneMaterialA {
-                    planeA.scale = scale
+                if self.setPlaneMaterialA_L {
+                    planeA_L.scale = scale_L
                 }
-                planeB.scale = simd_float3(0.0, 0.0, 0.0)
+                planeB_L.scale = simd_float3(0.0, 0.0, 0.0)
+                
+                // right eye
+                planeA_R.position = position_R
+                planeA_R.orientation = orientation_R
+                
+                // Prevent flashbang at start
+                if self.setPlaneMaterialA_R {
+                    planeA_R.scale = scale_R
+                }
+                planeB_R.scale = simd_float3(0.0, 0.0, 0.0)
             }
             else {
-                planeB.position = position
-                planeB.orientation = orientation
+                // left eye
+                planeB_L.position = position_L
+                planeB_L.orientation = orientation_L
                 
                 // Prevent flashbang at start
-                if self.setPlaneMaterialB {
-                    planeB.scale = scale
+                if self.setPlaneMaterialB_L {
+                    planeB_L.scale = scale_L
                 }
-                planeA.scale = simd_float3(0.0, 0.0, 0.0)
+                planeA_L.scale = simd_float3(0.0, 0.0, 0.0)
+                
+                // right eye
+                planeB_R.position = position_R
+                planeB_R.orientation = orientation_R
+                
+                // Prevent flashbang at start
+                if self.setPlaneMaterialB_R {
+                    planeB_R.scale = scale_R
+                }
+                planeA_R.scale = simd_float3(0.0, 0.0, 0.0)
             }
             
             if settings.chromaKeyEnabled {
