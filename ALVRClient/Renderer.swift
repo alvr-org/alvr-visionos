@@ -959,6 +959,7 @@ class Renderer {
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
         renderEncoder.setDepthStencilState(depthStateAlways)
+        renderEncoder.setDepthClipMode(.clamp)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         
@@ -1011,6 +1012,7 @@ class Renderer {
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
         renderEncoder.setDepthStencilState(depthStateAlways)
+        renderEncoder.setDepthClipMode(.clamp)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
@@ -1229,6 +1231,7 @@ class Renderer {
         
         renderEncoder.setCullMode(.none)
         renderEncoder.setFrontFacing(.counterClockwise)
+        renderEncoder.setDepthClipMode(.clamp)
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
 
