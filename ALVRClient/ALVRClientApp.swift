@@ -96,14 +96,16 @@ struct ALVRClientApp: App {
     • Fixed Experimental Renderer on visionOS 2.0 beta 2.\n\
     • Fixed flicker-judder in Experimental Renderer.\n\
     • Fixed view comfort settings in visionOS 2.0 causing visuals to appear too small or too large.\n\
+    • Fixed room centering constantly picking weird origins, hopefully.\n\
+    • Continued attempts at making 45Hz bearable.\n\
     \n\
     ________________________________\n\
     \n\
     Known issues:\n\
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
-    • On visionOS 2 beta 1, low FPS due to throttling may be more common.\n\
-    • On visionOS 2 beta 2, low FPS due to throttling may be even more common than beta 1.\n\
+    • On visionOS 2 beta, low FPS due to throttling may be more common.\n\
+    • On visionOS 2 beta 3, Rencentering sometimes does not preserve the center in SteamVR. This is a visionOS anchoring bug.\n\
     
     """
     

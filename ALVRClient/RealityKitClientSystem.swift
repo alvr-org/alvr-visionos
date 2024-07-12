@@ -332,6 +332,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var lastFrameQueueFillTime = 0.0
     var roundTripRenderTime: Double = 0.0
     var lastRoundTripRenderTimestamp: Double = 0.0
+    var currentHzAvg: Double = 90.0
     
     var renderer: Renderer
     
@@ -414,21 +415,25 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         //renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
         
         Task {
+            var filter = "Bicubic"
+            if currentRenderScale > 1.8 { // arbitrary, TODO actually benchmark this idk
+                filter = "Bilinear"
+            }
             self.surfaceMaterialA_L = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterialBicubic_L",
+                named: "/Root/SBSMaterial" + filter + "_L",
                 from: "SBSMaterial.usda"
             )
             self.surfaceMaterialB_L = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterialBicubic_L",
+                named: "/Root/SBSMaterial" + filter + "_L",
                 from: "SBSMaterial.usda"
             )
             
             self.surfaceMaterialA_R = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterialBicubic_R",
+                named: "/Root/SBSMaterial" + filter + "_R",
                 from: "SBSMaterial.usda"
             )
             self.surfaceMaterialB_R = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterialBicubic_R",
+                named: "/Root/SBSMaterial" + filter + "_R",
                 from: "SBSMaterial.usda"
             )
             
@@ -715,6 +720,14 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var rkFillUp = 2
     func update(context: SceneUpdateContext) {
         let startUpdateTime = CACurrentMediaTime()
+        var currentHz = 1.0 / context.deltaTime
+        if context.deltaTime > 0.001 {
+            currentHzAvg = (currentHzAvg * 0.95) + (currentHz * 0.05)
+        }
+        // Just in case(tm)
+        if !currentHzAvg.isFinite || currentHzAvg.isNaN {
+            currentHzAvg = 90.0
+        }
         
         if renderMultithreaded {
             objc_sync_enter(self.blitLock)
@@ -1251,7 +1264,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             var anchorTimestamp = vsyncTime - visionPro.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), handAnchorLatencyLimit)) / Double(NSEC_PER_SEC))
             
             // Make overlay look smooth (at the cost of timewarp)
-            if renderer.fadeInOverlayAlpha > 0.0 {
+            if renderer.fadeInOverlayAlpha > 0.0 || currentHzAvg < 65.0 {
                 anchorTimestamp = vsyncTime + visionPro.vsyncLatency
                 targetTimestamp = vsyncTime + visionPro.vsyncLatency
             }

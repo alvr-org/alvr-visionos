@@ -59,9 +59,10 @@ class WorldTracker {
     // Playspace and boundaries state
     var planeAnchors: [UUID: PlaneAnchor] = [:]
     var worldAnchors: [UUID: WorldAnchor] = [:]
+    var worldAnchorsToRemove: [WorldAnchor] = []
     var worldTrackingAddedOriginAnchor = false
     var worldTrackingSteamVRTransform: simd_float4x4 = matrix_identity_float4x4
-    var worldOriginAnchor: WorldAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
+    var worldOriginAnchor: WorldAnchor? = nil
     var planeLock = NSObject()
     var lastUpdatedTs: TimeInterval = 0
     var crownPressCount = 0
@@ -248,7 +249,7 @@ class WorldTracker {
         // Reset playspace state
         self.worldTrackingAddedOriginAnchor = false
         self.worldTrackingSteamVRTransform = matrix_identity_float4x4
-        self.worldOriginAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
+        self.worldOriginAnchor = nil//WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
         self.lastUpdatedTs = 0
         self.crownPressCount = 0
         self.sentPoses = 0
@@ -303,38 +304,50 @@ class WorldTracker {
         return simd_distance(matrix_identity_float4x4.columns.3, pos)
     }
     
+    func anchorDistanceFromAnchor(anchorA: WorldAnchor, anchorB: WorldAnchor) -> Float {
+        let posA = anchorA.originFromAnchorTransform.columns.3
+        let posB = anchorB.originFromAnchorTransform.columns.3
+        return simd_distance(posA, posB)
+    }
+    
     // We have an origin anchor which we use to maintain SteamVR's positions
     // every time visionOS's centering changes.
     func processWorldTrackingUpdates() async {
         for await update in worldTracking.anchorUpdates {
+            let keepSteamVRCenter = await ALVRClientApp.gStore.settings.keepSteamVRCenter
             print(update.event, update.anchor.id, update.anchor.description, update.timestamp)
             
             switch update.event {
             case .added, .updated:
                 worldAnchors[update.anchor.id] = update.anchor
-                if !self.worldTrackingAddedOriginAnchor {
-                    print("Early origin anchor?", anchorDistanceFromOrigin(anchor: update.anchor), "Current Origin,", self.worldOriginAnchor.id)
+                if !self.worldTrackingAddedOriginAnchor && keepSteamVRCenter && (worldOriginAnchor == nil || update.anchor.id != worldOriginAnchor!.id) {
+                    print("Early origin anchor?", anchorDistanceFromOrigin(anchor: update.anchor), "Current Origin,", self.worldOriginAnchor?.id)
                     
                     // If we randomly get an anchor added within 3.5m, consider that our origin
-                    if anchorDistanceFromOrigin(anchor: update.anchor) < 3.5 && update.anchor.isTracked {
+                    if anchorDistanceFromOrigin(anchor: update.anchor) < 3.5 && update.anchor.isTracked && (worldOriginAnchor == nil || anchorDistanceFromOrigin(anchor: update.anchor) <= anchorDistanceFromOrigin(anchor: worldOriginAnchor!)) {
                         print("Set new origin!")
                         
                         // This has a (positive) minor side-effect: all redundant anchors within 3.5m will get cleaned up,
                         // though which anchor gets chosen will be arbitrary.
                         // But there should only be one anyway.
-                        do {
-                            try await worldTracking.removeAnchor(self.worldOriginAnchor)
+                        if let anchor = self.worldOriginAnchor {
+                            worldAnchorsToRemove.append(anchor)
                         }
-                        catch {
-                            // don't care
+                        
+                        // HACK: try and restore updates?
+                        self.worldOriginAnchor = update.anchor
+                    }
+                }
+                else {
+                    if worldOriginAnchor != nil && update.anchor.id != worldOriginAnchor!.id {
+                        if anchorDistanceFromAnchor(anchorA: update.anchor, anchorB: worldOriginAnchor!) <= 3.5 && update.anchor.isTracked {
+                            print("Removed anchor for being too close:", update.anchor.id)
+                            worldAnchorsToRemove.append( update.anchor)
                         }
-                    
-                        worldOriginAnchor = update.anchor
-                        self.worldTrackingAddedOriginAnchor = true
                     }
                 }
                 
-                if update.anchor.id == worldOriginAnchor.id {
+                if worldOriginAnchor != nil && update.anchor.id == worldOriginAnchor!.id {
                     self.worldOriginAnchor = update.anchor
                     
                     // This seems to happen when headset is removed, or on app close.
@@ -345,9 +358,13 @@ class WorldTracker {
                         continue
                     }
 
+                    print("recentering against", update.anchor.id, "... count", crownPressCount)
                     let anchorTransform = update.anchor.originFromAnchorTransform
-                    if ALVRClientApp.gStore.settings.keepSteamVRCenter {
+                    if keepSteamVRCenter {
                         self.worldTrackingSteamVRTransform = anchorTransform
+                    }
+                    else {
+                        print("not recentering due to settings.")
                     }
                     
                     // Crown-press shenanigans
@@ -362,35 +379,30 @@ class WorldTracker {
                         lastUpdatedTs = update.timestamp
                         
                         // Triple-press crown to purge nearby anchors and recenter
-                        if crownPressCount >= 2 {
+                        if crownPressCount >= 2 && keepSteamVRCenter {
                             print("Reset world origin!")
                             
                             // Purge all existing world anchors within 3.5m
                             for anchorPurge in worldAnchors {
-                                do {
-                                    if anchorDistanceFromOrigin(anchor: update.anchor) < 3.5 {
-                                        try await worldTracking.removeAnchor(anchorPurge.value)
-                                    }
+                                if anchorDistanceFromOrigin(anchor: update.anchor) < 3.5 {
+                                    worldAnchorsToRemove.append(anchorPurge.value)
                                 }
-                                catch {
-                                    // don't care
-                                }
-                                worldAnchors.removeValue(forKey: anchorPurge.key)
                             }
                     
                             self.worldOriginAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
                             self.worldTrackingAddedOriginAnchor = true
-                            if ALVRClientApp.gStore.settings.keepSteamVRCenter {
-                                self.worldTrackingSteamVRTransform = anchorTransform
-                            }
-                            
+                            self.worldTrackingSteamVRTransform = anchorTransform
+
                             do {
-                                try await worldTracking.addAnchor(self.worldOriginAnchor)
+                                try await worldTracking.addAnchor(self.worldOriginAnchor!)
                             }
                             catch {
                                 // don't care
                             }
                             
+                            crownPressCount = 0
+                        }
+                        else if !keepSteamVRCenter {
                             crownPressCount = 0
                         }
                     }
@@ -991,6 +1003,19 @@ class WorldTracker {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
+        Task {
+            for anchor in worldAnchorsToRemove {
+                do {
+                    try await worldTracking.removeAnchor(anchor)
+                }
+                catch {
+                    // don't care
+                }
+                worldAnchors.removeValue(forKey: anchor.id)
+            }
+            worldAnchorsToRemove.removeAll()
+        }
+        
         // Predict as far into the future as Apple will allow us.
         for _ in 0...20 {
             deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestampWalkedBack)
@@ -1026,18 +1051,22 @@ class WorldTracker {
         // That aside, if we add an anchor at (0,0,0), we will get reports in processWorldTrackingUpdates()
         // every time the user recenters.
         if (!self.worldTrackingAddedOriginAnchor && sentPoses > 300) || !ALVRClientApp.gStore.settings.keepSteamVRCenter {
-            self.worldTrackingAddedOriginAnchor = true
-            
-            if ALVRClientApp.gStore.settings.keepSteamVRCenter {
+            if self.worldOriginAnchor == nil && ALVRClientApp.gStore.settings.keepSteamVRCenter {
+                self.worldOriginAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
+                self.worldTrackingSteamVRTransform = matrix_identity_float4x4
+                
                 Task {
                     do {
-                        try await worldTracking.addAnchor(self.worldOriginAnchor)
+                        try await worldTracking.addAnchor(self.worldOriginAnchor!)
                     }
                     catch {
                         // don't care
                     }
                 }
             }
+            
+            self.worldTrackingAddedOriginAnchor = true
+            print("anchor finalized")
         }
         sentPoses += 1
         
