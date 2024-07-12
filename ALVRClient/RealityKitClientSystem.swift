@@ -31,7 +31,7 @@ let realityKitRenderScale: Float = 2.25
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
-let rk_panel_depth: Float = 100
+let rk_panel_depth: Float = 90
 
 class VisionPro: NSObject, ObservableObject {
     var nextFrameTime: TimeInterval = 0.0
@@ -108,7 +108,7 @@ class RealityKitClientSystem : System {
         
         await MainActor.run {
             let material = UnlitMaterial(color: .white)
-            let material2 = UnlitMaterial(color: UIColor(white: 0.0, alpha: 1.0))
+            let material2 = UnlitMaterial(color: .black)
             
             let videoPlaneMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
             let cubeMesh = MeshResource.generateBox(size: 1.0)
@@ -1061,9 +1061,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             }
             else {
                 // Place giant plane 1m behind the video feed
-                backdrop.position = simd_float3(0.0, 0.0, rk_panel_depth + 1)
-                backdrop.orientation = simd_quatf()
-                backdrop.scale = simd_float3(rk_panel_depth + 1, rk_panel_depth + 1, rk_panel_depth + 1) * 100.0
+                let backdrop_depth = (rk_panel_depth * 2.0)
+                backdrop.position = simd_float3(0.0, 0.0, -backdrop_depth)
+                backdrop.orientation = simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
+                backdrop.scale = simd_float3(backdrop_depth * 4.0, backdrop_depth * 4.0, backdrop_depth * 4.0) // TODO: view tangents over 4.0? idk
                 
                 // Hopefully these optimize into consts to avoid allocations
                 if renderer.fadeInOverlayAlpha >= 1.0 {
