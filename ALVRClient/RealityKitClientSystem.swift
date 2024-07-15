@@ -31,8 +31,9 @@ import MetalKit
 import Spatial
 import AVFoundation
 
-let vrrGridSize = 64+1
-let renderWidth = Int(1920)
+let vrrGridSizeX = 59+1
+let vrrGridSizeY = 57+1
+let renderWidth = Int(1888)
 let renderHeight = Int(1824)
 let renderScale = 1.75
 let renderColorFormatSDR = MTLPixelFormat.bgra8Unorm_srgb // rgba8Unorm, rgba8Unorm_srgb, bgra8Unorm, bgra8Unorm_srgb, rgba16Float
@@ -372,7 +373,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var renderer: Renderer
     
     var renderTangents = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
-    var copyVertices = [simd_float3](repeating: simd_float3(), count: ((vrrGridSize-1)*vrrGridSize*2)*2)
+    var copyVertices = [simd_float3](repeating: simd_float3(), count: ((vrrGridSizeY-1)*vrrGridSizeX*2)*2)
     var copyVerticesBuffer: MTLBuffer? = nil
     
     required init(scene: RealityKit.Scene) {
@@ -391,12 +392,12 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         // Generate VRR mesh
         // TODO: can this be done faster? (per-frame)
-        for vertexID in 0..<((vrrGridSize-1)*vrrGridSize*2)*renderViewCount {
-            let x = (vertexID >> 1) % vrrGridSize
-            let y = (vertexID & 1) + (((vertexID >> 1) / vrrGridSize) % (vrrGridSize-1))
-            let which = (vertexID >= (vrrGridSize-1)*vrrGridSize*2) ? 1 : 0 // TODO people with three eyes (renderViewCount)
+        for vertexID in 0..<((vrrGridSizeY-1)*vrrGridSizeX*2)*renderViewCount {
+            let x = (vertexID >> 1) % vrrGridSizeX
+            let y = (vertexID & 1) + (((vertexID >> 1) / vrrGridSizeX) % (vrrGridSizeY-1))
+            let which = (vertexID >= (vrrGridSizeY-1)*vrrGridSizeX*2) ? 1 : 0 // TODO people with three eyes (renderViewCount)
             
-            copyVertices[vertexID] = simd_float3((Float(x) / Float(vrrGridSize - 1)), (Float(y) / Float(vrrGridSize - 1)), (which != 0) ? 1.0 : 0.0)
+            copyVertices[vertexID] = simd_float3((Float(x) / Float(vrrGridSizeX - 1)), (Float(y) / Float(vrrGridSizeY - 1)), (which != 0) ? 1.0 : 0.0)
         }
         copyVertices.withUnsafeBytes {
             copyVerticesBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
@@ -524,9 +525,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             desc.vertexLayouts = vertexLayouts
             desc.indexType = .uint32
 
-            let generatedGridSize = vrrGridSize
-            desc.vertexCapacity = generatedGridSize*generatedGridSize
-            desc.indexCapacity = ((generatedGridSize-1)*generatedGridSize*2)
+            let generatedGridSizeX = vrrGridSizeX
+            let generatedGridSizeY = vrrGridSizeY
+            desc.vertexCapacity = generatedGridSizeX*generatedGridSizeY
+            desc.indexCapacity = ((generatedGridSizeY-1)*generatedGridSizeX*2)
             
             let mesh = try LowLevelMesh(descriptor: desc)
 
@@ -535,10 +537,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 let vertices = rawBytes.bindMemory(to: VrrPlaneVertex.self)
                 
                 var vertexID = 0
-                for y in 0..<generatedGridSize {
-                    for x in 0..<generatedGridSize {
-                        let uvx = (Float(x) / Float(generatedGridSize - 1))
-                        let uvy = (Float(y) / Float(generatedGridSize - 1))
+                for y in 0..<generatedGridSizeY {
+                    for x in 0..<generatedGridSizeX {
+                        let uvx = (Float(x) / Float(generatedGridSizeX - 1))
+                        let uvy = (Float(y) / Float(generatedGridSizeY - 1))
                         let px = uvx - 0.5
                         let py = uvy - 0.5
                         
@@ -555,7 +557,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             // Generate indices
             // TODO: this could be simplified by moving the left/right stuff up ^
-            let verticesPerRow = generatedGridSize
+            let verticesPerRow = generatedGridSizeX
             var indexID = 0
             mesh.withUnsafeMutableIndices { rawIndices in
                 let indices = rawIndices.bindMemory(to: UInt32.self)
@@ -569,7 +571,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                     }
                 }
                 
-                for y in 1..<generatedGridSize-1 {
+                for y in 1..<generatedGridSizeY-1 {
                     if y & 1 == 0 {
                         // left to right
                         for x in 0..<verticesPerRow {
@@ -628,21 +630,21 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
         currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
 
-        let vrrGridPartitions = vrrGridSize-1
-        let layerWidth = Int(currentOffscreenRenderWidth / vrrGridPartitions) * vrrGridPartitions
-        let layerHeight = Int(currentOffscreenRenderHeight / vrrGridPartitions) * vrrGridPartitions
+        let vrrGridPartitionsX = vrrGridSizeX-1
+        let vrrGridPartitionsY = vrrGridSizeY-1
+        let layerWidth = Int(currentOffscreenRenderWidth / vrrGridPartitionsX) * vrrGridPartitionsX
+        let layerHeight = Int(currentOffscreenRenderHeight / vrrGridPartitionsY) * vrrGridPartitionsY
         descriptor.screenSize = MTLSizeMake(layerWidth, layerHeight, renderViewCount)
 
         // i==0 => left eye, i==1 -> right eye
-        let zoneCounts = MTLSizeMake(vrrGridPartitions, vrrGridPartitions, renderViewCount)
+        let zoneCounts = MTLSizeMake(vrrGridPartitionsX, vrrGridPartitionsY, renderViewCount)
         for i in 0..<zoneCounts.depth {
             let layerDescriptor = MTLRasterizationRateLayerDescriptor(sampleCount: zoneCounts)
-            
-            // These are all hardcoded for 64 zones atm
-            let innerWidthX = 7
-            let innerWidthY = 14
-            let innerShiftX = i == 0 ? 0 : -2
-            let innerShiftY = 4
+            // These are all hardcoded for 59/57 zones atm
+            let innerWidthX = 11
+            let innerWidthY = 11
+            let innerShiftX = i == 0 ? 4 : -4
+            let innerShiftY = 2
             let innerStartX = ((zoneCounts.width - innerWidthX) / 2) + innerShiftX
             let innerEndX = (innerStartX + innerWidthX)
             let innerStartY = ((zoneCounts.height - innerWidthY) / 2) + innerShiftY
@@ -691,15 +693,31 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 if layerDescriptor.vertical[row] <= 0.0 {
                     layerDescriptor.vertical[row] = 1.0 / 256.0
                 }
+                layerDescriptor.vertical[row] = layerDescriptor.vertical[row] * layerDescriptor.vertical[row]
                 //print("row", row, layerDescriptor.vertical[row])
             }
             for column in 0..<zoneCounts.width {
                 if layerDescriptor.horizontal[column] <= 0.0 {
                     layerDescriptor.horizontal[column] = 1.0 / 256.0
                 }
+                layerDescriptor.horizontal[column] = layerDescriptor.horizontal[column] * layerDescriptor.horizontal[column]
                 //print("col", column, layerDescriptor.horizontal[column])
             }
 
+#if false
+            for row in 0..<zoneCounts.height {
+                layerDescriptor.vertical[row] = DummyMetalRenderer.vrrParametersY[i][row]
+                if layerDescriptor.vertical[row] >= 1.0 {
+                    layerDescriptor.vertical[row] = 1.0 / 256.0
+                }
+            }
+            for column in 0..<zoneCounts.width {
+                layerDescriptor.horizontal[column] = DummyMetalRenderer.vrrParametersX[i][column]
+                if layerDescriptor.horizontal[column] >= 1.0 {
+                    layerDescriptor.horizontal[column] = 1.0 / 256.0
+                }
+            }
+#endif
             descriptor.setLayer(layerDescriptor, at: i)
         }
         
@@ -847,8 +865,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 
         renderEncoder.setVertexBuffer(copyVerticesBuffer, offset: 0, index: VertexAttribute.position.rawValue)
 
-        for i in 0..<(vrrGridSize-1)*renderViewCount {
-            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: i*vrrGridSize*2, vertexCount: vrrGridSize*2)
+        for i in 0..<(vrrGridSizeY-1)*renderViewCount {
+            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: i*vrrGridSizeX*2, vertexCount: vrrGridSizeX*2)
         }
 
         renderEncoder.popDebugGroup()
