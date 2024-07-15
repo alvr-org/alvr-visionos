@@ -1,6 +1,10 @@
 //
 //  MetalClientSystem.swift
 //
+// MetalClientSystem generally matches the Renderer abstraction
+// that RealityKitClientSystem requires, to allow as much code
+// shared for both input and rendering as possible.
+//
 
 import CompositorServices
 import Metal

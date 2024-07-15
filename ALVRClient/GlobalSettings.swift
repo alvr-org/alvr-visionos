@@ -1,6 +1,8 @@
 //
 //  GlobalSettings.swift
 //
+// Client-side settings and defaults
+//
 
 import Foundation
 import SwiftUI

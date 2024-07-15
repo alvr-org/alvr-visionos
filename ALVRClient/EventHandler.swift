@@ -1,6 +1,16 @@
 //
 //  EventHandler.swift
 //
+// ALVR client framework glue code, this thread is basically
+// always running and includes a self-managing watchdog to
+// ensure it is always running.
+//
+// Other notable things include:
+// - mDNS/Bonjour management (handleMdnsBroadcasts)
+// - Connection flavor text and versioning info for Entry UI
+// - AWDL detection (pollNALs)
+// - The main event thread (handleAlvrEvents)
+//
 
 import Foundation
 import Metal
@@ -87,6 +97,7 @@ class EventHandler: ObservableObject {
         }
     }
     
+    // Starts the EventHandler thread.
     func start() {
         alvr_resume()
 
@@ -108,15 +119,8 @@ class EventHandler: ObservableObject {
         }
     }
     
+    // Stops the EventHandler thread stream.
     func stop() {
-        /*inputRunning = false
-        if alvrInitialized {
-            print("Stopping")
-            renderStarted = false
-            alvr_destroy()
-            alvrInitialized = false
-        }*/
-        
         print("EventHandler.Stop")
         streamingActive = false
         vtDecompressionSession = nil
@@ -144,14 +148,17 @@ class EventHandler: ObservableObject {
         lastQueuedFrame = nil
     }
     
+    // Various hacks to be performed when the headset is removed or the app is exiting.
     func handleHeadsetRemoved() {
         preventAudioCracklingOnExit()
     }
     
+    // Various hacks to be performed when the headset is donned and VR is entering.
     func handleHeadsetEntered() {
         fixAudioForDirectStereo()
     }
     
+    // To be called when rendering is starting
     func handleRenderStarted() {
         // Prevent event thread rebooting if we can
         timeLastAlvrEvent = CACurrentMediaTime()
@@ -160,6 +167,9 @@ class EventHandler: ObservableObject {
         timeLastFrameDecoded = CACurrentMediaTime()
     }
 
+    // Ensure that the audio session is direct stereo, so that SteamVR can handle
+    // all the fancy effects as it pleases.
+    // Also ensures that the microphone uses the right noise cancellation.
     func fixAudioForDirectStereo() {
         audioIsOff = false
         let audioSession = AVAudioSession.sharedInstance()
@@ -174,6 +184,8 @@ class EventHandler: ObservableObject {
         }
     }
     
+    // On visionOS 1, the app would have audio crackling on exiting, so
+    // we avoid it by quickly shutting off the audio on exit.
     func preventAudioCracklingOnExit() {
         if audioIsOff {
             return
@@ -187,7 +199,7 @@ class EventHandler: ObservableObject {
         }
     }
 
-    // Handle mDNS broadcasts
+    // Handle mDNS broadcasts, should be called periodically (1-5s)
     func handleMdnsBroadcasts() {
         // HACK: Some mDNS clients seem to only see edge updates (ie, when a client appears/disappears)
         // so we just create/destroy this every 2s until we're streaming.
@@ -249,6 +261,7 @@ class EventHandler: ObservableObject {
         timeLastSentPeriodicUpdatedValues = CACurrentMediaTime()
     }
     
+    // Make sure the event thread is always running, sometimes it gets lost.
     func eventsWatchdog() {
         while true {
             if eventHeartbeat == lastEventHeartbeat {
@@ -286,6 +299,7 @@ class EventHandler: ObservableObject {
         }
     }
     
+    // Poll for NALs and and, when decoded, add them to the frameQueue
     func handleNals() {
         timeLastFrameGot = CACurrentMediaTime()
         while renderStarted {
@@ -403,6 +417,7 @@ class EventHandler: ObservableObject {
         }
     }
     
+    // Returns the ALVR hostname in the format "NNNN.client.alvr"
     func getHostname() -> String {
         var byteArray = [UInt8](repeating: 0, count: 256)
 
@@ -421,6 +436,7 @@ class EventHandler: ObservableObject {
         }
     }
     
+    // Gets the mDNS service name from the client framework, usually "_alvr._tcp"
     func getMdnsService() -> String {
         var byteArray = [UInt8](repeating: 0, count: 256)
 
@@ -439,6 +455,8 @@ class EventHandler: ObservableObject {
         }
     }
     
+    // Gets the mDNS protocol ID, used to identify the client version to the Streamer
+    // and ensure the protocol versions match.
     func getMdnsProtocolId() -> String {
         var byteArray = [UInt8](repeating: 0, count: 256)
 
@@ -457,6 +475,7 @@ class EventHandler: ObservableObject {
         }
     }
     
+    // Restart the ALVR client framework's event thread if it's unresponsive.
     func kickAlvr() {
         stop()
         alvrInitialized = false
@@ -468,6 +487,7 @@ class EventHandler: ObservableObject {
         timeLastFrameSent = CACurrentMediaTime()
     }
 
+    // The main event thread
     func handleAlvrEvents() {
         print("Start event thread...")
         while inputRunning {

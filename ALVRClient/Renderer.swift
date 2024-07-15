@@ -1,6 +1,12 @@
 //
 //  Renderer.swift
 //
+// Primarily, stuff for the MetalClientSystem rendering, but portions are shared
+// with RealityKitClientSystem
+//
+// Notable portions include:
+// - Pipeline setup for different color formats and compiled Metal constants (rebuildRenderPipelines)
+//
 import CompositorServices
 import Metal
 import MetalKit
@@ -83,6 +89,8 @@ class Renderer {
     var fadeInOverlayAlpha: Float = 0.0
     var coolPulsingColorsTime: Float = 0.0
     var reprojectedFramesInARow: Int = 0
+    var roundTripRenderTime: Double = 0.0
+    var lastRoundTripRenderTimestamp: Double = 0.0
     var currentYuvTransform: simd_float4x4 = matrix_identity_float4x4
     
     // Was curious if it improved; it's still juddery.
@@ -245,6 +253,7 @@ class Renderer {
         )
     }
 
+    // Vertex descriptor with float3 position and float2 UVs
     class func buildMetalVertexDescriptor() -> MTLVertexDescriptor {
         // Create a Metal vertex descriptor specifying how vertices will by laid out for input into our render
         //   pipeline and how we'll layout our Model IO vertices
@@ -270,6 +279,7 @@ class Renderer {
         return mtlVertexDescriptor
     }
     
+    // Vertex descriptor without any UV info
     class func buildMetalVertexDescriptorNoUV() -> MTLVertexDescriptor {
         // Create a Metal vertex descriptor specifying how vertices will by laid out for input into our render
         //   pipeline and how we'll layout our Model IO vertices
@@ -287,6 +297,7 @@ class Renderer {
         return mtlVertexDescriptor
     }
 
+    // Generic render pipeline, used for the wireframe rendering.
     class func buildRenderPipelineWithDevice(device: MTLDevice,
                                              mtlVertexDescriptor: MTLVertexDescriptor,
                                              colorFormat: MTLPixelFormat,
@@ -323,6 +334,8 @@ class Renderer {
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
     
+    // Copy/"passthrough" pipeline for transferring from an offscreen MTLTexture
+    // to the final RealityKit MTLTexture.
     func buildCopyPipelineWithDevice(device: MTLDevice,
                                              colorFormat: MTLPixelFormat,
                                              viewCount: Int,
@@ -399,6 +412,7 @@ class Renderer {
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
     
+    // Video frame renderer, incl my own YCbCr stage and/or Apple's 48 private YCbCr texture formats.
     func buildRenderPipelineForVideoFrameWithDevice(device: MTLDevice,
                                                           mtlVertexDescriptor: MTLVertexDescriptor,
                                                           colorFormat: MTLPixelFormat,
@@ -447,6 +461,8 @@ class Renderer {
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
 
+    // Advances the uniform buffer for the next frame, values can be written to `uniforms`
+    // after this is called.
     private func updateDynamicBufferState() {
         /// Update the state of our uniform buffers before rendering
 
@@ -455,6 +471,8 @@ class Renderer {
         uniforms = UnsafeMutableRawPointer(dynamicUniformBuffer.contents() + uniformBufferOffset).bindMemory(to:UniformsArray.self, capacity:1)
     }
     
+    // Advances the Plane uniform buffer, values can be written to `planeUniforms`
+    // after this is called.
     private func selectNextPlaneUniformBuffer() {
         /// Update the state of our uniform buffers before rendering
 
@@ -463,6 +481,7 @@ class Renderer {
         planeUniforms = UnsafeMutableRawPointer(dynamicPlaneUniformBuffer.contents() + planeUniformBufferOffset).bindMemory(to:PlaneUniform.self, capacity:1)
     }
 
+    // Writes FOV/tangents/etc information to the uniform buffer.
     private func updateGameStateForVideoFrame(_ whichIdx: Int, drawable: LayerRenderer.Drawable?, viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
         let settings = ALVRClientApp.gStore.settings
         func uniforms(forViewIndex viewIndex: Int) -> Uniforms {
@@ -511,7 +530,7 @@ class Renderer {
     
     // Checks if eye tracking was secretly added, maybe, hard to know really.
     func checkEyes(drawable: LayerRenderer.Drawable) {
-        print(drawable.colorTextures.first?.width, drawable.colorTextures.first?.height)
+        print(drawable.colorTextures.first?.width as Any, drawable.colorTextures.first?.height as Any)
         print(drawable.views[0].transform - EventHandler.shared.viewTransforms[0])
         print(drawable.views[1].transform - EventHandler.shared.viewTransforms[1])
         if let vrr = drawable.rasterizationRateMaps.first {
@@ -527,19 +546,21 @@ class Renderer {
         }
     }
     
+    // Adjust view transforms for debugging various issues.
+    // For now we just remove the rotational component.
     func fixTransform(_ transform: simd_float4x4) -> simd_float4x4 {
         var out = matrix_identity_float4x4
-        out.columns.3 = transform.columns.3 // 0.8 near, 1.3 far, makes it look correct again?
+        out.columns.3 = transform.columns.3
         out.columns.3.w = 1.0
         return out
     }
     
+    // Adjusts view tangents for debugging various issues.
     func fixTangents(_ tangents: simd_float4) -> simd_float4 {
         return tangents
     }
 
-    var roundTripRenderTime: Double = 0.0
-    var lastRoundTripRenderTimestamp: Double = 0.0
+    // Render the frame, only used in MetalClientSystem renderer.
     func renderFrame() {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
@@ -789,7 +810,7 @@ class Renderer {
         if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
             //print("render")
             if let encoder = beginRenderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable) {
-                renderStreamingFrame(0, commandBuffer: commandBuffer, renderEncoder: encoder, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+                renderStreamingFrame(0, commandBuffer: commandBuffer, renderEncoder: encoder, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
                 endRenderStreamingFrame(renderEncoder: encoder)
             }
             renderStreamingFrameOverlays(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
@@ -846,6 +867,7 @@ class Renderer {
         EventHandler.shared.lastQueuedFramePose = framePreviouslyPredictedPose
     }
     
+    // Pulse the wireframe between cyan and blue.
     func coolPulsingColor() -> simd_float4 {
         // Color picked from the ALVR logo
         let lightColor = simd_float4(0.05624, 0.73124, 0.75999, 1.0)
@@ -869,6 +891,7 @@ class Renderer {
         return simd_mix(lightColor, darkColor, simd_float4(repeating: switchingFn))
     }
     
+    // Can draw planes with debug colors, or with a subtle transparency change based on the type.
     func planeToColor(plane: PlaneAnchor) -> simd_float4 {
         let planeAlpha = fadeInOverlayAlpha
         var subtleChange = 0.75 + ((Float(plane.id.hashValue & 0xFF) / Float(0xff)) * 0.25)
@@ -917,6 +940,7 @@ class Renderer {
         }
     }
     
+    // Line color for a given ARKit Plane
     func planeToLineColor(plane: PlaneAnchor) -> simd_float4 {
         let planeAlpha = fadeInOverlayAlpha
         let subtleChange = 0.75 + ((Float(plane.id.hashValue & 0xFF) / Float(0xff)) * 0.25)
@@ -929,6 +953,8 @@ class Renderer {
         }
     }
     
+    // Only renders the frame depth, used to correct depth after the overlay is rendered
+    // because Apple's Metal renderer is kinda weird about it.
     func renderStreamingFrameDepth(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?) {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return
@@ -978,6 +1004,7 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
+    // Clears the render target, nothing more nothing less.
     func renderNothing(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4, drawable: LayerRenderer.Drawable?) {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return
@@ -1034,6 +1061,7 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
+    // Renders a wireframe overlay on top of the existing video frame (or nothing)
     func renderOverlay(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4)
     {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
@@ -1132,6 +1160,7 @@ class Renderer {
         renderEncoder.endEncoding()
     }
     
+    // Sets up rendering a video frame, including uniforms
     func beginRenderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4, drawable: LayerRenderer.Drawable?) -> (any MTLRenderCommandEncoder)? {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return nil
@@ -1238,12 +1267,9 @@ class Renderer {
         return renderEncoder
     }
     
-    func renderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderEncoder: any MTLRenderCommandEncoder, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
+    // Actually do the video frame render.
+    func renderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderEncoder: any MTLRenderCommandEncoder, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4) {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
-            return
-        }
-        
-        guard let queuedFrame = queuedFrame else {
             return
         }
         
@@ -1260,11 +1286,13 @@ class Renderer {
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: whichIdx*4, vertexCount: 4)
     }
     
+    // Finish video frame encoding.
     func endRenderStreamingFrame(renderEncoder: any MTLRenderCommandEncoder) {
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
     }
     
+    // Render an overlay on top of the video frame.
     func renderStreamingFrameOverlays(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], viewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4, drawable: LayerRenderer.Drawable?) {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return

@@ -1,6 +1,18 @@
 //
 //  RealityKitEyeTrackingSystem.swift
 //
+// This file is a fully self-contained and modular eye tracking addition
+// which makes it easy to add eye tracking to any RealityKit environment with
+// three lines added to a RealityKit View:
+//
+// await RealityKitEyeTrackingSystem.setup(content)
+// MagicRealityKitEyeTrackingSystemComponent.registerComponent()
+// RealityKitEyeTrackingSystem.registerSystem()
+//
+// Then, any Broadcast extension can read out the eye tracking data and send it
+// back to this module via the CFNotificationCenter shift registers.
+// (See ALVREyeBroadcast for more details on that)
+//
 
 import SwiftUI
 import RealityKit
@@ -32,8 +44,6 @@ class NotificationShiftRegisterVar {
     init(_ baseName: String) {
         let notificationCenter = CFNotificationCenterGetDarwinNotifyCenter()
         CFNotificationCenterAddObserver(notificationCenter, Unmanaged.passUnretained(self).toOpaque(), { (center, observer, name, object, userInfo) in
-            //print("notification!", name, object, userInfo)
-            
             let us = Unmanaged<NotificationShiftRegisterVar>.fromOpaque(observer!).takeUnretainedValue()
             us.raw = 0
             us.bits = 0
@@ -171,7 +181,6 @@ class RealityKitEyeTrackingSystem : System {
     }
     
     func update(context: SceneUpdateContext) {
-        //print(which, context.deltaTime, s != nil)
         if s != nil {
             s?.update(context: context)
             return
@@ -395,7 +404,7 @@ class RealityKitEyeTrackingSystemCorrectlyAssociated : System {
         var scale2 = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
         scale2 *= rk_eye_panel_depth
 
-        var orientationXY = /*simd_quatf(frame.transform) **/ simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
+        let orientationXY = /*simd_quatf(frame.transform) **/ simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
         
         if let surfaceMaterial = surfaceMaterialX {
             eyeXPlane.model?.materials = [surfaceMaterial]

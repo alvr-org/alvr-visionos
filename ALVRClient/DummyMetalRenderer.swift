@@ -43,7 +43,7 @@ class DummyMetalRenderer {
         DummyMetalRenderer.renderTangents.removeAll()
         DummyMetalRenderer.renderViewTransforms.removeAll()
         for view in drawable.views {
-            var tangents = view.tangents
+            let tangents = view.tangents
             DummyMetalRenderer.renderTangents.append(tangents)
             var transform = matrix_identity_float4x4
             transform.columns.3 = view.transform.columns.3
