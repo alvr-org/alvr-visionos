@@ -610,22 +610,23 @@ struct VideoHandler {
         print(videoFormat!)
         
         // We need our pixels unpacked for 10-bit so that the Metal textures actually work
-        var pixelFormat:OSType? = nil
-        let bpc = getBpcForVideoFormat(videoFormat!)
-        let isFullRange = getIsFullRangeForVideoFormat(videoFormat!)
+        //var pixelFormat:OSType? = nil
+        //let bpc = getBpcForVideoFormat(videoFormat!)
+        //let isFullRange = getIsFullRangeForVideoFormat(videoFormat!)
         
         // TODO: figure out how to check for 422/444, CVImageBufferChromaLocationBottomField?
         // On visionOS 2, setting pixelFormat *at all* causes a copy to an uncompressed MTLTexture buffer, so we are avoiding it for now.
-        if bpc == 10 {
-            //pixelFormat = isFullRange ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
-            //pixelFormat = isFullRange ? kCVPixelFormatType_420YpCbCr10PackedBiPlanarFullRange : kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange // default
-        }
+        //if bpc == 10 {
+        //    //pixelFormat = isFullRange ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+        //    //pixelFormat = isFullRange ? kCVPixelFormatType_420YpCbCr10PackedBiPlanarFullRange : kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange // default
+        //}
         
         let videoDecoderSpecification:[NSString: AnyObject] = [kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder:kCFBooleanTrue]
-        var destinationImageBufferAttributes:[NSString: AnyObject] = [kCVPixelBufferMetalCompatibilityKey: true as NSNumber, kCVPixelBufferPoolMinimumBufferCountKey: 3 as NSNumber]
-        if pixelFormat != nil {
-            destinationImageBufferAttributes[kCVPixelBufferPixelFormatTypeKey] = pixelFormat! as NSNumber
-        }
+        let destinationImageBufferAttributes:[NSString: AnyObject] = [kCVPixelBufferMetalCompatibilityKey: true as NSNumber, kCVPixelBufferPoolMinimumBufferCountKey: 3 as NSNumber]
+        // TODO come back to this maybe idk
+        //if pixelFormat != nil {
+        //    destinationImageBufferAttributes[kCVPixelBufferPixelFormatTypeKey] = pixelFormat! as NSNumber
+        //}
 
         var decompressionSession:VTDecompressionSession? = nil
         err = VTDecompressionSessionCreate(allocator: nil, formatDescription: videoFormat!, decoderSpecification: videoDecoderSpecification as CFDictionary, imageBufferAttributes: destinationImageBufferAttributes as CFDictionary, outputCallback: nil, decompressionSessionOut: &decompressionSession)

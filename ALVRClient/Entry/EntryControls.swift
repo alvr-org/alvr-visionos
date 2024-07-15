@@ -77,9 +77,7 @@ struct EntryControls: View {
                         
                         print("Open real immersive space")
                         
-                        var id = "RealityKitClient"
-                        
-                        switch await openImmersiveSpace(id: id) {
+                        switch await openImmersiveSpace(id: "RealityKitClient") {
                         case .opened:
                             immersiveSpaceIsShown = true
                         case .error, .userCancelled:
