@@ -643,14 +643,14 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             // These are all hardcoded for 59/57 zones atm
             let innerWidthX = 11
             let innerWidthY = 11
-            let innerShiftX = i == 0 ? 4 : -4
-            let innerShiftY = 2
+            let innerShiftX = i == 0 ? 9 : -7
+            let innerShiftY = 0
             let innerStartX = ((zoneCounts.width - innerWidthX) / 2) + innerShiftX
             let innerEndX = (innerStartX + innerWidthX)
             let innerStartY = ((zoneCounts.height - innerWidthY) / 2) + innerShiftY
             let innerEndY = (innerStartY + innerWidthY)
-            let cutoffStartX = min(i == 0 ? 2 : 4, innerStartX) // TODO: verify this asymmetry is ok
-            let cutoffEndX = min(i == 0 ? 4 : 2, zoneCounts.width-innerEndX) // TODO: verify this asymmetry is ok
+            let cutoffStartX = min(i == 0 ? 2 : 0, innerStartX)
+            let cutoffEndX = min(i == 0 ? 0 : 2, zoneCounts.width-innerEndX)
             
             let innerVal: Float = 1.0
             let outerVal: Float = 1.0
