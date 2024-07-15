@@ -1,6 +1,8 @@
 //
 //  WorldTracker.swift
 //
+// Basically handles everything related to ARKit and SteamVR
+//
 
 import Foundation
 import ARKit
@@ -221,27 +223,6 @@ class WorldTracker {
         Task {
             await processHandTrackingUpdates()
         }
-#if false
-        // HACK
-        guard var fileFolder = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.alvr.client.ALVR")?.path else {
-            return
-        }
-        
-        fileFolder = fileFolder + "/Library/Caches/video/"
-        
-        if !FileManager.default.fileExists(atPath: fileFolder) {
-            try? FileManager.default.createDirectory(atPath: fileFolder, withIntermediateDirectories: true, attributes: nil)
-        }
-        
-        print("asdf")
-        let fm = FileManager.default
-        let items = try! fm.contentsOfDirectory(atPath: fileFolder)
-        for item in items {
-            print(item)
-            do { try FileManager.default.copyItem(at: URL(fileURLWithPath: fileFolder + item), to: URL.documentsDirectory.appending(path: item)) } catch { }
-            //.write(to:  atomically: true, encoding: .utf8)
-        }
-#endif
     }
     
     func resetPlayspace() {

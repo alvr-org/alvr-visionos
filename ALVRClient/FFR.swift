@@ -1,6 +1,8 @@
 //
 //  FFR.swift
 //
+// Foveation vars as read from the Streamer's JSON config.
+//
 
 import Foundation
 import Metal

@@ -1,5 +1,15 @@
 //
-//  App.swift
+//  ALVRClientApp.swift
+//
+// High-level application stuff, notably includes:
+// - Changelogs (incl app version checks)
+// - The AWDL alert
+// - GlobalSettings save/load hooks
+// - Each different space:
+//   - DummyImmersiveSpace: Literally just fetches FOV information/view transforms and exits
+//   - RealityKitClient: The "40PPD" RealityKit renderer.
+//   - MetalClient: Old reliable, the 26PPD Metal renderer.
+// - Metal Layer config (ContentStageConfiguration)
 //
 
 import SwiftUI
@@ -253,5 +263,4 @@ struct ALVRClientApp: App {
         .immersionStyle(selection: $clientImmersionStyle, in: .mixed, .full)
         .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
     }
-    
 }

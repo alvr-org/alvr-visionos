@@ -1,3 +1,8 @@
+//
+//  Settings.swift
+//
+// ALVR server-side settings decoded from JSON.
+//
 import Foundation
 
 enum SettingsError: Error {
