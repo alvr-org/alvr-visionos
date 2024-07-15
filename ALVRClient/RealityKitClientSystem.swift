@@ -12,14 +12,20 @@ import MetalKit
 import Spatial
 import AVFoundation
 
+//MTLPixelFormat.bgra10_xr_srgb = 1.12ms at 3880px per eye
+//MTLPixelFormat.rgba16Float = 1.12ms
+//MTLPixelFormat.init(rawValue: MTLPixelFormatRGB10A2Unorm_sRGB)! = 1.12ms
+
 let vrrGridSize = 64+1
 let renderWidth = Int(1920)
 let renderHeight = Int(1824)
 let renderScale = 1.75
 let renderColorFormatSDR = MTLPixelFormat.bgra8Unorm_srgb // rgba8Unorm, rgba8Unorm_srgb, bgra8Unorm, bgra8Unorm_srgb, rgba16Float
-let renderColorFormatHDR = MTLPixelFormat.rgba16Float // bgr10_xr_srgb? rg11b10Float? rgb9e5?--rgb9e5 is probably not renderable.
+var renderColorFormatHDR = MTLPixelFormat.rgba16Float // bgr10_xr_srgb? rg11b10Float? rgb9e5?--rgb9e5 is probably not renderable.
 let renderColorFormatDrawableSDR = renderColorFormatSDR
-let renderColorFormatDrawableHDR = MTLPixelFormat.rgba16Float
+var renderColorFormatDrawableHDR = MTLPixelFormat.rgba16Float
+let renderColorFormatVisionOS2HDR = MTLPixelFormat.rgba16Float // idk, if I ever want to change it? other texture formats don't do well tbh
+let renderColorFormatDrawableVisionOS2HDR = MTLPixelFormat.rgba16Float
 let renderDepthFormat = MTLPixelFormat.depth16Unorm
 let renderViewCount = 2
 let renderZNear = 0.001
@@ -109,6 +115,12 @@ class RealityKitClientSystem : System {
     required init(scene: RealityKit.Scene) {
         which = RealityKitClientSystem.howManyScenesExist
         RealityKitClientSystem.howManyScenesExist += 1
+        
+        // HACK: We need to do this early somewhere, so I chose here.
+        if #available(visionOS 2.0, *) {
+            renderColorFormatHDR = renderColorFormatVisionOS2HDR
+            renderColorFormatDrawableHDR = renderColorFormatDrawableVisionOS2HDR
+        }
     }
     
     static func setup(_ content: RealityViewContent) async {
@@ -275,9 +287,9 @@ class DrawableWrapper {
     
     @MainActor func present(commandBuffer: MTLCommandBuffer) {
         if #available(visionOS 2.0, *) {
-            if let tex = wrapped as? LowLevelTexture {
+            if wrapped as? LowLevelTexture != nil {
                 commandBuffer.commit()
-                //commandBuffer.waitUntilCompleted()
+                commandBuffer.waitUntilCompleted()
                 return
             }
         }
@@ -491,9 +503,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     func createCopyShaderPipelines()
     {
         let vrrMap = createVRR() // HACK
+        var formatHDR = renderColorFormatDrawableHDR
+        if #available(visionOS 2.0, *) {
+            formatHDR = renderColorFormatDrawableVisionOS2HDR
+        }
         
         self.passthroughPipelineState = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatSDR, viewCount: 1, vrrScreenSize: vrrMap.screenSize, vrrPhysSize: vrrMap.physicalSize(layer: 0),  vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader")
-        self.passthroughPipelineStateHDR = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR, viewCount: 1, vrrScreenSize: vrrMap.screenSize, vrrPhysSize: vrrMap.physicalSize(layer: 0),  vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader")
+        self.passthroughPipelineStateHDR = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: formatHDR, viewCount: 1, vrrScreenSize: vrrMap.screenSize, vrrPhysSize: vrrMap.physicalSize(layer: 0),  vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader")
     }
     
     func createVrrMeshResource(_ which: Int, _ vrrMap: MTLRasterizationRateMap) throws -> MeshResource {
@@ -839,6 +855,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     
     func copyTextureToTexture(_ commandBuffer: MTLCommandBuffer, _ from: MTLTexture, _ to: MTLTexture, _ vrrMapBuffer: MTLBuffer) {
         //vrrMap!.copyParameterData(buffer: vrrMapBuffer!, offset: 0)
+        
+        var formatHDR = renderColorFormatDrawableHDR
+        if #available(visionOS 2.0, *) {
+            formatHDR = renderColorFormatDrawableVisionOS2HDR
+        }
 
         // Create a render pass descriptor
         let renderPassDescriptor = MTLRenderPassDescriptor()
@@ -855,7 +876,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         renderEncoder.label = "Copy Texture to Texture"
         renderEncoder.pushDebugGroup("Copy Texture to Texture")
-        renderEncoder.setRenderPipelineState(to.pixelFormat == renderColorFormatDrawableHDR ? passthroughPipelineStateHDR! : passthroughPipelineState!)
+        renderEncoder.setRenderPipelineState(to.pixelFormat == formatHDR ? passthroughPipelineStateHDR! : passthroughPipelineState!)
         renderEncoder.setFragmentTexture(from, index: 0)
         renderEncoder.setVertexBuffer(vrrMapBuffer, offset: 0, index: BufferIndex.VRR.rawValue)
         renderEncoder.setCullMode(.none)
