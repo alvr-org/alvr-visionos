@@ -74,9 +74,6 @@ class EventHandler: ObservableObject {
     var numberOfEventThreadRestarts: Int = 0
     var mdnsListener: NWListener? = nil
     
-    var viewWidth = 1920*2
-    var viewHeight = 1824*2
-    
     var stutterSampleStart = 0.0
     var stutterEventsCounted = 0
     var lastStutterTime = 0.0
@@ -91,7 +88,7 @@ class EventHandler: ObservableObject {
             print("Initialize ALVR")
             alvrInitialized = true
             let refreshRates:[Float] = [100, 96, 90]
-            let capabilities = AlvrClientCapabilities(default_view_width: UInt32(1920*2), default_view_height: UInt32(1824*2), external_decoder: true, refresh_rates: refreshRates, refresh_rates_count: Int32(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: false)
+            let capabilities = AlvrClientCapabilities(default_view_width: UInt32(renderWidth*2), default_view_height: UInt32(renderHeight*2), external_decoder: true, refresh_rates: refreshRates, refresh_rates_count: Int32(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: false)
             alvr_initialize(/*capabilities=*/capabilities)
             alvr_resume()
         }
