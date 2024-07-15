@@ -1252,6 +1252,7 @@ def Xform "Root"
             int inputs:index
             float inputs:max_lod_clamp
             float inputs:min_lod_clamp
+            string inputs:mip_filter = "none"
             bool inputs:no_flip_v
             int2 inputs:offset
             float2 inputs:texcoord.connect = </Root/BiplanarMaterialBilinear_L/TextureCoordinates.outputs:out>
@@ -1259,7 +1260,7 @@ def Xform "Root"
             string inputs:v_wrap_mode
             color4f outputs:out
             float2 ui:nodegraph:node:pos = (-445.75592, -172.47223)
-            int ui:nodegraph:node:stackingOrder = 749
+            int ui:nodegraph:node:stackingOrder = 751
             string[] ui:nodegraph:realitykit:node:attributesShowingChildren = ["inputs:max_anisotropy"]
         }
 
@@ -1356,7 +1357,7 @@ def Xform "Root"
             float inputs:max_lod_clamp
             string inputs:min_filter
             float inputs:min_lod_clamp
-            string inputs:mip_filter
+            string inputs:mip_filter = "none"
             bool inputs:no_flip_v
             int2 inputs:offset
             float2 inputs:texcoord.connect = </Root/BiplanarMaterialBilinear_R/TextureCoordinates.outputs:out>
@@ -1364,7 +1365,7 @@ def Xform "Root"
             string inputs:v_wrap_mode
             color4f outputs:out
             float2 ui:nodegraph:node:pos = (-435.61642, -128.64912)
-            int ui:nodegraph:node:stackingOrder = 637
+            int ui:nodegraph:node:stackingOrder = 641
         }
 
         def Shader "TextureCoordinates"
