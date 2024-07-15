@@ -547,12 +547,11 @@ class Renderer {
     }
     
     // Adjust view transforms for debugging various issues.
-    // For now we just remove the rotational component.
     func fixTransform(_ transform: simd_float4x4) -> simd_float4x4 {
-        var out = matrix_identity_float4x4
-        out.columns.3 = transform.columns.3
-        out.columns.3.w = 1.0
-        return out
+        //var out = matrix_identity_float4x4
+        //out.columns.3 = transform.columns.3
+        //out.columns.3.w = 1.0
+        return transform
     }
     
     // Adjusts view tangents for debugging various issues.
