@@ -12,7 +12,7 @@ import MetalKit
 import Spatial
 import AVFoundation
 
-let vrrGridSize = 64
+let vrrGridSize = 64+1
 let renderWidth = Int(1920)
 let renderHeight = Int(1824)
 let renderScale = 1.75
@@ -32,6 +32,22 @@ let realityKitRenderScale: Float = 2.25
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
 let rk_panel_depth: Float = 90
+
+struct RKQueuedFrame {
+    let texture: MTLTexture
+    let depthTexture: MTLTexture
+    let timestamp: UInt64
+    let transform: simd_float4x4
+    let vsyncTime: Double
+    let vrrMap: MTLRasterizationRateMap
+    let vrrBuffer: MTLBuffer
+}
+
+struct VrrPlaneVertex {
+    var position: simd_float3 = .zero
+    var uv: simd_float2 = .zero
+}
+
 
 class VisionPro: NSObject, ObservableObject {
     var nextFrameTime: TimeInterval = 0.0
@@ -80,15 +96,6 @@ class VisionPro: NSObject, ObservableObject {
     }
 }
 
-struct RKQueuedFrame {
-    let texture: MTLTexture
-    let depthTexture: MTLTexture
-    let timestamp: UInt64
-    let transform: simd_float4x4
-    let vsyncTime: Double
-    let vrrMap: MTLRasterizationRateMap
-    let vrrBuffer: MTLBuffer
-}
 
 // Every WindowGroup technically counts as a Scene, which means
 // we have to do Shenanigans to make sure that only the correct Scenes
@@ -110,7 +117,7 @@ class RealityKitClientSystem : System {
             let material = UnlitMaterial(color: .white)
             let material2 = UnlitMaterial(color: .black)
             
-            let videoPlaneMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
+            let videoPlaneMeshCollision = MeshResource.generatePlane(width: 1.0, depth: 1.0)
             let cubeMesh = MeshResource.generateBox(size: 1.0)
             try? cubeMesh.addInvertedNormals()
             
@@ -119,35 +126,35 @@ class RealityKitClientSystem : System {
             anchor.name = "backdrop_headanchor"
             anchor.position = simd_float3(0.0, 0.0, 0.0)
             
-            let videoPlaneA_L = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            let videoPlaneA_L = Entity()
             videoPlaneA_L.name = "video_plane_a_L"
             videoPlaneA_L.components.set(MagicRealityKitClientSystemComponent())
             videoPlaneA_L.components.set(InputTargetComponent())
-            videoPlaneA_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            videoPlaneA_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneA_L.scale = simd_float3(0.0, 0.0, 0.0)
             
-            let videoPlaneB_L = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            let videoPlaneB_L = Entity()
             videoPlaneB_L.name = "video_plane_b_L"
             videoPlaneB_L.components.set(MagicRealityKitClientSystemComponent())
             videoPlaneB_L.components.set(InputTargetComponent())
-            videoPlaneB_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            videoPlaneB_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneB_L.scale = simd_float3(0.0, 0.0, 0.0)
             
-            let videoPlaneA_R = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            let videoPlaneA_R = Entity()
             videoPlaneA_R.name = "video_plane_a_R"
             videoPlaneA_R.components.set(MagicRealityKitClientSystemComponent())
             videoPlaneA_R.components.set(InputTargetComponent())
-            videoPlaneA_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            videoPlaneA_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneA_R.scale = simd_float3(0.0, 0.0, 0.0)
             
-            let videoPlaneB_R = ModelEntity(mesh: videoPlaneMesh, materials: [material])
+            let videoPlaneB_R = Entity()
             videoPlaneB_R.name = "video_plane_b_R"
             videoPlaneB_R.components.set(MagicRealityKitClientSystemComponent())
             videoPlaneB_R.components.set(InputTargetComponent())
-            videoPlaneB_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMesh)]))
+            videoPlaneB_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneB_R.scale = simd_float3(0.0, 0.0, 0.0)
 
-            let backdrop = ModelEntity(mesh: videoPlaneMesh, materials: [material2])
+            let backdrop = ModelEntity(mesh: videoPlaneMeshCollision, materials: [material2])
             backdrop.name = "backdrop_plane"
             backdrop.isEnabled = false
             
@@ -199,11 +206,18 @@ class DrawableWrapper {
     var drawable: AnyObject? = nil
     var textureResource: TextureResource? = nil
     
-    init(pixelFormat: MTLPixelFormat, width: Int, height: Int, usage: MTLTextureUsage) {
+    init(pixelFormat: MTLPixelFormat, width: Int, height: Int, usage: MTLTextureUsage, isBiplanar: Bool) {
         if #available(visionOS 2.0, *) {
-            let desc = LowLevelTexture.Descriptor(textureType: .type2D, pixelFormat: pixelFormat, width: width, height: height, depth: 1, mipmapLevelCount: 1, arrayLength: 1, textureUsage: usage)
-            let tex = try? LowLevelTexture(descriptor: desc)
-            self.wrapped = tex
+            if isBiplanar {
+                let desc = LowLevelTexture.Descriptor(textureType: .type2DArray, pixelFormat: pixelFormat, width: width, height: height/2, depth: 1, mipmapLevelCount: 1, arrayLength: 2, textureUsage: usage)
+                let tex = try? LowLevelTexture(descriptor: desc)
+                self.wrapped = tex
+            }
+            else {
+                let desc = LowLevelTexture.Descriptor(textureType: .type2D, pixelFormat: pixelFormat, width: width, height: height, depth: 1, mipmapLevelCount: 1, arrayLength: 1, textureUsage: usage)
+                let tex = try? LowLevelTexture(descriptor: desc)
+                self.wrapped = tex
+            }
         }
         else {
             let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: pixelFormat, width: width, height: height, usage: [usage], mipmapsMode: .none)
@@ -282,6 +296,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var drawableQueueB: DrawableWrapper? = nil
     private var textureResourceA: TextureResource? = nil
     private var textureResourceB: TextureResource? = nil
+    private var meshResourceL: MeshResource? = nil
+    private var meshResourceR: MeshResource? = nil
     private(set) var surfaceMaterialA_L: ShaderGraphMaterial? = nil
     private(set) var surfaceMaterialB_L: ShaderGraphMaterial? = nil
     private(set) var surfaceMaterialA_R: ShaderGraphMaterial? = nil
@@ -292,6 +308,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var setPlaneMaterialB_R = false
     var passthroughPipelineState: MTLRenderPipelineState? = nil
     var passthroughPipelineStateHDR: MTLRenderPipelineState? = nil
+    var meshHasVrr = false
     
     public let device: MTLDevice
     let commandQueue: MTLCommandQueue
@@ -355,10 +372,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         
         // Generate VRR mesh
+        // TODO: can this be done faster? (per-frame)
         for vertexID in 0..<((vrrGridSize-1)*vrrGridSize*2)*2 {
-            var x = (vertexID >> 1) % vrrGridSize
-            var y = (vertexID & 1) + (((vertexID >> 1) / vrrGridSize) % (vrrGridSize-1))
-            var which = (vertexID >= (vrrGridSize-1)*vrrGridSize*2) ? 1 : 0
+            let x = (vertexID >> 1) % vrrGridSize
+            let y = (vertexID & 1) + (((vertexID >> 1) / vrrGridSize) % (vrrGridSize-1))
+            let which = (vertexID >= (vrrGridSize-1)*vrrGridSize*2) ? 1 : 0
             
             copyVertices[vertexID] = simd_float3((Float(x) / Float(vrrGridSize - 1)), (Float(y) / Float(vrrGridSize - 1)), (which != 0) ? 1.0 : 0.0)
         }
@@ -394,9 +412,16 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         let vrr = createVRR() // HACK
         
-        currentRenderWidth = vrr.screenSize.width//Int(Double(renderWidth) * Double(currentRenderScale))
-        currentRenderHeight = vrr.screenSize.height//Int(Double(renderHeight) * Double(currentRenderScale))
-        currentRenderScale = Float(currentRenderWidth) / Float(renderWidth)
+        if meshHasVrr {
+            currentRenderWidth = currentOffscreenRenderWidth
+            currentRenderHeight = currentOffscreenRenderHeight
+            currentRenderScale = Float(currentRenderWidth) / Float(renderWidth)
+        }
+        else {
+            currentRenderWidth = vrr.screenSize.width//Int(Double(renderWidth) * Double(currentRenderScale))
+            currentRenderHeight = vrr.screenSize.height//Int(Double(renderHeight) * Double(currentRenderScale))
+            currentRenderScale = Float(currentRenderWidth) / Float(renderWidth)
+        }
         
         currentRenderColorFormat = renderer.currentRenderColorFormat
         currentDrawableRenderColorFormat = renderer.currentDrawableRenderColorFormat
@@ -404,8 +429,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         lastRenderScale = currentRenderScale
         lastOffscreenRenderScale = currentOffscreenRenderScale
 
-        self.drawableQueueA = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: .renderTarget)
-        self.drawableQueueB = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: .renderTarget)
+        self.drawableQueueA = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: .renderTarget, isBiplanar: meshHasVrr)
+        self.drawableQueueB = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: .renderTarget, isBiplanar: meshHasVrr)
         
         // Dummy texture
         self.textureResourceA = self.drawableQueueA!.makeTextureResource()
@@ -416,24 +441,29 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         Task {
             var filter = "Bicubic"
+            var base = "/Root/SBSMaterial"
             if currentRenderScale > 1.8 { // arbitrary, TODO actually benchmark this idk
                 filter = "Bilinear"
             }
+            if meshHasVrr {
+                base = "/Root/BiplanarMaterial"
+                filter = "Bilinear"
+            }
             self.surfaceMaterialA_L = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterial" + filter + "_L",
+                named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
             self.surfaceMaterialB_L = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterial" + filter + "_L",
+                named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
             
             self.surfaceMaterialA_R = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterial" + filter + "_R",
+                named: base + filter + "_R",
                 from: "SBSMaterial.usda"
             )
             self.surfaceMaterialB_R = try! await ShaderGraphMaterial(
-                named: "/Root/SBSMaterial" + filter + "_R",
+                named: base + filter + "_R",
                 from: "SBSMaterial.usda"
             )
             
@@ -466,6 +496,119 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         self.passthroughPipelineStateHDR = try! renderer.buildCopyPipelineWithDevice(device: device, colorFormat: renderColorFormatDrawableHDR, viewCount: 1, vrrScreenSize: vrrMap.screenSize, vrrPhysSize: vrrMap.physicalSize(layer: 0),  vertexShaderName: "copyVertexShader", fragmentShaderName: "copyFragmentShader")
     }
     
+    func createVrrMeshResource(_ which: Int, _ vrrMap: MTLRasterizationRateMap) throws -> MeshResource {
+        if #available(visionOS 2.0, *) {
+            let vertexAttributes: [LowLevelMesh.Attribute] = [
+                .init(semantic: .position, format: .float3, offset: MemoryLayout<VrrPlaneVertex>.offset(of: \.position)!),
+                .init(semantic: .uv0, format: .float2, offset: MemoryLayout<VrrPlaneVertex>.offset(of: \.uv)!)
+            ]
+
+
+            let vertexLayouts: [LowLevelMesh.Layout] = [
+                .init(bufferIndex: 0, bufferStride: MemoryLayout<VrrPlaneVertex>.stride)
+            ]
+
+            var desc = LowLevelMesh.Descriptor()
+            desc.vertexAttributes = vertexAttributes
+            desc.vertexLayouts = vertexLayouts
+            desc.indexType = .uint32
+
+            let generatedGridSize = vrrGridSize
+            desc.vertexCapacity = generatedGridSize*generatedGridSize
+            desc.indexCapacity = ((generatedGridSize-1)*generatedGridSize*2)
+            
+            let mesh = try LowLevelMesh(descriptor: desc)
+
+            // Generate vertices
+            mesh.withUnsafeMutableBytes(bufferIndex: 0) { rawBytes in
+                let vertices = rawBytes.bindMemory(to: VrrPlaneVertex.self)
+                
+                var vertexID = 0
+                for y in 0..<generatedGridSize {
+                    for x in 0..<generatedGridSize {
+                        let uvx = (Float(x) / Float(generatedGridSize - 1))
+                        let uvy = (Float(y) / Float(generatedGridSize - 1))
+                        let px = uvx - 0.5
+                        let py = uvy - 0.5
+                        
+                        let physicalCoordinates = vrrMap.physicalCoordinates(screenCoordinates: MTLCoordinate2D(x: uvx * Float(vrrMap.screenSize.width), y: uvy * Float(vrrMap.screenSize.height)), layer: which)
+                        let real_uvx = (physicalCoordinates.x / Float(vrrMap.screenSize.width))
+                        let real_uvy = (physicalCoordinates.y / Float(vrrMap.screenSize.height))
+                        
+                        vertices[vertexID].position = simd_float3(px, 0.0, py)
+                        vertices[vertexID].uv = simd_float2(real_uvx, real_uvy)
+                        vertexID += 1
+                    }
+                }
+            }
+            
+            // Generate indices
+            // TODO: this could be simplified by moving the left/right stuff up ^
+            let verticesPerRow = generatedGridSize
+            var indexID = 0
+            mesh.withUnsafeMutableIndices { rawIndices in
+                let indices = rawIndices.bindMemory(to: UInt32.self)
+                
+                for y in 0..<1 {
+                    for x in 0..<verticesPerRow {
+                        indices[indexID] = UInt32((y * verticesPerRow) + x)
+                        indexID += 1
+                        indices[indexID] = UInt32(((y + 1) * verticesPerRow) + x)
+                        indexID += 1
+                    }
+                }
+                
+                for y in 1..<generatedGridSize-1 {
+                    if y & 1 == 0 {
+                        // left to right
+                        for x in 0..<verticesPerRow {
+                            indices[indexID] = UInt32((y * verticesPerRow) + x)
+                            if indices[indexID] != indices[indexID-1] {
+                                indexID += 1
+                            }
+                            indices[indexID] = UInt32(((y + 1) * verticesPerRow) + x)
+                            if indices[indexID] != indices[indexID-1] {
+                                indexID += 1
+                            }
+                        }
+                    } else {
+                        // right to left
+                        for x in (0..<verticesPerRow).reversed() {
+                            indices[indexID] = UInt32((y * verticesPerRow) + x)
+                            if indices[indexID] != indices[indexID-1] {
+                                indexID += 1
+                            }
+                            indices[indexID] = UInt32(((y + 1) * verticesPerRow) + x)
+                            if indices[indexID] != indices[indexID-1] {
+                                indexID += 1
+                            }
+                        }
+                    }
+                }
+            }
+            let numIndices = indexID
+            
+            let meshBounds = BoundingBox(min: [-0.5, 0, -0.5], max: [0.5, 0, 0.5])
+            let parts: [LowLevelMesh.Part] = [
+                    LowLevelMesh.Part(
+                    indexOffset: 0,
+                    indexCount: numIndices,
+                    topology: .triangleStrip,
+                    bounds: meshBounds
+                )
+            ]
+            mesh.parts.replaceAll(parts)
+            
+            meshHasVrr = true
+            return try MeshResource(from: mesh)
+        }
+        else {
+            meshHasVrr = false
+            let videoPlaneMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
+            return videoPlaneMesh
+        }
+    }
+    
     func createVRR() -> MTLRasterizationRateMap {
         let descriptor = MTLRasterizationRateMapDescriptor()
         descriptor.label = "Offscreen VRR"
@@ -473,13 +616,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         currentOffscreenRenderWidth = Int(Double(renderWidth) * Double(currentOffscreenRenderScale))
         currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
 
-
-        let layerWidth = Int(currentOffscreenRenderWidth / vrrGridSize) * vrrGridSize
-        let layerHeight = Int(currentOffscreenRenderHeight / vrrGridSize) * vrrGridSize
+        let vrrGridPartitions = vrrGridSize-1
+        let layerWidth = Int(currentOffscreenRenderWidth / vrrGridPartitions) * vrrGridPartitions
+        let layerHeight = Int(currentOffscreenRenderHeight / vrrGridPartitions) * vrrGridPartitions
         descriptor.screenSize = MTLSizeMake(layerWidth, layerHeight, 2)
 
         // i==0 => left eye, i==1 -> right eye
-        let zoneCounts = MTLSizeMake(vrrGridSize, vrrGridSize, 2)
+        let zoneCounts = MTLSizeMake(vrrGridPartitions, vrrGridPartitions, 2)
         for i in 0..<zoneCounts.depth {
             let layerDescriptor = MTLRasterizationRateLayerDescriptor(sampleCount: zoneCounts)
             
@@ -569,6 +712,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         //currentOffscreenRenderWidth = vrrMap.physicalSize(layer: 0).width
         //currentOffscreenRenderHeight = vrrMap.physicalSize(layer: 0).height
         
+        // TODO: update mesh
+        if meshResourceL == nil {
+            meshResourceL = (try? createVrrMeshResource(0, vrrMap)) ?? MeshResource.generatePlane(width: 1.0, depth: 1.0)
+        }
+        if meshResourceR == nil {
+            meshResourceR = (try? createVrrMeshResource(1, vrrMap)) ?? MeshResource.generatePlane(width: 1.0, depth: 1.0)
+        }
         
         //print("Offscreen render res foveated:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
         return vrrMap
@@ -674,7 +824,12 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             }
             let (texture, depthTexture, vrrBuffer) = self.rkFramePool.removeFirst()
             objc_sync_exit(self.rkFramePoolLock)
-            if self.renderFrame(drawableTexture: texture, depthTexture: depthTexture, vrrBuffer: vrrBuffer) == nil {
+            
+            guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+                fatalError("Failed to create command buffer")
+            }
+            
+            if self.renderFrame(drawableTexture: texture, offscreenTexture: texture, depthTexture: depthTexture, vrrBuffer: vrrBuffer, commandBuffer: commandBuffer) == nil {
                 objc_sync_enter(self.rkFramePoolLock)
                 self.rkFramePool.append((texture, depthTexture, vrrBuffer))
                 objc_sync_exit(self.rkFramePoolLock)
@@ -708,7 +863,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 
         renderEncoder.setVertexBuffer(copyVerticesBuffer, offset: 0, index: VertexAttribute.position.rawValue)
 
-        for i in 0..<(vrrGridSize*2)-2 {
+        for i in 0..<(vrrGridSize-1)*2 {
             renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: i*vrrGridSize*2, vertexCount: vrrGridSize*2)
         }
 
@@ -739,16 +894,16 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
 
         // RealityKit automatically calls this every frame for every scene.
-        guard let planeA_L = context.scene.findEntity(named: "video_plane_a_L") as? ModelEntity else {
+        guard let planeA_L = context.scene.findEntity(named: "video_plane_a_L") else {
             return
         }
-        guard let planeB_L = context.scene.findEntity(named: "video_plane_b_L") as? ModelEntity else {
+        guard let planeB_L = context.scene.findEntity(named: "video_plane_b_L") else {
             return
         }
-        guard let planeA_R = context.scene.findEntity(named: "video_plane_a_R") as? ModelEntity else {
+        guard let planeA_R = context.scene.findEntity(named: "video_plane_a_R") else {
             return
         }
-        guard let planeB_R = context.scene.findEntity(named: "video_plane_b_R") as? ModelEntity else {
+        guard let planeB_R = context.scene.findEntity(named: "video_plane_b_R") else {
             return
         }
         guard let backdrop = context.scene.findEntity(named: "backdrop_plane") as? ModelEntity else {
@@ -766,8 +921,15 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             // TODO: for some reason color format changes causes fps to drop to 45?
             if lastRenderScale != currentRenderScale || lastOffscreenRenderScale != currentOffscreenRenderScale || lastRenderColorFormat != currentRenderColorFormat {
-                currentRenderWidth = currentOffscreenRenderWidth//Int(Double(renderWidth) * Double(currentRenderScale))
-                currentRenderHeight = currentOffscreenRenderHeight//Int(Double(renderHeight) * Double(currentRenderScale))
+                if meshHasVrr {
+                    currentRenderWidth = currentOffscreenRenderWidth
+                    currentRenderHeight = currentOffscreenRenderHeight
+                    currentRenderScale = Float(currentRenderWidth) / Float(renderWidth)
+                }
+                else {
+                    currentRenderWidth = Int(Double(renderWidth) * Double(currentRenderScale))
+                    currentRenderHeight = Int(Double(renderHeight) * Double(currentRenderScale))
+                }
                 
                 // TODO: SSAA after moving foveation out of frag shader?
                 if !renderDoStreamSSAA {
@@ -778,9 +940,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 currentOffscreenRenderHeight = Int(Double(renderHeight) * Double(currentOffscreenRenderScale))
             
                 // Recreate framebuffer
-                self.drawableQueueA = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget])
+                self.drawableQueueA = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], isBiplanar: meshHasVrr)
                 self.textureResourceA = self.drawableQueueA!.makeTextureResource()
-                self.drawableQueueB = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget])
+                self.drawableQueueB = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*2, usage: [.renderTarget], isBiplanar: meshHasVrr)
                 self.textureResourceB = self.drawableQueueB!.makeTextureResource()
                 
                 self.setPlaneMaterialA_L = false
@@ -802,15 +964,106 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             lastOffscreenRenderScale = currentOffscreenRenderScale
             lastRenderColorFormat = currentRenderColorFormat
             
+            if commandBuffer == nil {
+                commandBuffer = commandQueue.makeCommandBuffer()
+            }
+            
+            guard let commandBuffer = commandBuffer else {
+                fatalError("Failed to create command buffer")
+            }
+            
+            if !self.setPlaneMaterialA_L {
+                if self.surfaceMaterialA_L != nil {
+                    if self.textureResourceA != nil && self.meshResourceL != nil{
+                        try! self.surfaceMaterialA_L!.setParameter(
+                            name: "texture",
+                            value: .textureResource(self.textureResourceA!)
+                        )
+                        
+                        let modelComponent = ModelComponent(mesh: self.meshResourceL!, materials: [self.surfaceMaterialA_L!])
+                        planeA_L.components.set(modelComponent)
+                        self.setPlaneMaterialA_L = true
+                    }
+                }
+            }
+            if !self.setPlaneMaterialB_L {
+                if self.surfaceMaterialB_L != nil {
+                    if self.textureResourceB != nil && self.meshResourceL != nil {
+                        try! self.surfaceMaterialB_L!.setParameter(
+                            name: "texture",
+                            value: .textureResource(self.textureResourceB!)
+                        )
+                        
+                        let modelComponent = ModelComponent(mesh: self.meshResourceL!, materials: [self.surfaceMaterialB_L!])
+                        planeB_L.components.set(modelComponent)
+                        self.setPlaneMaterialB_L = true
+                    }
+                }
+            }
+            
+            if !self.setPlaneMaterialA_R {
+                if self.surfaceMaterialA_R != nil {
+                    if self.textureResourceA != nil && self.meshResourceR != nil {
+                        try! self.surfaceMaterialA_R!.setParameter(
+                            name: "texture",
+                            value: .textureResource(self.textureResourceA!)
+                        )
+                        
+                        let modelComponent = ModelComponent(mesh: self.meshResourceR!, materials: [self.surfaceMaterialA_R!])
+                        planeA_R.components.set(modelComponent)
+                        self.setPlaneMaterialA_R = true
+                    }
+                }
+            }
+            if !self.setPlaneMaterialB_R {
+                if self.surfaceMaterialB_R != nil {
+                    if self.textureResourceB != nil && self.meshResourceR != nil {
+                        try! self.surfaceMaterialB_R!.setParameter(
+                            name: "texture",
+                            value: .textureResource(self.textureResourceB!)
+                        )
+                        
+                        let modelComponent = ModelComponent(mesh: self.meshResourceR!, materials: [self.surfaceMaterialB_R!])
+                        planeB_R.components.set(modelComponent)
+                        self.setPlaneMaterialB_R = true
+                    }
+                }
+            }
+            
+            if !self.setPlaneMaterialA_L || !self.setPlaneMaterialB_L || !self.setPlaneMaterialA_R || !self.setPlaneMaterialB_R {
+                //rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
+                return
+            }
+            
+            //print(commandBuffer == nil, frame == nil, rkFramePool.count)
+
+        
+            rkFramesRendered += 1
+            let whichRkFrame = rkFramesRendered % 2
+        
+            var drawable: MTLTexture? = nil
+            if whichRkFrame == 0 {
+                drawable = drawableQueueA?.nextTexture(commandBuffer: commandBuffer)
+            }
+            else {
+                drawable = drawableQueueB?.nextTexture(commandBuffer: commandBuffer)
+            }
+            guard let drawable = drawable else {
+                print("no drawable")
+                //self.rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
+                rkFramesRendered -= 1
+                return
+            }
+            
             if !renderMultithreaded {
                 objc_sync_enter(self.rkFramePoolLock)
                 if !self.rkFramePool.isEmpty {
                     let (texture, depthTexture, vrrBuffer) = self.rkFramePool.removeFirst()
                     objc_sync_exit(self.rkFramePoolLock)
-                    let pair = self.renderFrame(drawableTexture: texture, depthTexture: depthTexture, vrrBuffer: vrrBuffer)
-                    commandBuffer = pair?.0
+                    let pair = self.renderFrame(drawableTexture: meshHasVrr ? drawable : texture, offscreenTexture: texture, depthTexture: depthTexture, vrrBuffer: vrrBuffer, commandBuffer: commandBuffer)
+                    //commandBuffer = pair?.0
                     frame = pair?.1
-                    if commandBuffer == nil {
+                    if pair?.0 == nil {
                         self.rkFramePool.append((texture, depthTexture, vrrBuffer))
                         //print("no frame")
                     }
@@ -852,92 +1105,18 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 }
             }
             
-            //print(commandBuffer == nil, frame == nil, rkFramePool.count)
             guard let frame = frame else {
                 //print("no frame")
-                return
-            }
-            
-            if commandBuffer == nil {
-                commandBuffer = commandQueue.makeCommandBuffer()
-            }
-            
-            guard let commandBuffer = commandBuffer else {
-                fatalError("Failed to create command buffer")
-            }
-        
-            rkFramesRendered += 1
-            let whichRkFrame = rkFramesRendered % 2
-            
-            if !self.setPlaneMaterialA_L {
-                if self.surfaceMaterialA_L != nil {
-                    if self.textureResourceA != nil {
-                        try! self.surfaceMaterialA_L!.setParameter(
-                            name: "texture",
-                            value: .textureResource(self.textureResourceA!)
-                        )
-                        
-                        planeA_L.model?.materials = [self.surfaceMaterialA_L!]
-                        self.setPlaneMaterialA_L = true
-                    }
+                
+                // Late abort, keep visionOS happy and present the drawable even though it won't be visible
+                if whichRkFrame == 0 {
+                    drawableQueueA!.present(commandBuffer: commandBuffer)
                 }
-            }
-            if !self.setPlaneMaterialB_L {
-                if self.surfaceMaterialB_L != nil {
-                    if self.textureResourceB != nil {
-                        try! self.surfaceMaterialB_L!.setParameter(
-                            name: "texture",
-                            value: .textureResource(self.textureResourceB!)
-                        )
-                        
-                        planeB_L.model?.materials = [self.surfaceMaterialB_L!]
-                        self.setPlaneMaterialB_L = true
-                    }
+                else {
+                    drawableQueueB!.present(commandBuffer: commandBuffer)
                 }
-            }
-            
-            if !self.setPlaneMaterialA_R {
-                if self.surfaceMaterialA_R != nil {
-                    if self.textureResourceA != nil {
-                        try! self.surfaceMaterialA_R!.setParameter(
-                            name: "texture",
-                            value: .textureResource(self.textureResourceA!)
-                        )
-                        
-                        planeA_R.model?.materials = [self.surfaceMaterialA_R!]
-                        self.setPlaneMaterialA_R = true
-                    }
-                }
-            }
-            if !self.setPlaneMaterialB_R {
-                if self.surfaceMaterialB_R != nil {
-                    if self.textureResourceB != nil {
-                        try! self.surfaceMaterialB_R!.setParameter(
-                            name: "texture",
-                            value: .textureResource(self.textureResourceB!)
-                        )
-                        
-                        planeB_R.model?.materials = [self.surfaceMaterialB_R!]
-                        self.setPlaneMaterialB_R = true
-                    }
-                }
-            }
-            
-            if !self.setPlaneMaterialA_L || !self.setPlaneMaterialB_L || !self.setPlaneMaterialA_R || !self.setPlaneMaterialB_R {
-                rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
-                return
-            }
-        
-            var drawable: MTLTexture? = nil
-            if whichRkFrame == 0 {
-                drawable = drawableQueueA?.nextTexture(commandBuffer: commandBuffer)
-            }
-            else {
-                drawable = drawableQueueB?.nextTexture(commandBuffer: commandBuffer)
-            }
-            guard let drawable = drawable else {
-                print("no drawable")
-                self.rkFramePool.append((frame.texture, frame.depthTexture, frame.vrrBuffer))
+                rkFramesRendered -= 1
+                
                 return
             }
             
@@ -953,7 +1132,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 EventHandler.shared.handleHeadsetEntered()
                 //EventHandler.shared.kickAlvr() // HACK: RealityKit kills the audio :/
             }
-            
 
             var planeTransform_L = frame.transform * DummyMetalRenderer.renderViewTransforms[0]
             var planeTransform_R = frame.transform * DummyMetalRenderer.renderViewTransforms[1]
@@ -1000,8 +1178,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             //drawable!.texture.setPurgeableState(.nonVolatile)
             //vrrBuffer.setPurgeableState(.nonVolatile)
 #endif
-            
-            copyTextureToTexture(commandBuffer, texture, drawable, vrrBuffer)
+            if !meshHasVrr {
+                copyTextureToTexture(commandBuffer, texture, drawable, vrrBuffer)
+            }
 
             let submitTime = CACurrentMediaTime()
             commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
@@ -1122,7 +1301,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     }
     
     // TODO: Share this with Renderer somehow
-    func renderFrame(drawableTexture: MTLTexture, depthTexture: MTLTexture, vrrBuffer: MTLBuffer) -> (MTLCommandBuffer, RKQueuedFrame)? {
+    func renderFrame(drawableTexture: MTLTexture, offscreenTexture: MTLTexture, depthTexture: MTLTexture, vrrBuffer: MTLBuffer, commandBuffer: MTLCommandBuffer) -> (MTLCommandBuffer, RKQueuedFrame)? {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
         var streamingActiveForFrame = EventHandler.shared.streamingActive
@@ -1286,9 +1465,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             return nil
         }
         
-        if isReprojected && renderer.fadeInOverlayAlpha <= 0.0 {
+        // don't re-render reprojected frames
+        /*if isReprojected && renderer.fadeInOverlayAlpha <= 0.0 {
             return nil
-        }
+        }*/
         
         EventHandler.shared.totalFramesRendered += 1
         
@@ -1313,9 +1493,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         
         // TODO: why does this cause framerate to go down to 45?
-        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+        /*guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             fatalError("Failed to create command buffer")
-        }
+        }*/
 
 #if !targetEnvironment(simulator)
         drawableTexture.setPurgeableState(.nonVolatile)
@@ -1426,7 +1606,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         lastSubmit = submitTime
         
         let timestamp = queuedFrame?.timestamp ?? 0
-        let rkQueuedFrame = RKQueuedFrame(texture: drawableTexture, depthTexture: depthTexture, timestamp: timestamp, transform: planeTransform, vsyncTime: self.visionPro.nextFrameTime, vrrMap: vrrMap, vrrBuffer: vrrBuffer)
+        let rkQueuedFrame = RKQueuedFrame(texture: offscreenTexture, depthTexture: depthTexture, timestamp: timestamp, transform: planeTransform, vsyncTime: self.visionPro.nextFrameTime, vrrMap: vrrMap, vrrBuffer: vrrBuffer)
         
         return (commandBuffer, rkQueuedFrame)
     }
