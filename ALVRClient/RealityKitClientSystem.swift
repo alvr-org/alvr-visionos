@@ -693,14 +693,18 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 if layerDescriptor.vertical[row] <= 0.0 {
                     layerDescriptor.vertical[row] = 1.0 / 256.0
                 }
-                layerDescriptor.vertical[row] = layerDescriptor.vertical[row] * layerDescriptor.vertical[row]
+                if layerDescriptor.vertical[row] >= 0.7 || layerDescriptor.vertical[row] <= 0.25 {
+                    layerDescriptor.vertical[row] = layerDescriptor.vertical[row] * layerDescriptor.vertical[row]
+                }
                 //print("row", row, layerDescriptor.vertical[row])
             }
             for column in 0..<zoneCounts.width {
                 if layerDescriptor.horizontal[column] <= 0.0 {
                     layerDescriptor.horizontal[column] = 1.0 / 256.0
                 }
-                layerDescriptor.horizontal[column] = layerDescriptor.horizontal[column] * layerDescriptor.horizontal[column]
+                if layerDescriptor.horizontal[column] >= 0.5 || layerDescriptor.horizontal[column] <= 0.25 {
+                    layerDescriptor.horizontal[column] = layerDescriptor.horizontal[column] * layerDescriptor.horizontal[column]
+                }
                 //print("col", column, layerDescriptor.horizontal[column])
             }
 
