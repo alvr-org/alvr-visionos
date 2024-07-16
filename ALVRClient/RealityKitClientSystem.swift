@@ -694,7 +694,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                     layerDescriptor.vertical[row] = 1.0 / 256.0
                 }
                 if layerDescriptor.vertical[row] >= 0.7 || layerDescriptor.vertical[row] <= 0.25 {
-                    layerDescriptor.vertical[row] = layerDescriptor.vertical[row] * layerDescriptor.vertical[row]
+                    //layerDescriptor.vertical[row] = layerDescriptor.vertical[row] * layerDescriptor.vertical[row]
                 }
                 //print("row", row, layerDescriptor.vertical[row])
             }
@@ -703,7 +703,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                     layerDescriptor.horizontal[column] = 1.0 / 256.0
                 }
                 if layerDescriptor.horizontal[column] >= 0.5 || layerDescriptor.horizontal[column] <= 0.25 {
-                    layerDescriptor.horizontal[column] = layerDescriptor.horizontal[column] * layerDescriptor.horizontal[column]
+                    //layerDescriptor.horizontal[column] = layerDescriptor.horizontal[column] * layerDescriptor.horizontal[column]
                 }
                 //print("col", column, layerDescriptor.horizontal[column])
             }
