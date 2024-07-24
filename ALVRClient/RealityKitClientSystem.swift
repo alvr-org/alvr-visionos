@@ -48,6 +48,8 @@ let renderZNear = 0.001
 let renderZFar = 1000.0
 let rkFramesInFlight = 3
 let realityKitRenderScale: Float = 2.25
+let forceDrawableQueue = false
+let useTripleBufferingStaleTextureVisionOS2Hack = true
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
@@ -158,6 +160,7 @@ class RealityKitClientSystem : System {
             videoPlaneA_L.components.set(InputTargetComponent())
             videoPlaneA_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneA_L.scale = simd_float3(0.0, 0.0, 0.0)
+            videoPlaneA_L.isEnabled = false
             
             let videoPlaneB_L = Entity()
             videoPlaneB_L.name = "video_plane_b_L"
@@ -165,6 +168,15 @@ class RealityKitClientSystem : System {
             videoPlaneB_L.components.set(InputTargetComponent())
             videoPlaneB_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneB_L.scale = simd_float3(0.0, 0.0, 0.0)
+            videoPlaneB_L.isEnabled = false
+            
+            let videoPlaneC_L = Entity()
+            videoPlaneC_L.name = "video_plane_c_L"
+            videoPlaneC_L.components.set(MagicRealityKitClientSystemComponent())
+            videoPlaneC_L.components.set(InputTargetComponent())
+            videoPlaneC_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
+            videoPlaneC_L.scale = simd_float3(0.0, 0.0, 0.0)
+            videoPlaneC_L.isEnabled = false
             
             let videoPlaneA_R = Entity()
             videoPlaneA_R.name = "video_plane_a_R"
@@ -172,6 +184,7 @@ class RealityKitClientSystem : System {
             videoPlaneA_R.components.set(InputTargetComponent())
             videoPlaneA_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneA_R.scale = simd_float3(0.0, 0.0, 0.0)
+            videoPlaneA_R.isEnabled = false
             
             let videoPlaneB_R = Entity()
             videoPlaneB_R.name = "video_plane_b_R"
@@ -179,6 +192,15 @@ class RealityKitClientSystem : System {
             videoPlaneB_R.components.set(InputTargetComponent())
             videoPlaneB_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneB_R.scale = simd_float3(0.0, 0.0, 0.0)
+            videoPlaneB_R.isEnabled = false
+            
+            let videoPlaneC_R = Entity()
+            videoPlaneC_R.name = "video_plane_c_R"
+            videoPlaneC_R.components.set(MagicRealityKitClientSystemComponent())
+            videoPlaneC_R.components.set(InputTargetComponent())
+            videoPlaneC_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
+            videoPlaneC_R.scale = simd_float3(0.0, 0.0, 0.0)
+            videoPlaneC_R.isEnabled = false
 
             let backdrop = ModelEntity(mesh: videoPlaneMeshCollision, materials: [materialBackdrop])
             backdrop.name = "backdrop_plane"
@@ -188,8 +210,10 @@ class RealityKitClientSystem : System {
 
             content.add(videoPlaneA_L)
             content.add(videoPlaneB_L)
+            content.add(videoPlaneC_L)
             content.add(videoPlaneA_R)
             content.add(videoPlaneB_R)
+            content.add(videoPlaneC_R)
             content.add(anchor)
         }
     }
@@ -230,9 +254,10 @@ class DrawableWrapper {
     var wrapped: AnyObject? = nil
     var drawable: AnyObject? = nil
     var textureResource: TextureResource? = nil
+    var texture: MTLTexture? = nil
     
     init(pixelFormat: MTLPixelFormat, width: Int, height: Int, usage: MTLTextureUsage, isBiplanar: Bool) {
-        if #available(visionOS 2.0, *) {
+        if #available(visionOS 2.0, *), !forceDrawableQueue {
             if isBiplanar {
                 let desc = LowLevelTexture.Descriptor(textureType: .type2DArray, pixelFormat: pixelFormat, width: width, height: height/renderViewCount, depth: 1, mipmapLevelCount: 1, arrayLength: renderViewCount, textureUsage: usage)
                 let tex = try? LowLevelTexture(descriptor: desc)
@@ -284,7 +309,15 @@ class DrawableWrapper {
     func nextTexture(commandBuffer: MTLCommandBuffer) -> MTLTexture? {
         if #available(visionOS 2.0, *) {
             if let tex = wrapped as? LowLevelTexture {
+                if self.texture != nil {
+                    return self.texture
+                }
                 let writeTexture: MTLTexture = tex.replace(using: commandBuffer)
+                
+                // HACK: Ewwwwwwwww
+                if useTripleBufferingStaleTextureVisionOS2Hack {
+                    self.texture = writeTexture
+                }
                 return writeTexture
             }
         }
@@ -302,7 +335,9 @@ class DrawableWrapper {
         if #available(visionOS 2.0, *) {
             if wrapped as? LowLevelTexture != nil {
                 commandBuffer.commit()
+                //if self.texture != nil {
                 commandBuffer.waitUntilCompleted()
+                //}
                 return
             }
         }
@@ -319,18 +354,24 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var lastUpdateTime = 0.0
     var drawableQueueA: DrawableWrapper? = nil
     var drawableQueueB: DrawableWrapper? = nil
+    var drawableQueueC: DrawableWrapper? = nil
     private var textureResourceA: TextureResource? = nil
     private var textureResourceB: TextureResource? = nil
+    private var textureResourceC: TextureResource? = nil
     private var meshResourceL: MeshResource? = nil
     private var meshResourceR: MeshResource? = nil
     private(set) var surfaceMaterialA_L: ShaderGraphMaterial? = nil
     private(set) var surfaceMaterialB_L: ShaderGraphMaterial? = nil
+    private(set) var surfaceMaterialC_L: ShaderGraphMaterial? = nil
     private(set) var surfaceMaterialA_R: ShaderGraphMaterial? = nil
     private(set) var surfaceMaterialB_R: ShaderGraphMaterial? = nil
+    private(set) var surfaceMaterialC_R: ShaderGraphMaterial? = nil
     var setPlaneMaterialA_L = false
     var setPlaneMaterialB_L = false
+    var setPlaneMaterialC_L = false
     var setPlaneMaterialA_R = false
     var setPlaneMaterialB_R = false
+    var setPlaneMaterialC_R = false
     var passthroughPipelineState: MTLRenderPipelineState? = nil
     var passthroughPipelineStateHDR: MTLRenderPipelineState? = nil
     var meshHasVrr = false
@@ -441,10 +482,12 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 
         self.drawableQueueA = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*renderViewCount, usage: .renderTarget, isBiplanar: meshHasVrr)
         self.drawableQueueB = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*renderViewCount, usage: .renderTarget, isBiplanar: meshHasVrr)
+        self.drawableQueueC = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*renderViewCount, usage: .renderTarget, isBiplanar: meshHasVrr)
         
         // Dummy texture
         self.textureResourceA = self.drawableQueueA!.makeTextureResource()
         self.textureResourceB = self.drawableQueueB!.makeTextureResource()
+        self.textureResourceC = self.drawableQueueC!.makeTextureResource()
         
         Task {
             var filter = "Bicubic"
@@ -464,6 +507,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
+            self.surfaceMaterialC_L = try! await ShaderGraphMaterial(
+                named: base + filter + "_L",
+                from: "SBSMaterial.usda"
+            )
             
             self.surfaceMaterialA_R = try! await ShaderGraphMaterial(
                 named: base + filter + "_R",
@@ -473,12 +520,18 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 named: base + filter + "_R",
                 from: "SBSMaterial.usda"
             )
+            self.surfaceMaterialC_R = try! await ShaderGraphMaterial(
+                named: base + filter + "_R",
+                from: "SBSMaterial.usda"
+            )
             
             if #available(visionOS 2.0, *) {
                 self.surfaceMaterialA_L?.readsDepth = false
                 self.surfaceMaterialB_L?.readsDepth = false
+                self.surfaceMaterialC_L?.readsDepth = false
                 self.surfaceMaterialA_R?.readsDepth = false
                 self.surfaceMaterialB_R?.readsDepth = false
+                self.surfaceMaterialC_R?.readsDepth = false
             }
         }
         
@@ -509,7 +562,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     // Create a VRR mesh if on visionOS 2.0, which allows us to shave off an entire millisecond of
     // copying
     func createVRRMeshResource(_ which: Int, _ vrrMap: MTLRasterizationRateMap) throws -> MeshResource {
-        if #available(visionOS 2.0, *) {
+        if #available(visionOS 2.0, *), !forceDrawableQueue {
             let vertexAttributes: [LowLevelMesh.Attribute] = [
                 .init(semantic: .position, format: .float3, offset: MemoryLayout<VrrPlaneVertex>.offset(of: \.position)!),
                 .init(semantic: .uv0, format: .float2, offset: MemoryLayout<VrrPlaneVertex>.offset(of: \.uv)!)
@@ -880,7 +933,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     // DrawableQueue will always time out if it is not attached to a Material/Entity before it is
     // asked for. Also, we kinda do things weird and out of order to allow changing the resolution
     // at runtime, so we need to ensure this condition is met to avoid a deadlock.
-    func ensureMaterialsBeforeDrawableDequeue(_ planeA_L: Entity, _ planeB_L: Entity, _ planeA_R: Entity, _ planeB_R: Entity) -> Bool {
+    func ensureMaterialsBeforeDrawableDequeue(_ planeA_L: Entity, _ planeB_L: Entity, _ planeC_L: Entity, _ planeA_R: Entity, _ planeB_R: Entity, _ planeC_R: Entity) -> Bool {
         if !self.setPlaneMaterialA_L {
             if self.surfaceMaterialA_L != nil {
                 if self.textureResourceA != nil && self.meshResourceL != nil{
@@ -906,6 +959,20 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                     let modelComponent = ModelComponent(mesh: self.meshResourceL!, materials: [self.surfaceMaterialB_L!])
                     planeB_L.components.set(modelComponent)
                     self.setPlaneMaterialB_L = true
+                }
+            }
+        }
+        if !self.setPlaneMaterialC_L {
+            if self.surfaceMaterialC_L != nil {
+                if self.textureResourceC != nil && self.meshResourceL != nil {
+                    try! self.surfaceMaterialC_L!.setParameter(
+                        name: "texture",
+                        value: .textureResource(self.textureResourceC!)
+                    )
+                    
+                    let modelComponent = ModelComponent(mesh: self.meshResourceL!, materials: [self.surfaceMaterialC_L!])
+                    planeC_L.components.set(modelComponent)
+                    self.setPlaneMaterialC_L = true
                 }
             }
         }
@@ -938,8 +1005,22 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 }
             }
         }
+        if !self.setPlaneMaterialC_R {
+            if self.surfaceMaterialC_R != nil {
+                if self.textureResourceC != nil && self.meshResourceR != nil {
+                    try! self.surfaceMaterialC_R!.setParameter(
+                        name: "texture",
+                        value: .textureResource(self.textureResourceC!)
+                    )
+                    
+                    let modelComponent = ModelComponent(mesh: self.meshResourceR!, materials: [self.surfaceMaterialC_R!])
+                    planeC_R.components.set(modelComponent)
+                    self.setPlaneMaterialC_R = true
+                }
+            }
+        }
         
-        if !self.setPlaneMaterialA_L || !self.setPlaneMaterialB_L || !self.setPlaneMaterialA_R || !self.setPlaneMaterialB_R {
+        if !self.setPlaneMaterialA_L || !self.setPlaneMaterialB_L || !self.setPlaneMaterialC_L || !self.setPlaneMaterialA_R || !self.setPlaneMaterialB_R || !self.setPlaneMaterialC_R {
             return false
         }
         
@@ -967,10 +1048,16 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         guard let planeB_L = context.scene.findEntity(named: "video_plane_b_L") else {
             return
         }
+        guard let planeC_L = context.scene.findEntity(named: "video_plane_c_L") else {
+            return
+        }
         guard let planeA_R = context.scene.findEntity(named: "video_plane_a_R") else {
             return
         }
         guard let planeB_R = context.scene.findEntity(named: "video_plane_b_R") else {
+            return
+        }
+        guard let planeC_R = context.scene.findEntity(named: "video_plane_c_R") else {
             return
         }
         guard let backdrop = context.scene.findEntity(named: "backdrop_plane") as? ModelEntity else {
@@ -1005,6 +1092,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             self.textureResourceA = self.drawableQueueA!.makeTextureResource()
             self.drawableQueueB = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*renderViewCount, usage: [.renderTarget], isBiplanar: meshHasVrr)
             self.textureResourceB = self.drawableQueueB!.makeTextureResource()
+            self.drawableQueueC = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*renderViewCount, usage: [.renderTarget], isBiplanar: meshHasVrr)
+            self.textureResourceC = self.drawableQueueC!.makeTextureResource()
             
             self.setPlaneMaterialA_L = false
             self.setPlaneMaterialB_L = false
@@ -1033,7 +1122,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             fatalError("Failed to create command buffer")
         }
         
-        if !ensureMaterialsBeforeDrawableDequeue(planeA_L, planeB_L, planeA_R, planeB_R) {
+        if !ensureMaterialsBeforeDrawableDequeue(planeA_L, planeB_L, planeC_L, planeA_R, planeB_R, planeC_R) {
             return
         }
     
@@ -1043,14 +1132,17 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         // entity in such a way that it will only display if the pose is correct to the
         // frame we sent.
         rkFramesRendered += 1
-        let whichRkFrame = rkFramesRendered % 2
+        let whichRkFrame = rkFramesRendered % 3
     
         var drawable: MTLTexture? = nil
         if whichRkFrame == 0 {
             drawable = drawableQueueA?.nextTexture(commandBuffer: commandBuffer)
         }
-        else {
+        else if whichRkFrame == 1 {
             drawable = drawableQueueB?.nextTexture(commandBuffer: commandBuffer)
+        }
+        else if whichRkFrame == 2 {
+            drawable = drawableQueueC?.nextTexture(commandBuffer: commandBuffer)
         }
         guard let drawable = drawable else {
             print("no drawable")
@@ -1165,49 +1257,36 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             }
         }
         
-        // Update only the A/B panel we will be showing, and hide the other one
-        if whichRkFrame == 0 {
-            // left eye
-            planeA_L.position = position_L
-            planeA_L.orientation = orientation_L
-            
-            // Prevent flashbang at start
-            if self.setPlaneMaterialA_L {
-                planeA_L.scale = scale_L
-            }
-            planeB_L.scale = simd_float3(0.0, 0.0, 0.0)
-            
-            // right eye
-            planeA_R.position = position_R
-            planeA_R.orientation = orientation_R
-            
-            // Prevent flashbang at start
-            if self.setPlaneMaterialA_R {
-                planeA_R.scale = scale_R
-            }
-            planeB_R.scale = simd_float3(0.0, 0.0, 0.0)
+        // Update only the A/B/C panel we will be showing, and hide the other one
+        planeA_L.isEnabled = false
+        planeB_L.isEnabled = false
+        planeC_L.isEnabled = false
+        planeA_R.isEnabled = false
+        planeB_R.isEnabled = false
+        planeC_R.isEnabled = false
+        
+        var activePlane_L = planeA_L
+        var activePlane_R = planeA_R
+        if whichRkFrame == 1 {
+            activePlane_L = planeB_L
+            activePlane_R = planeB_R
         }
-        else {
-            // left eye
-            planeB_L.position = position_L
-            planeB_L.orientation = orientation_L
-            
-            // Prevent flashbang at start
-            if self.setPlaneMaterialB_L {
-                planeB_L.scale = scale_L
-            }
-            planeA_L.scale = simd_float3(0.0, 0.0, 0.0)
-            
-            // right eye
-            planeB_R.position = position_R
-            planeB_R.orientation = orientation_R
-            
-            // Prevent flashbang at start
-            if self.setPlaneMaterialB_R {
-                planeB_R.scale = scale_R
-            }
-            planeA_R.scale = simd_float3(0.0, 0.0, 0.0)
+        else if whichRkFrame == 2 {
+            activePlane_L = planeC_L
+            activePlane_R = planeC_R
         }
+        
+        // left eye
+        activePlane_L.position = position_L
+        activePlane_L.orientation = orientation_L
+        activePlane_L.scale = scale_L
+        activePlane_L.isEnabled = true
+
+        // right eye
+        activePlane_R.position = position_R
+        activePlane_R.orientation = orientation_R
+        activePlane_R.scale = scale_R
+        activePlane_R.isEnabled = true
         
         if settings.chromaKeyEnabled {
             backdrop.isEnabled = false
@@ -1236,8 +1315,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         if whichRkFrame == 0 {
             drawableQueueA!.present(commandBuffer: commandBuffer)
         }
-        else {
+        else if whichRkFrame == 1 {
             drawableQueueB!.present(commandBuffer: commandBuffer)
+        }
+        else if whichRkFrame == 2 {
+            drawableQueueC!.present(commandBuffer: commandBuffer)
         }
 
         objc_sync_enter(rkFramePoolLock)
