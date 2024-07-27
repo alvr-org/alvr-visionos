@@ -299,6 +299,13 @@ class EventHandler: ObservableObject {
     // Poll for NALs and and, when decoded, add them to the frameQueue
     func handleNals() {
         timeLastFrameGot = CACurrentMediaTime()
+        
+        // Prevent NAL buildup
+        if !renderStarted {
+            VideoHandler.abandonAllPendingNals()
+            return
+        }
+        
         while renderStarted {
             guard let (timestamp, viewParams, nal) = VideoHandler.pollNal() else {
                 break
