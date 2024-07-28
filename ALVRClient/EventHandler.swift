@@ -366,10 +366,27 @@ class EventHandler: ObservableObject {
                 continue
             }
             objc_sync_exit(frameQueueLock)
+            
+            let startedDecodeTime = CACurrentMediaTime()
 
             if let vtDecompressionSession = vtDecompressionSession {
                 VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
                     guard let imageBuffer = imageBuffer else {
+                        return
+                    }
+                    
+                    if (CACurrentMediaTime() - startedDecodeTime > Double(50*MSEC_PER_SEC)) {
+                        objc_sync_enter(frameQueueLock)
+
+                        print("Handle decode overrun!", CACurrentMediaTime() - startedDecodeTime, framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
+
+                        // We have to request an IDR to resume the video feed
+                        VideoHandler.abandonAllPendingNals()
+                        alvr_request_idr()
+                        framesSinceLastIDR = 0
+                        framesSinceLastDecode = 0
+                        objc_sync_exit(frameQueueLock)
+
                         return
                     }
                     
