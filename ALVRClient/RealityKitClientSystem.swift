@@ -48,7 +48,11 @@ let renderZNear = 0.001
 let renderZFar = 1000.0
 let rkFramesInFlight = 3
 let realityKitRenderScale: Float = 2.25
+#if XCODE_BETA_16
 let forceDrawableQueue = false
+#else
+let forceDrawableQueue = true
+#endif
 let useTripleBufferingStaleTextureVisionOS2Hack = true
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
@@ -257,6 +261,7 @@ class DrawableWrapper {
     var texture: MTLTexture? = nil
     
     init(pixelFormat: MTLPixelFormat, width: Int, height: Int, usage: MTLTextureUsage, isBiplanar: Bool) {
+#if XCODE_BETA_16
         if #available(visionOS 2.0, *), !forceDrawableQueue {
             if isBiplanar {
                 let desc = LowLevelTexture.Descriptor(textureType: .type2DArray, pixelFormat: pixelFormat, width: width, height: height/renderViewCount, depth: 1, mipmapLevelCount: 1, arrayLength: renderViewCount, textureUsage: usage)
@@ -268,22 +273,24 @@ class DrawableWrapper {
                 let tex = try? LowLevelTexture(descriptor: desc)
                 self.wrapped = tex
             }
+            return
         }
-        else {
-            let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: pixelFormat, width: width, height: height, usage: [usage], mipmapsMode: .none)
-            let queue = try? TextureResource.DrawableQueue(desc)
-            queue!.allowsNextDrawableTimeout = true
-            self.wrapped = queue
-        }
+#endif
+        let desc = TextureResource.DrawableQueue.Descriptor(pixelFormat: pixelFormat, width: width, height: height, usage: [usage], mipmapsMode: .none)
+        let queue = try? TextureResource.DrawableQueue(desc)
+        queue!.allowsNextDrawableTimeout = true
+        self.wrapped = queue
     }
     
     func makeTextureResource() -> TextureResource? {
+#if XCODE_BETA_16
         if #available(visionOS 2.0, *) {
             if let tex = wrapped as? LowLevelTexture {
                 self.textureResource = try! TextureResource(from: tex)
                 return self.textureResource
             }
         }
+#endif
         
         if let queue = wrapped as? TextureResource.DrawableQueue {
             if self.textureResource == nil {
@@ -307,6 +314,7 @@ class DrawableWrapper {
     }
     
     func nextTexture(commandBuffer: MTLCommandBuffer) -> MTLTexture? {
+#if XCODE_BETA_16
         if #available(visionOS 2.0, *) {
             if let tex = wrapped as? LowLevelTexture {
                 if self.texture != nil {
@@ -321,6 +329,7 @@ class DrawableWrapper {
                 return writeTexture
             }
         }
+#endif
         
         if let queue = wrapped as? TextureResource.DrawableQueue {
             let drawable = try? queue.nextDrawable()
@@ -332,15 +341,15 @@ class DrawableWrapper {
     }
     
     @MainActor func present(commandBuffer: MTLCommandBuffer) {
+#if XCODE_BETA_16
         if #available(visionOS 2.0, *) {
             if wrapped as? LowLevelTexture != nil {
                 commandBuffer.commit()
-                //if self.texture != nil {
                 commandBuffer.waitUntilCompleted()
-                //}
                 return
             }
         }
+#endif
         if let drawable = self.drawable as? TextureResource.Drawable {
             commandBuffer.commit()
             commandBuffer.waitUntilCompleted()
@@ -525,6 +534,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 from: "SBSMaterial.usda"
             )
             
+#if XCODE_BETA_16
             if #available(visionOS 2.0, *) {
                 self.surfaceMaterialA_L?.readsDepth = false
                 self.surfaceMaterialB_L?.readsDepth = false
@@ -533,6 +543,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 self.surfaceMaterialB_R?.readsDepth = false
                 self.surfaceMaterialC_R?.readsDepth = false
             }
+#endif
         }
         
         recreateFramePool()
@@ -562,6 +573,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     // Create a VRR mesh if on visionOS 2.0, which allows us to shave off an entire millisecond of
     // copying
     func createVRRMeshResource(_ which: Int, _ vrrMap: MTLRasterizationRateMap) throws -> MeshResource {
+#if XCODE_BETA_16
         if #available(visionOS 2.0, *), !forceDrawableQueue {
             let vertexAttributes: [LowLevelMesh.Attribute] = [
                 .init(semantic: .position, format: .float3, offset: MemoryLayout<VrrPlaneVertex>.offset(of: \.position)!),
@@ -668,11 +680,12 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             meshHasVrr = true
             return try MeshResource(from: mesh)
         }
-        else {
-            meshHasVrr = false
-            let videoPlaneMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
-            return videoPlaneMesh
-        }
+#endif
+
+        // visionOS 1.x
+        meshHasVrr = false
+        let videoPlaneMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
+        return videoPlaneMesh
     }
     
     // Create a Variable Rasterization Rate

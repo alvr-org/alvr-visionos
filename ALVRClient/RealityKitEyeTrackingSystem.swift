@@ -148,7 +148,7 @@ class RealityKitEyeTrackingSystem : System {
             from: "EyeTrackingMats.usda"
         )
             
-        await MainActor.run {
+        await MainActor.run { [hoverEffectTrackerMat] in
             let planeMesh = MeshResource.generatePlane(width: 1.0, depth: 1.0)
 
             let eyeXPlane = ModelEntity(mesh: planeMesh, materials: [leftEyeOnlyMat])
