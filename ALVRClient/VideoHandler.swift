@@ -114,6 +114,7 @@ let kCVPixelFormatType_444YpCbCr10PackedBiPlanarVideoRange = 0x70343434 as OSTyp
 let kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarFullRange = 0x2D786630 as OSType // -xf0
 let kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarFullRange = 0x26786632 as OSType // &xf2
 let kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarFullRange = 0x2D786632 as OSType // -xf2
+let kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange_compat = 0x26786630 as OSType // &xf0
 
 struct VideoHandler {
     // Useful for debugging.
@@ -190,7 +191,7 @@ struct VideoHandler {
         kCVPixelFormatType_DisparityFloat16: "DisparityFloat16",
         kCVPixelFormatType_DisparityFloat32: "DisparityFloat32",
         kCVPixelFormatType_Lossless_32BGRA: "32BGRA",
-        kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange: "Lossless_420YpCbCr10PackedBiPlanarFullRange",
+        kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange_compat: "Lossless_420YpCbCr10PackedBiPlanarFullRange",
         kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange: "Lossless_420YpCbCr10PackedBiPlanarVideoRange",
         kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange: "Lossless_420YpCbCr8BiPlanarFullRange",
         kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange: "Lossless_420YpCbCr8BiPlanarVideoRange",
@@ -276,7 +277,7 @@ struct VideoHandler {
             case kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarFullRange,
-                 kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange_compat,
                  kCVPixelFormatType_420YpCbCr10PackedBiPlanarFullRange,
                  kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange:
                 return [MTLPixelFormat.init(rawValue: MTLPixelFormatYCBCR10_420_2P_PACKED_sRGB)!, MTLPixelFormat.invalid] // MTLPixelFormatYCBCR10_420_2P_PACKED
@@ -310,7 +311,7 @@ struct VideoHandler {
             case kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarFullRange,
-                 kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange,
+                 kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange_compat,
                  kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarVideoRange,
                  kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarFullRange,
