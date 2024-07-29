@@ -746,7 +746,7 @@ class Renderer {
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
-        if EventHandler.shared.alvrInitialized {
+        if EventHandler.shared.alvrInitialized && EventHandler.shared.lastIpd != -1 {
             if #available(visionOS 2.0, *) {
                 EventHandler.shared.viewTransforms = [fixTransform(drawable.views[0].transform), drawable.views.count > 1 ? fixTransform(drawable.views[1].transform) : fixTransform(drawable.views[0].transform)]
             }
