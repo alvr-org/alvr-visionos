@@ -93,6 +93,7 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
+    • Updated client runtime to v20.9.1. Please make sure to update your streamer to the same version!\n\
     • Improved wireframe stability with Experimental Renderer.\n\
     • Improved tracking stability while throttled.\n\
     • Removed MetalFX due to performance issues, and to simplify rendering.\n\
@@ -108,6 +109,8 @@ struct ALVRClientApp: App {
     • Fixed view comfort settings in visionOS 2.0 causing visuals to appear too small or too large.\n\
     • Fixed room centering constantly picking weird origins, hopefully.\n\
     • Continued attempts at making 45Hz bearable.\n\
+    • Fixed a bug where lingering too long before connecting would cause crashes via out-of-memory.\n\
+    • Improved user experience when power profile shifts cause decoding lag spikes by instead falling back to wireframe.\n\
     \n\
     ________________________________\n\
     \n\
