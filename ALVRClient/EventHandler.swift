@@ -200,6 +200,7 @@ class EventHandler: ObservableObject {
     func handleMdnsBroadcasts() {
         // HACK: Some mDNS clients seem to only see edge updates (ie, when a client appears/disappears)
         // so we just create/destroy this every 2s until we're streaming.
+        timeLastSentMdnsBroadcast = CACurrentMediaTime()
         if mdnsListener != nil {
             mdnsListener!.cancel()
             mdnsListener = nil
@@ -240,8 +241,6 @@ class EventHandler: ObservableObject {
                 listener.start(queue: DispatchQueue.main)
             }
         }
-        
-        timeLastSentMdnsBroadcast = CACurrentMediaTime()
     }
 
     // Data which only needs to be sent periodically, such as battery percentage
