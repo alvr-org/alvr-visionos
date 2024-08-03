@@ -775,16 +775,21 @@ struct VideoHandler {
             return nil
         }
         
-        dataPtr.withMemoryRebound(to: UInt8.self, capacity: blockBufferSize) { pointer in
-            var offset = 0
-            
+        //dataPtr.withMemoryRebound(to: UInt8.self, capacity: blockBufferSize) { pointer in
+        let pointer = UnsafeMutablePointer<UInt8>(OpaquePointer(dataPtr))!
+        var offset = 0
+        
+        buffer.withUnsafeBytes { (unsafeBytes) in
+            let bytes = unsafeBytes.bindMemory(to: UInt8.self).baseAddress!
+
             for index in naluIndices {
                 pointer.advanced(by: offset    ).pointee = UInt8((index.payloadSize >> 24) & 0xFF)
                 pointer.advanced(by: offset + 1).pointee = UInt8((index.payloadSize >> 16) & 0xFF)
                 pointer.advanced(by: offset + 2).pointee = UInt8((index.payloadSize >>  8) & 0xFF)
                 pointer.advanced(by: offset + 3).pointee = UInt8((index.payloadSize      ) & 0xFF)
                 offset += 4
-                _ = UnsafeMutableBufferPointer(start: pointer.advanced(by: offset), count: blockBufferSize - offset).update(from: buffer[index.payloadStartOffset..<index.payloadStartOffset + index.payloadSize])
+                
+                pointer.advanced(by: offset).update(from: bytes.advanced(by: index.payloadStartOffset), count: blockBufferSize - offset)
                 offset += index.payloadSize
             }
         }
