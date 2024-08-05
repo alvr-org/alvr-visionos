@@ -241,6 +241,10 @@ half3 EncodingNonlinearToLinearRGB_half(half3 color, half gamma) {
 
 half colorclose_hsv(half3 hsv, half3 keyHsv, half2 tol)
 {
+    // Saturation or value too low, don't consider it at all.
+    if (hsv.b < 0.001 || hsv.g < 0.001) {
+        return 1.0;
+    }
     half3 weights = half3(4., 1., 2.);
     half tmp = length(weights * (keyHsv - hsv));
     if (tmp < tol.x)
