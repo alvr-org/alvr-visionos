@@ -260,7 +260,7 @@ class DrawableWrapper {
     var textureResource: TextureResource? = nil
     var texture: MTLTexture? = nil
     
-    init(pixelFormat: MTLPixelFormat, width: Int, height: Int, usage: MTLTextureUsage, isBiplanar: Bool) {
+    @MainActor init(pixelFormat: MTLPixelFormat, width: Int, height: Int, usage: MTLTextureUsage, isBiplanar: Bool) {
 #if XCODE_BETA_16
         if #available(visionOS 2.0, *), !forceDrawableQueue {
             if isBiplanar {
@@ -313,7 +313,7 @@ class DrawableWrapper {
         return nil
     }
     
-    func nextTexture(commandBuffer: MTLCommandBuffer) -> MTLTexture? {
+    @MainActor func nextTexture(commandBuffer: MTLCommandBuffer) -> MTLTexture? {
 #if XCODE_BETA_16
         if #available(visionOS 2.0, *) {
             if let tex = wrapped as? LowLevelTexture {
@@ -558,7 +558,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     }
     
     // Create offscreen->Drawable copy pipelines for both HDR and SDR
-    func createCopyShaderPipelines()
+    @MainActor func createCopyShaderPipelines()
     {
         let vrrMap = createVRR() // HACK
         var formatHDR = renderColorFormatDrawableHDR
@@ -572,7 +572,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     
     // Create a VRR mesh if on visionOS 2.0, which allows us to shave off an entire millisecond of
     // copying
-    func createVRRMeshResource(_ which: Int, _ vrrMap: MTLRasterizationRateMap) throws -> MeshResource {
+    @MainActor func createVRRMeshResource(_ which: Int, _ vrrMap: MTLRasterizationRateMap) throws -> MeshResource {
 #if XCODE_BETA_16
         if #available(visionOS 2.0, *), !forceDrawableQueue {
             let vertexAttributes: [LowLevelMesh.Attribute] = [
@@ -689,7 +689,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     }
     
     // Create a Variable Rasterization Rate
-    func createVRR() -> MTLRasterizationRateMap {
+    @MainActor func createVRR() -> MTLRasterizationRateMap {
         let descriptor = MTLRasterizationRateMapDescriptor()
         descriptor.label = "Offscreen VRR"
 
@@ -1350,7 +1350,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     }
     
     // TODO: Share this with Renderer somehow
-    func renderFrame(drawableTexture: MTLTexture, offscreenTexture: MTLTexture, depthTexture: MTLTexture, vrrBuffer: MTLBuffer, commandBuffer: MTLCommandBuffer) -> (MTLCommandBuffer, RKQueuedFrame)? {
+    @MainActor func renderFrame(drawableTexture: MTLTexture, offscreenTexture: MTLTexture, depthTexture: MTLTexture, vrrBuffer: MTLBuffer, commandBuffer: MTLCommandBuffer) -> (MTLCommandBuffer, RKQueuedFrame)? {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
         var streamingActiveForFrame = EventHandler.shared.streamingActive
