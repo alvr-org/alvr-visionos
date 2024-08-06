@@ -93,30 +93,21 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Updated client runtime to v20.9.1. Please make sure to update your streamer to the same version!\n\
-    • Improved wireframe stability with Experimental Renderer.\n\
-    • Improved tracking stability while throttled.\n\
-    • Removed MetalFX due to performance issues, and to simplify rendering.\n\
-    • Added basic variable rasterization rate drawing in periphery to attempt to save power.\n\
-    • Significantly improved rendering performance, allowing higher resolutions with less power draw.\n\
+    • Improved thermals and battery life by fixing a bug which caused extremely high CPU utilization.\n\
+    • Improved chroma keying to hopefully remove some black pixel false-positives.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
-    • Fixed flicker-judder in Experimental Renderer.\n\
-    • Fixed view comfort settings in causing visuals to appear too small or too large.\n\
-    • Fixed room centering constantly picking weird origins, hopefully.\n\
-    • Continued attempts at making 45Hz bearable.\n\
-    • Fixed a bug where lingering too long before connecting would cause crashes via out-of-memory.\n\
-    • Improved user experience when power profile shifts cause decoding lag spikes by instead falling back to wireframe.\n\
+    • None yet.
     \n\
     ________________________________\n\
     \n\
     Known issues:\n\
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
-    • Recentering sometimes does not preserve the center in SteamVR. This is a visionOS anchoring bug.\n\
+    • The control center and other semitransparent windows may flicker in the right eye when in front of the streamed scene.
     
     """
     
