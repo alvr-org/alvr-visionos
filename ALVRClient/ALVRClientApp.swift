@@ -100,7 +100,7 @@ struct ALVRClientApp: App {
     \n\
     Bug fixes:\n\
     \n\
-    • None yet.
+    • Fixed flickering in right eye when window or Notification Center is placed in front of the streamed scene.\n\
     \n\
     ________________________________\n\
     \n\

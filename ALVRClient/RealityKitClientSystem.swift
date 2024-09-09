@@ -520,7 +520,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
-            
+
             self.surfaceMaterialA_R = try! await ShaderGraphMaterial(
                 named: base + filter + "_R",
                 from: "SBSMaterial.usda"
@@ -533,7 +533,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 named: base + filter + "_R",
                 from: "SBSMaterial.usda"
             )
-            
+
+            // A weird bug happened here, only surfaceMaterialC_R had readsDepth set correctly?
+            // Turns out we don't want this anyway, causes the app to render in front of windows
+            // and hands
+/*
 #if XCODE_BETA_16
             if #available(visionOS 2.0, *) {
                 self.surfaceMaterialA_L?.readsDepth = false
@@ -544,6 +548,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 self.surfaceMaterialC_R?.readsDepth = false
             }
 #endif
+*/
         }
         
         recreateFramePool()
@@ -1110,8 +1115,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             self.setPlaneMaterialA_L = false
             self.setPlaneMaterialB_L = false
+            self.setPlaneMaterialC_L = false
             self.setPlaneMaterialA_R = false
             self.setPlaneMaterialB_R = false
+            self.setPlaneMaterialC_R = false
             
             renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
             renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
@@ -1183,8 +1190,14 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             if whichRkFrame == 0 {
                 drawableQueueA!.present(commandBuffer: commandBuffer)
             }
-            else {
+            else if whichRkFrame == 1 {
                 drawableQueueB!.present(commandBuffer: commandBuffer)
+            }
+            else if whichRkFrame == 2 {
+                drawableQueueC!.present(commandBuffer: commandBuffer)
+            }
+            else {
+                print("aaaaaaaaaa this switch needs extending")
             }
             rkFramesRendered -= 1 // Ensure whichRkFrame is still correct next time around
             
@@ -1333,6 +1346,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         else if whichRkFrame == 2 {
             drawableQueueC!.present(commandBuffer: commandBuffer)
+        }
+        else {
+            print("aaaaaaaaaa this switch needs extending")
         }
 
         objc_sync_enter(rkFramePoolLock)
