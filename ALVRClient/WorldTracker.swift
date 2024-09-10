@@ -74,7 +74,11 @@ class WorldTracker {
     var lastHandsUpdatedTs: TimeInterval = 0
     var lastSentHandsTs: TimeInterval = 0
     var lastLeftHandPose: AlvrPose = AlvrPose()
+    var lastLeftHandVel: (Float, Float, Float) = (0,0,0)
+    var lastLeftHandAngVel: (Float, Float, Float) = (0,0,0)
     var lastRightHandPose: AlvrPose = AlvrPose()
+    var lastRightHandVel: (Float, Float, Float) = (0,0,0)
+    var lastRightHandAngVel: (Float, Float, Float) = (0,0,0)
     
     // Controller haptics
     var leftHapticsStart: TimeInterval = 0
@@ -479,20 +483,30 @@ class WorldTracker {
         let lastPose: AlvrPose = hand.chirality == .left ? lastLeftHandPose : lastRightHandPose
         let pose: AlvrPose = handAnchorToPose(hand)
         let dp = (pose.position.0 - lastPose.position.0, pose.position.1 - lastPose.position.1, pose.position.2 - lastPose.position.2)
-        let dt = Float(lastHandsUpdatedTs - lastSentHandsTs)
+        var dt = Float(lastHandsUpdatedTs - lastSentHandsTs)
+        if dt <= 0.0 {
+            dt = 0.010 // fallback 10ms
+        }
+        let lin_vel = (dp.0 / dt, dp.1 / dt, dp.2 / dt)
+        let ang_vel = angularVelocityBetweenQuats(lastPose.orientation, pose.orientation, dt)
+        //print(hand.chirality, dt, lin_vel, ang_vel)
         
         if !hand.isTracked {
-            return AlvrDeviceMotion(device_id: device_id, pose: hand.chirality == .left ? lastLeftHandPose : lastRightHandPose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
+            return AlvrDeviceMotion(device_id: device_id, pose: hand.chirality == .left ? lastLeftHandPose : lastRightHandPose, linear_velocity: hand.chirality == .left ? lastLeftHandVel : lastRightHandVel, angular_velocity: hand.chirality == .left ? lastLeftHandAngVel : lastRightHandAngVel)
         }
         
         if hand.chirality == .left {
             lastLeftHandPose = pose
+            lastLeftHandVel = lin_vel
+            lastLeftHandAngVel = ang_vel
         }
         else {
             lastRightHandPose = pose
+            lastRightHandVel = lin_vel
+            lastRightHandAngVel = ang_vel
         }
         
-        return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (dp.0 / dt, dp.1 / dt, dp.2 / dt), angular_velocity: (0, 0, 0))
+        return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: lin_vel, angular_velocity: ang_vel)
     }
     
     func quatDifference(_ a: simd_quatf, _ b: simd_quatf) -> simd_quatf {
@@ -523,7 +537,7 @@ class WorldTracker {
         // angles slightly with pinchOffset.y until the pointer stopped moving left/right and up/down.
         // Then I adjusted the positional offset with pinchOffset.xyz.
         let adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7389288)))
-        let adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3(0.06772318, 0.0, 1.0)))
+        let adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3((isLeft ? 1.0 : -1.0) * 0.06772318, 0.0, 1.0)))
         let adjPosition = simd_float3(0.0, isLeft ? -leftPinchEyeDelta.y : -rightPinchEyeDelta.y, 0.0)
         let q = simd_quatf(orient) * adjLeftRight * adjUpDown
         //pinchOffset = simd_float3()
@@ -777,8 +791,10 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(a["Right Thumbstick X Axis"]?.value ?? 0.0))
                     alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(a["Right Thumbstick Y Axis"]?.value ?? 0.0))
                     
-                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(b["Right Trigger"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(b["Right Trigger"]?.value ?? 0.0))
+                    if rightPinchTrigger <= 0.0 {
+                        alvr_send_button(WorldTracker.rightTriggerClick, boolVal(b["Right Trigger"]?.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(b["Right Trigger"]?.value ?? 0.0))
+                    }
                     
                     alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(b["Right Shoulder"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(b["Right Shoulder"]?.value ?? 0.0))
@@ -794,8 +810,10 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(a["Left Thumbstick X Axis"]?.value ?? 0.0))
                     alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(a["Left Thumbstick Y Axis"]?.value ?? 0.0))
                     
-                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(b["Left Trigger"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(b["Left Trigger"]?.value ?? 0.0))
+                    if leftPinchTrigger <= 0.0 {
+                        alvr_send_button(WorldTracker.leftTriggerClick, boolVal(b["Left Trigger"]?.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(b["Left Trigger"]?.value ?? 0.0))
+                    }
                     
                     alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(b["Left Shoulder"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(b["Left Shoulder"]?.value ?? 0.0))
@@ -811,8 +829,10 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(a["Right Thumbstick X Axis"]?.value ?? 0.0))
                     alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(a["Right Thumbstick Y Axis"]?.value ?? 0.0))
                     
-                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(b["Right Trigger"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(b["Right Trigger"]?.value ?? 0.0))
+                    if rightPinchTrigger <= 0.0 {
+                        alvr_send_button(WorldTracker.rightTriggerClick, boolVal(b["Right Trigger"]?.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(b["Right Trigger"]?.value ?? 0.0))
+                    }
                     
                     alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(b["Right Shoulder"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(b["Right Shoulder"]?.value ?? 0.0))
@@ -828,8 +848,10 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(a["Left Thumbstick X Axis"]?.value ?? 0.0))
                     alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(a["Left Thumbstick Y Axis"]?.value ?? 0.0))
                     
-                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(b["Left Trigger"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(b["Left Trigger"]?.value ?? 0.0))
+                    if leftPinchTrigger <= 0.0 {
+                        alvr_send_button(WorldTracker.leftTriggerClick, boolVal(b["Left Trigger"]?.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(b["Left Trigger"]?.value ?? 0.0))
+                    }
                     
                     alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(b["Left Shoulder"]?.isPressed ?? false))
                     alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(b["Left Shoulder"]?.value ?? 0.0))
@@ -1155,23 +1177,21 @@ class WorldTracker {
 #endif
         if let leftHand = handPoses.leftHand {
             if !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+                let handMotion = handAnchorToAlvrDeviceMotion(leftHand)
+                
+                trackingMotions.append(handMotion)
                 if leftHand.isTracked {
-                    trackingMotions.append(handAnchorToAlvrDeviceMotion(leftHand))
                     skeletonLeft = handAnchorToSkeleton(leftHand)
-                }
-                else {
-                    trackingMotions.append(handAnchorToAlvrDeviceMotion(leftHand))
                 }
             }
         }
         if let rightHand = handPoses.rightHand {
             if !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (rightIsPinching || rightPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
+                let handMotion = handAnchorToAlvrDeviceMotion(rightHand)
+
+                trackingMotions.append(handMotion)
                 if rightHand.isTracked {
-                    trackingMotions.append(handAnchorToAlvrDeviceMotion(rightHand))
                     skeletonRight = handAnchorToSkeleton(rightHand)
-                }
-                else {
-                    trackingMotions.append(handAnchorToAlvrDeviceMotion(rightHand))
                 }
             }
         }
@@ -1210,11 +1230,25 @@ class WorldTracker {
             // Menu press with two pinches
             // (have to override triggers to prevent screenshot send)
             if (rightIsPinching && leftIsPinching) {
-                alvr_send_button(WorldTracker.leftMenuClick, boolVal(true))
-                alvr_send_button(WorldTracker.leftTriggerClick, boolVal(false))
-                alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(0.0))
-                alvr_send_button(WorldTracker.rightTriggerClick, boolVal(false))
-                alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(0.0))
+                leftPinchTrigger -= 0.1
+                if leftPinchTrigger < 0.0 {
+                    leftPinchTrigger = 0.0
+                }
+                rightPinchTrigger -= 0.1
+                if rightPinchTrigger < 0.0 {
+                    rightPinchTrigger = 0.0
+                }
+                
+                if leftPinchTrigger <= 0.0 && rightPinchTrigger <= 0.0 {
+                    alvr_send_button(WorldTracker.leftMenuClick, boolVal(true))
+                }
+                else {
+                    alvr_send_button(WorldTracker.leftMenuClick, boolVal(false))
+                }
+                alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
+                alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
+                alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
+                alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
                 
                 trackingMotions.append(pinchToAlvrDeviceMotion(.left))
                 trackingMotions.append(pinchToAlvrDeviceMotion(.right))
@@ -1230,6 +1264,7 @@ class WorldTracker {
                     }
                 }
                 else if !leftIsPinching && leftPinchTrigger > 0.0 {
+                    trackingMotions.append(pinchToAlvrDeviceMotion(.left))
                     alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
                     alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
                     leftPinchTrigger -= 0.1
@@ -1252,6 +1287,7 @@ class WorldTracker {
                     }
                 }
                 else if !rightIsPinching && rightPinchTrigger > 0.0 {
+                    trackingMotions.append(pinchToAlvrDeviceMotion(.right))
                     alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
                     alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
                     rightPinchTrigger -= 0.1
@@ -1327,6 +1363,15 @@ class WorldTracker {
         alvr_send_tracking(targetTimestampNS, UnsafePointer(viewFovsPtr), nil, 0, nil, nil)
         
         viewFovsPtr.deallocate()
+    }
+    
+    func angularVelocityBetweenQuats(_ q1: AlvrQuat, _ q2: AlvrQuat, _ dt: Float) -> (Float, Float, Float) {
+        let r = (2.0 / dt)
+        return (
+            (q1.w*q2.x - q1.x*q2.w - q1.y*q2.z + q1.z*q2.y) * r,
+            (q1.w*q2.y + q1.x*q2.z - q1.y*q2.w - q1.z*q2.x) * r,
+            (q1.w*q2.z - q1.x*q2.y + q1.y*q2.x - q1.z*q2.w) * r
+            )
     }
     
     // The poses we get back from the ALVR runtime are in SteamVR coordniate space,

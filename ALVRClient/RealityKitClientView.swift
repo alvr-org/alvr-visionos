@@ -29,10 +29,28 @@ struct RealityKitClientView: View {
             isRight = true
         }
         
+        /*if #available(visionOS 2.0, *) {
+            print(event.chirality, event.phase, event.id.hashValue, isRight, isInProgressPinch, WorldTracker.shared.leftSelectionRayId, WorldTracker.shared.rightSelectionRayId)
+        }*/
+        
         if event.kind == .indirectPinch && event.phase == .active {
             if !isInProgressPinch {
-                if WorldTracker.shared.leftSelectionRayId != -1 {
-                    isRight = true
+            
+                // If we have chiralities, assign based on them
+                if #available(visionOS 2.0, *) {
+                    if event.chirality == .none {
+                        if WorldTracker.shared.leftSelectionRayId != -1 {
+                            isRight = true
+                        }
+                    }
+                    else {
+                        isRight = event.chirality == .right
+                    }
+                }
+                else {
+                    if WorldTracker.shared.leftSelectionRayId != -1 {
+                        isRight = true
+                    }
                 }
                 
                 if isRight && WorldTracker.shared.rightSelectionRayId != -1 {

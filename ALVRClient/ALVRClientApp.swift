@@ -101,6 +101,9 @@ struct ALVRClientApp: App {
     Bug fixes:\n\
     \n\
     • Fixed flickering in right eye when window or Notification Center is placed in front of the streamed scene.\n\
+    • Fixed virtual controllers not sending angular velocities.\n\
+    • Fixed pinch interaction emulation cancelling inputs when doing the menu gesture.\n\
+    • Fixed pinch interaction emulation sometimes leading to stuck inputs on SteamVR dashboard.\n\
     \n\
     ________________________________\n\
     \n\

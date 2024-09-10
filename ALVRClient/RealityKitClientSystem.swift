@@ -146,6 +146,11 @@ class RealityKitClientSystem : System {
         
         await MainActor.run {
             let materialBackdrop = UnlitMaterial(color: .black)
+            var materialInputCatcher = UnlitMaterial(color: .init(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0))
+            materialInputCatcher.blending = .transparent(opacity: 0.0)
+            if #available(visionOS 2.0, *) {
+                materialInputCatcher.writesDepth = false
+            }
             
             let videoPlaneMeshCollision = MeshResource.generatePlane(width: 1.0, depth: 1.0)
             let cubeMesh = MeshResource.generateBox(size: 1.0)
@@ -161,48 +166,36 @@ class RealityKitClientSystem : System {
             let videoPlaneA_L = Entity()
             videoPlaneA_L.name = "video_plane_a_L"
             videoPlaneA_L.components.set(MagicRealityKitClientSystemComponent())
-            videoPlaneA_L.components.set(InputTargetComponent())
-            videoPlaneA_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneA_L.scale = simd_float3(0.0, 0.0, 0.0)
             videoPlaneA_L.isEnabled = false
             
             let videoPlaneB_L = Entity()
             videoPlaneB_L.name = "video_plane_b_L"
             videoPlaneB_L.components.set(MagicRealityKitClientSystemComponent())
-            videoPlaneB_L.components.set(InputTargetComponent())
-            videoPlaneB_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneB_L.scale = simd_float3(0.0, 0.0, 0.0)
             videoPlaneB_L.isEnabled = false
             
             let videoPlaneC_L = Entity()
             videoPlaneC_L.name = "video_plane_c_L"
             videoPlaneC_L.components.set(MagicRealityKitClientSystemComponent())
-            videoPlaneC_L.components.set(InputTargetComponent())
-            videoPlaneC_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneC_L.scale = simd_float3(0.0, 0.0, 0.0)
             videoPlaneC_L.isEnabled = false
             
             let videoPlaneA_R = Entity()
             videoPlaneA_R.name = "video_plane_a_R"
             videoPlaneA_R.components.set(MagicRealityKitClientSystemComponent())
-            videoPlaneA_R.components.set(InputTargetComponent())
-            videoPlaneA_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneA_R.scale = simd_float3(0.0, 0.0, 0.0)
             videoPlaneA_R.isEnabled = false
             
             let videoPlaneB_R = Entity()
             videoPlaneB_R.name = "video_plane_b_R"
             videoPlaneB_R.components.set(MagicRealityKitClientSystemComponent())
-            videoPlaneB_R.components.set(InputTargetComponent())
-            videoPlaneB_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneB_R.scale = simd_float3(0.0, 0.0, 0.0)
             videoPlaneB_R.isEnabled = false
             
             let videoPlaneC_R = Entity()
             videoPlaneC_R.name = "video_plane_c_R"
             videoPlaneC_R.components.set(MagicRealityKitClientSystemComponent())
-            videoPlaneC_R.components.set(InputTargetComponent())
-            videoPlaneC_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneC_R.scale = simd_float3(0.0, 0.0, 0.0)
             videoPlaneC_R.isEnabled = false
 
@@ -211,6 +204,21 @@ class RealityKitClientSystem : System {
             backdrop.isEnabled = false
             
             anchor.addChild(backdrop)
+            
+            // We need to make sure all input rays hit the input catcher, because if it hits the video planes
+            // then inputs will randomly cancel
+            let input_catcher = ModelEntity(mesh: videoPlaneMeshCollision, materials: [materialInputCatcher])
+            input_catcher.components.set(InputTargetComponent())
+            input_catcher.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
+            input_catcher.name = "input_catcher"
+            
+            let input_catcher_depth = (rk_panel_depth * 0.5)
+            input_catcher.position = simd_float3(0.0, 0.0, -input_catcher_depth)
+            input_catcher.orientation = simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
+            input_catcher.scale = simd_float3(input_catcher_depth * 4.0, input_catcher_depth * 4.0, input_catcher_depth * 4.0) // TODO: view tangents over 4.0? idk
+            input_catcher.isEnabled = true
+            
+            anchor.addChild(input_catcher)
 
             content.add(videoPlaneA_L)
             content.add(videoPlaneB_L)
