@@ -125,8 +125,8 @@ class Renderer {
             fatalError("streaming started: failed to retrieve alvr settings")
         }
             
-        encodingGamma = settings.video.encoderConfig.encodingGamma
-        hdrEnabled = settings.video.encoderConfig.enableHdr
+        encodingGamma = settings.video.encoder_config.encoding_gamma
+        hdrEnabled = settings.video.encoder_config.enable_hdr
         if hdrEnabled {
             currentRenderColorFormat = renderColorFormatHDR
             currentDrawableRenderColorFormat = renderColorFormatDrawableHDR
@@ -203,8 +203,8 @@ class Renderer {
         }
         print("rebuildRenderPipelines")
             
-        encodingGamma = settings.video.encoderConfig.encodingGamma
-        hdrEnabled = settings.video.encoderConfig.enableHdr
+        encodingGamma = settings.video.encoder_config.encoding_gamma
+        hdrEnabled = settings.video.encoder_config.enable_hdr
         if hdrEnabled {
             currentRenderColorFormat = renderColorFormatHDR
             currentDrawableRenderColorFormat = renderColorFormatDrawableHDR
@@ -214,7 +214,7 @@ class Renderer {
             currentDrawableRenderColorFormat = renderColorFormatSDR
         }
             
-        let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
+        let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveated_encoding)
         videoFramePipelineState_YpCbCrBiPlanar = try! buildRenderPipelineForVideoFrameWithDevice(
                             device: device,
                             mtlVertexDescriptor: mtlVertexDescriptor,
@@ -707,7 +707,7 @@ class Renderer {
             
             var needsPipelineRebuild = false
             if let otherSettings = Settings.getAlvrSettings() {
-                if otherSettings.video.encoderConfig.encodingGamma != encodingGamma {
+                if otherSettings.video.encoder_config.encoding_gamma != encodingGamma {
                     needsPipelineRebuild = true
                 }
             }

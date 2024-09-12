@@ -572,6 +572,7 @@ class EventHandler: ObservableObject {
                     print(message)
                     hudMessageBuffer.deallocate()
                 }
+                Settings.clearSettingsCache()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started \(alvrEvent.STREAMING_STARTED)")
                 numberOfEventThreadRestarts = 0
@@ -587,6 +588,7 @@ class EventHandler: ObservableObject {
                 if !renderStarted {
                     WorldTracker.shared.sendFakeTracking(viewFovs: viewFovs, targetTimestamp: CACurrentMediaTime() - 1.0)
                 }
+                Settings.clearSettingsCache()
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
                 if streamingActive {
@@ -595,6 +597,7 @@ class EventHandler: ObservableObject {
                     timeLastAlvrEvent = CACurrentMediaTime()
                     timeLastFrameSent = CACurrentMediaTime()
                 }
+                Settings.clearSettingsCache()
             case ALVR_EVENT_HAPTICS.rawValue:
                 //print("haptics: \(alvrEvent.HAPTICS)")
                 let haptics = alvrEvent.HAPTICS
@@ -619,6 +622,7 @@ class EventHandler: ObservableObject {
             case ALVR_EVENT_DECODER_CONFIG.rawValue:
                 streamingActive = true
                 print("create decoder \(alvrEvent.DECODER_CONFIG)")
+                Settings.clearSettingsCache()
                 // Don't reinstantiate the decoder if it's already created.
                 // TODO: Switching from H264 -> HEVC at runtime?
                 if vtDecompressionSession != nil {

@@ -47,8 +47,8 @@ struct FoveationVars {
 struct FFR {
     private init() {}
     
-    public static func calculateFoveationVars(alvrEvent: StreamingStarted_Body, foveationSettings: SettingsCodables.Switch<FoveationSettings>) -> FoveationVars {
-        guard case .content(let settings) = foveationSettings else {
+    public static func calculateFoveationVars(alvrEvent: StreamingStarted_Body, foveationSettings: FoveationSettings?) -> FoveationVars {
+        guard let settings = foveationSettings else {
             return FoveationVars(
                 enabled: false,
                 targetEyeWidth: 0,

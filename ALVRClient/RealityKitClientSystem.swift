@@ -1455,7 +1455,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             let settings = ALVRClientApp.gStore.settings
             if let otherSettings = Settings.getAlvrSettings() {
-                if otherSettings.video.encoderConfig.encodingGamma != renderer.encodingGamma {
+                if otherSettings.video.encoder_config.encoding_gamma != renderer.encodingGamma {
                     needsPipelineRebuild = true
                 }
             }

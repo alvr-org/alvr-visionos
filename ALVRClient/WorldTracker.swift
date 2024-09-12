@@ -1114,6 +1114,17 @@ class WorldTracker {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
+        var skeletonsEnabled = false
+        var steamVRInput2p0Enabled = false
+        if let otherSettings = Settings.getAlvrSettings() {
+            if otherSettings.headset.controllers?.hand_skeleton != nil {
+                skeletonsEnabled = true
+            }
+            if otherSettings.headset.controllers?.hand_skeleton?.steamvr_input_2_0 ?? false {
+                steamVRInput2p0Enabled = true
+            }
+        }
+        
         Task {
             for anchor in worldAnchorsToRemove {
                 do {
@@ -1293,7 +1304,17 @@ class WorldTracker {
         if rightSkeletonDisableHysteresis <= 0.0 {
             rightSkeletonDisableHysteresis = 0.0
         }
-
+        
+        // Disable the hysteresis if input 2.0 isn't enabled,
+        // disable skeletons with the hysteresis if skeletons are disabled
+        if !skeletonsEnabled {
+            leftSkeletonDisableHysteresis = defaultSkeletonDisableHysteresis
+            rightSkeletonDisableHysteresis = defaultSkeletonDisableHysteresis
+        }
+        else if !steamVRInput2p0Enabled {
+            leftSkeletonDisableHysteresis = 0.0
+            rightSkeletonDisableHysteresis = 0.0
+        }
 
         if let leftHand = handPoses.leftHand {
             if !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
