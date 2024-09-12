@@ -10,6 +10,10 @@ extension AlvrQuat
 	{
 		self.init(x: q.vector.x, y: q.vector.y, z: q.vector.z, w: q.vector.w)
 	}
+ 
+    func asQuatf() -> simd_quatf {
+        return simd_quatf(ix: self.x, iy: self.y, iz: self.z, r: self.w)
+    }
 }
 
 extension AlvrPose

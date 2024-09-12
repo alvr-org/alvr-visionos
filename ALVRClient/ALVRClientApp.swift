@@ -95,22 +95,23 @@ struct ALVRClientApp: App {
     \n\
     • Improved thermals and battery life by fixing a bug which caused extremely high CPU utilization.\n\
     • Improved chroma keying to hopefully remove some black pixel false-positives.\n\
+    • Hand tracking is now filtered to remove jittering.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
     • Fixed flickering in right eye when window or Notification Center is placed in front of the streamed scene.\n\
-    • Fixed virtual controllers not sending angular velocities.\n\
+    • Fixed throwing and waving gestures not working in some games.\n\
     • Fixed pinch interaction emulation cancelling inputs when doing the menu gesture.\n\
     • Fixed pinch interaction emulation sometimes leading to stuck inputs on SteamVR dashboard.\n\
+    • Fixed inputs getting dropped with SteamVR Input 2.0 setting enabled.\n\
     \n\
     ________________________________\n\
     \n\
     Known issues:\n\
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
-    • The control center and other semitransparent windows may flicker in the right eye when in front of the streamed scene.
     
     """
     
