@@ -93,9 +93,11 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
+    • Updated to client runtime v20.11.0. Please be sure to update your streamer.\n\
     • Improved thermals and battery life by fixing a bug which caused extremely high CPU utilization.\n\
     • Improved chroma keying to hopefully remove some black pixel false-positives.\n\
     • Hand tracking is now filtered to remove jittering.\n\
+    • The streamer version is now displayed under Connection Info. This will only work on streamer versions after v20.11.0.\n\
     \n\
     ________________________________\n\
     \n\
@@ -112,6 +114,7 @@ struct ALVRClientApp: App {
     Known issues:\n\
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
+    • Controllers may be unstable on streamer versions older than v20.11.0. Please update your streamer to resolve this issue.\n\
     
     """
     
