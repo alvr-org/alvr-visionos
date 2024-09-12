@@ -557,7 +557,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)",
 				);
-				MARKETING_VERSION = 20.9.2;
+				MARKETING_VERSION = 20.11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = alvr.client;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
@@ -599,7 +599,7 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)",
 				);
-				MARKETING_VERSION = 20.9.2;
+				MARKETING_VERSION = 20.11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = alvr.client;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "xros xrsimulator";

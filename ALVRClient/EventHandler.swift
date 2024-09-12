@@ -35,7 +35,12 @@ class EventHandler: ObservableObject {
     @Published var hostname: String = ""
     @Published var IP: String = ""
     @Published var alvrVersion: String = ""
+    @Published var hostAlvrVersion: String = ""
     @Published var connectionFlavorText: String = ""
+    
+    var hostAlvrMajor = 20
+    var hostAlvrMinor = 11
+    var hostAlvrRevision = 0
     
     var renderStarted = false
     
@@ -437,6 +442,24 @@ class EventHandler: ObservableObject {
         }
     }
     
+    func getHostVersion() -> String {
+        var byteArray = [UInt8](repeating: 0, count: 256)
+
+        byteArray.withUnsafeMutableBytes { (ptr: UnsafeMutableRawBufferPointer) -> Void in
+            let cStringPtr = ptr.bindMemory(to: CChar.self).baseAddress
+            
+            alvr_get_server_version(cStringPtr)
+        }
+        
+        if let utf8String = String(bytes: byteArray, encoding: .utf8) {
+            let ret = utf8String.trimmingCharacters(in: ["\0"]);
+            return ret;
+        } else {
+            print("Unable to decode alvr_get_server_version into a UTF-8 string.")
+            return "failed to decode host version";
+        }
+    }
+    
     // Returns the ALVR hostname in the format "NNNN.client.alvr"
     func getHostname() -> String {
         var byteArray = [UInt8](repeating: 0, count: 256)
@@ -505,6 +528,8 @@ class EventHandler: ObservableObject {
         timeLastAlvrEvent = CACurrentMediaTime()
         timeLastFrameGot = CACurrentMediaTime()
         timeLastFrameSent = CACurrentMediaTime()
+        
+        clearHostVersion()
     }
 
     // The main event thread
@@ -573,8 +598,10 @@ class EventHandler: ObservableObject {
                     hudMessageBuffer.deallocate()
                 }
                 Settings.clearSettingsCache()
+                updateHostVersion()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started \(alvrEvent.STREAMING_STARTED)")
+                updateHostVersion()
                 numberOfEventThreadRestarts = 0
                 if !streamingActive {
                     streamEvent = alvrEvent
@@ -598,6 +625,7 @@ class EventHandler: ObservableObject {
                     timeLastFrameSent = CACurrentMediaTime()
                 }
                 Settings.clearSettingsCache()
+                clearHostVersion()
             case ALVR_EVENT_HAPTICS.rawValue:
                 //print("haptics: \(alvrEvent.HAPTICS)")
                 let haptics = alvrEvent.HAPTICS
@@ -623,6 +651,7 @@ class EventHandler: ObservableObject {
                 streamingActive = true
                 print("create decoder \(alvrEvent.DECODER_CONFIG)")
                 Settings.clearSettingsCache()
+                updateHostVersion()
                 // Don't reinstantiate the decoder if it's already created.
                 // TODO: Switching from H264 -> HEVC at runtime?
                 if vtDecompressionSession != nil {
@@ -725,6 +754,25 @@ class EventHandler: ObservableObject {
     func updateVersion(_ newVersion: String) {
         DispatchQueue.main.async {
             self.alvrVersion = newVersion
+        }
+    }
+    
+    func updateHostVersion() {
+        DispatchQueue.main.async {
+            self.hostAlvrVersion = self.getHostVersion()
+            let majorMinorRev = self.hostAlvrVersion.split(separator: ".")
+            if majorMinorRev.count >= 3 {
+                self.hostAlvrMajor = Int(majorMinorRev[0]) ?? 20
+                self.hostAlvrMinor = Int(majorMinorRev[1]) ?? 11
+                self.hostAlvrRevision = Int(majorMinorRev[2]) ?? 0
+                print("Host version: v\(self.hostAlvrMajor).\(self.hostAlvrMinor).\(self.hostAlvrRevision), raw: \(self.hostAlvrVersion)")
+            }
+        }
+    }
+    
+    func clearHostVersion() {
+        DispatchQueue.main.async {
+            self.hostAlvrVersion = ""
         }
     }
 }

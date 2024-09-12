@@ -287,7 +287,7 @@ struct Entry: View {
                 
                 if eventHandler.hostname != "" && eventHandler.IP != "" {
                     let columns = [
-                        GridItem(.fixed(100), alignment: .trailing),
+                        GridItem(.fixed(150), alignment: .trailing),
                         GridItem(.fixed(150), alignment: .leading)
                     ]
 
@@ -296,14 +296,23 @@ struct Entry: View {
                         Text(eventHandler.hostname)
                         Text("IP:")
                         Text(eventHandler.IP)
-                        Text("Protocol:")
+                        Text("Client Protocol:")
                         Text(eventHandler.getMdnsProtocolId())
+                        Text("Streamer Version:")
+                        if eventHandler.hostAlvrVersion != "" {
+                            Text(eventHandler.hostAlvrVersion)
+                        }
+                        else {
+                            Text("Disconnected")
+                        }
+                        Text("")
+                        Text("")
                     }
                     .frame(width: 250, alignment: .center)
                     .padding(.bottom)
                 }
             }
-            .frame(minHeight: 150)
+            .frame(minHeight: 170)
         }
         .frame(minWidth: 650, maxWidth: 650)
         .glassBackgroundEffect()
