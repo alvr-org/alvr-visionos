@@ -354,7 +354,7 @@ class EventHandler: ObservableObject {
             if lastRequestedTimestamp != 0 && (lagSpiked || framesSinceLastDecode > 90*2) {
                 objc_sync_exit(frameQueueLock)
 
-                print("Handle spike!", framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
+                print("Handle spike! lagSpiked=\(lagSpiked) lastRequestedTimestamp=\(lastRequestedTimestamp), timestamp=\(timestamp), framesSinceLastDecode=\(framesSinceLastDecode) framesSinceLastIDR=\(framesSinceLastIDR) ns_diff_from_last_req_ts=\(ns_diff_from_last_req_ts)")
 
                 // We have to request an IDR to resume the video feed
                 VideoHandler.abandonAllPendingNals()
@@ -393,7 +393,7 @@ class EventHandler: ObservableObject {
                     timeLastFrameDecoded = CACurrentMediaTime()
 
                     //let imageBufferPtr = Unmanaged.passUnretained(imageBuffer).toOpaque()
-                    //print("finish decode: \(timestamp), \(imageBufferPtr), \(nal_type)")
+                    //print("finish decode: \(timestamp), \(framesSinceLastDecode)")
 
                     objc_sync_enter(frameQueueLock)
                     framesSinceLastDecode = 0
