@@ -97,6 +97,7 @@ struct ALVRClientApp: App {
     • Improved thermals and battery life by fixing a bug which caused extremely high CPU utilization.\n\
     • Improved chroma keying to hopefully remove some black pixel false-positives.\n\
     • Hand tracking is now filtered to remove jittering.\n\
+    • Added gaze-pinch emulation support for other controller emulation types.\n\
     • The streamer version is now displayed under Connection Info. This will only work on streamer versions after v20.11.0.\n\
     \n\
     ________________________________\n\

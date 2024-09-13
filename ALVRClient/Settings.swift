@@ -36,6 +36,7 @@ struct SettingsCodables {
         @DefaultEmptyArray var left_hand_tracking_position_offset: [Float]
         @DefaultEmptyArray var left_hand_tracking_rotation_offset: [Float]
         @OptionSwitch var hand_skeleton: HandSkeletonConfig?
+        @DefaultEmptyString var emulation_mode: String
     }
     
     struct HeadsetConfig: Codable {

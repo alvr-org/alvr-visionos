@@ -632,9 +632,11 @@ class WorldTracker {
         let direction = simd_normalize(convertApplePositionToSteamVR(appleOrigin + appleDirection) - origin)
         let orient = simd_look(at: -direction)
         
-        //let val = sin(Float(CACurrentMediaTime() * 0.0125)) + 1.0
+        //let val = sin(Float(CACurrentMediaTime() * 0.25)) + 1.0
         //let val2 = sin(Float(CACurrentMediaTime()))
         //let val3 = (((sin(Float(CACurrentMediaTime() * 0.025)) + 1.0) * 0.5) * 0.015)
+        //let val4 = ((sin(Float(CACurrentMediaTime() * 0.125)) + 1.0) * 0.5) + 1.0
+        //let val5 = ((sin(Float(CACurrentMediaTime() * 0.125)) + 1.0) * 0.5)
         
         var pinchOffset = isLeft ? (leftPinchCurrentPosition - leftPinchStartPosition) : (rightPinchCurrentPosition - rightPinchStartPosition)
         
@@ -643,9 +645,24 @@ class WorldTracker {
         // Gathered these by oscillating the controller along the gaze ray, and then adjusting the
         // angles slightly with pinchOffset.y until the pointer stopped moving left/right and up/down.
         // Then I adjusted the positional offset with pinchOffset.xyz.
-        let adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7389288)))
-        let adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3((isLeft ? 1.0 : -1.0) * 0.06772318, 0.0, 1.0)))
-        let adjPosition = simd_float3(0.0, isLeft ? -leftPinchEyeDelta.y : -rightPinchEyeDelta.y, 0.0)
+        var adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7389288)))
+        var adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3((isLeft ? 1.0 : -1.0) * 0.06772318, 0.0, 1.0)))
+        var adjPosition = simd_float3(0.0, isLeft ? -leftPinchEyeDelta.y : -rightPinchEyeDelta.y, 0.0)
+        
+        if let otherSettings = Settings.getAlvrSettings() {
+            let emulationMode = otherSettings.headset.controllers?.emulation_mode ?? ""
+            if emulationMode == "RiftSTouch" {
+                adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7349951)))
+                adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3((isLeft ? 1.0 : -1.0) * 0.00451532, 0.0, 1.0)))
+            }
+            else if emulationMode == "Quest2Touch" || emulationMode == "Quest3Plus" {
+                adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.5898746)))
+                adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3((isLeft ? 1.0 : -1.0) * 0.01, 0.0, 1.0)))
+            }
+            
+            // TODO: ViveWand and ViveTracker
+        }
+        
         let q = simd_quatf(orient) * adjLeftRight * adjUpDown
         //pinchOffset = simd_float3()
         
