@@ -582,7 +582,7 @@ class EventHandler: ObservableObject {
             var alvrEvent = AlvrEvent()
             let res = alvr_poll_event(&alvrEvent)
             if !res {
-                usleep(1000)
+                Thread.sleep(forTimeInterval: 0.001)
                 continue
             }
             timeLastAlvrEvent = CACurrentMediaTime()
@@ -686,6 +686,7 @@ class EventHandler: ObservableObject {
              default:
                  print("msg")
              }
+             Thread.sleep(forTimeInterval: 0.0001)
         }
         
         print("Events thread stopped")
