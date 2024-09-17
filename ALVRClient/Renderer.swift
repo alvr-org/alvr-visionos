@@ -803,7 +803,7 @@ class Renderer {
         let viewTangents = drawable.views.map { $0.tangents }
         let nearZ =  Double(drawable.depthRange.y)
         let farZ = Double(drawable.depthRange.x)
-        let simdDeviceAnchor = deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4
+        let simdDeviceAnchor = WorldTracker.shared.floorCorrectionTransform.asFloat4x4() * (deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4)
         let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
         
         if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
@@ -832,7 +832,7 @@ class Renderer {
         {
             reprojectedFramesInARow = 0;
 
-            let noFramePose = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
+            let noFramePose = simdDeviceAnchor
             // TODO: draw a cool loading logo
             renderNothing(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
             

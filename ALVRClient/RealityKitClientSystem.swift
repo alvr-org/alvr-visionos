@@ -198,6 +198,12 @@ class RealityKitClientSystem : System {
             videoPlaneC_R.components.set(MagicRealityKitClientSystemComponent())
             videoPlaneC_R.scale = simd_float3(0.0, 0.0, 0.0)
             videoPlaneC_R.isEnabled = false
+            
+            let checkFloorLevelingPlane = ModelEntity(mesh: videoPlaneMeshCollision, materials: [materialBackdrop])
+            checkFloorLevelingPlane.name = "check_floor_leveling_plane"
+            checkFloorLevelingPlane.position = simd_float3(0.0, 0.0, 0.0)
+            checkFloorLevelingPlane.scale = simd_float3(0.1, 0.1, 0.1)
+            checkFloorLevelingPlane.isEnabled = false
 
             let backdrop = ModelEntity(mesh: videoPlaneMeshCollision, materials: [materialBackdrop])
             backdrop.name = "backdrop_plane"
@@ -212,7 +218,7 @@ class RealityKitClientSystem : System {
             input_catcher.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             input_catcher.name = "input_catcher"
             
-            let input_catcher_depth = (rk_panel_depth * 0.5)
+            let input_catcher_depth: Float = 1.5//(rk_panel_depth * 0.5)
             input_catcher.position = simd_float3(0.0, 0.0, -input_catcher_depth)
             input_catcher.orientation = simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
             input_catcher.scale = simd_float3(input_catcher_depth * 4.0, input_catcher_depth * 4.0, input_catcher_depth * 4.0) // TODO: view tangents over 4.0? idk
@@ -226,6 +232,7 @@ class RealityKitClientSystem : System {
             content.add(videoPlaneA_R)
             content.add(videoPlaneB_R)
             content.add(videoPlaneC_R)
+            content.add(checkFloorLevelingPlane)
             content.add(anchor)
         }
     }

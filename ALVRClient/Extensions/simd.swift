@@ -20,6 +20,13 @@ extension simd_float3
     {
         return simd_float4(self.x, self.y, self.z, 1.0)
     }
+    
+    func asFloat4x4() -> matrix_float4x4
+    {
+        var ret = matrix_identity_float4x4
+        ret.columns.3 = self.asFloat4_1()
+        return ret
+    }
 }
 
 extension simd_float4

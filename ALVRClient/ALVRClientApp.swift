@@ -109,6 +109,8 @@ struct ALVRClientApp: App {
     • Fixed pinch interaction emulation cancelling inputs when doing the menu gesture.\n\
     • Fixed pinch interaction emulation sometimes leading to stuck inputs on SteamVR dashboard.\n\
     • Fixed inputs getting dropped with SteamVR Input 2.0 setting enabled.\n\
+    • Fixed gaze-pinch emulation when headset is upside-down.\n\
+    • Fixed view transforms being slightly incorrect, possibly causing floor misalignment.\n\
     \n\
     ________________________________\n\
     \n\

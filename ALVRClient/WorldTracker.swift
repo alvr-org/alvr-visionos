@@ -231,6 +231,7 @@ class WorldTracker {
     var leftPinchEyeDelta = simd_float3()
     var rightPinchEyeDelta = simd_float3()
     var averageViewTransformPositionalComponent = simd_float3()
+    var floorCorrectionTransform = simd_float3()
     
     var leftSkeletonDisableHysteresis = 0.0
     var rightSkeletonDisableHysteresis = 0.0
@@ -550,6 +551,8 @@ class WorldTracker {
             }
         }
         
+        position += floorCorrectionTransform.asFloat4()
+        
         let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
         return pose
     }
@@ -647,7 +650,8 @@ class WorldTracker {
         // Then I adjusted the positional offset with pinchOffset.xyz.
         var adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.7389288)))
         var adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3((isLeft ? 1.0 : -1.0) * 0.06772318, 0.0, 1.0)))
-        var adjPosition = simd_float3(0.0, isLeft ? -leftPinchEyeDelta.y : -rightPinchEyeDelta.y, 0.0)
+        var adjPosition = simd_float3(isLeft ? -leftPinchEyeDelta.x : -rightPinchEyeDelta.x, isLeft ? -leftPinchEyeDelta.y : -rightPinchEyeDelta.y, isLeft ? -leftPinchEyeDelta.z : -rightPinchEyeDelta.z)
+        let tipOffset: Float = -0.02522 * 2 // For some reason all the controller models have this offset? TODO: XYZ per-controller?
         
         if let otherSettings = Settings.getAlvrSettings() {
             let emulationMode = otherSettings.headset.controllers?.emulation_mode ?? ""
@@ -662,6 +666,8 @@ class WorldTracker {
             
             // TODO: ViveWand and ViveTracker
         }
+        
+        adjPosition.y += tipOffset
         
         let q = simd_quatf(orient) * adjLeftRight * adjUpDown
         //pinchOffset = simd_float3()
@@ -679,6 +685,7 @@ class WorldTracker {
         guard let skeleton = hand.handSkeleton else {
             return nil
         }
+        let adjPose = floorCorrectionTransform.asFloat4x4()
         let rootAlvrPose = handAnchorToPose(hand, true)
         let rootOrientation = simd_quatf(ix: rootAlvrPose.orientation.x, iy: rootAlvrPose.orientation.y, iz: rootAlvrPose.orientation.z, r: rootAlvrPose.orientation.w)
         let rootPosition = simd_float3(x: rootAlvrPose.position.0, y: rootAlvrPose.position.1, z: rootAlvrPose.position.2)
@@ -696,7 +703,7 @@ class WorldTracker {
             if steamVrIdx == -1 || steamVrIdx >= SteamVRJoints.numberOfJoints.rawValue {
                 continue
             }
-            let transformRaw = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform * joint.anchorFromJointTransform
+            let transformRaw = adjPose * self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform * joint.anchorFromJointTransform
             let transform = transformRaw
             var orientation = simd_quaternion(transform) * simd_quatf(from: simd_float3(1.0, 0.0, 0.0), to: simd_float3(0.0, 0.0, 1.0))
             
@@ -1219,9 +1226,17 @@ class WorldTracker {
         
         //let targetTimestampNS = UInt64(targetTimestampWalkedBack * Double(NSEC_PER_SEC))
         let reportedTargetTimestampNS = UInt64(reportedTargetTimestamp * Double(NSEC_PER_SEC))
-        
-        let headPositionApple = deviceAnchor.originFromAnchorTransform.columns.3.asFloat3()
-        
+
+        floorCorrectionTransform = simd_float3() // TODO: Set floor height to plane provider floor height? Raycast it dynamically? idk.
+#if XCODE_BETA_16
+        if #available(visionOS 2.0, *) {
+            // TODO: This might be the height of my carpet lol
+            //floorCorrectionTransform.y = averageViewTransformPositionalComponent.y * 0.5
+        }
+#endif
+
+        var appleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
+        appleOriginFromAnchor.columns.3 += floorCorrectionTransform.asFloat4()
         
         // HACK: The selection ray origin is slightly off (especially for Metal).
         // I think they subtracted the view transform from the pinch origin twice?
@@ -1231,35 +1246,34 @@ class WorldTracker {
         // Real head y = 1.1004653
         // Pinch origin y = 1.0797559
         // y which lines up the ray correctly = 1.059214
-        if leftIsPinching && leftSelectionRayOrigin != simd_float3() && leftPinchStartPosition == leftPinchCurrentPosition {
-            leftPinchEyeDelta = headPositionApple - leftSelectionRayOrigin
-            leftPinchEyeDelta -= averageViewTransformPositionalComponent
-            if !pinchesAreFromRealityKit {
-                leftPinchEyeDelta -= averageViewTransformPositionalComponent
-#if XCODE_BETA_16
-                if #available(visionOS 2.0, *) {
-                    leftPinchEyeDelta += averageViewTransformPositionalComponent
-                }
-#endif
-            }
+        if leftIsPinching && !lastLeftIsPinching && leftSelectionRayOrigin != simd_float3() && leftPinchStartPosition == leftPinchCurrentPosition {
+            leftPinchEyeDelta = simd_float3()
+
             //print("left pinch eye delta", leftPinchEyeDelta)
         }
-        if rightIsPinching && rightSelectionRayOrigin != simd_float3() && rightPinchStartPosition == rightPinchCurrentPosition {
-            rightPinchEyeDelta = headPositionApple - rightSelectionRayOrigin
-            rightPinchEyeDelta -= averageViewTransformPositionalComponent
-            if !pinchesAreFromRealityKit {
-                rightPinchEyeDelta -= averageViewTransformPositionalComponent
-#if XCODE_BETA_16
-                if #available(visionOS 2.0, *) {
-                    rightPinchEyeDelta += averageViewTransformPositionalComponent
-                }
-#endif
-            }
+        if rightIsPinching && !lastRightIsPinching && rightSelectionRayOrigin != simd_float3() && rightPinchStartPosition == rightPinchCurrentPosition {
+            rightPinchEyeDelta = simd_float3()
+            
+            // Verifying gazes: This value should be near-zero when the right eye is closed.
+            // Verifies successfully on visionOS 2.0!
+            /*let verifyAppleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
+            let verifyAppleHeadPosition = verifyAppleOriginFromAnchor.columns.3.asFloat3()
+            let verifyLeftTransform = verifyAppleOriginFromAnchor * viewTransforms[0]
+            
+            let rayOrigin = rightSelectionRayOrigin
+            //let rayOrigin = leftTransform.columns.3.asFloat3()
+            
+            var test = ((rayOrigin - verifyAppleHeadPosition).asFloat4() * verifyAppleOriginFromAnchor).asFloat3()
+            test -= viewTransforms[0].columns.3.asFloat3()
+            let test2 = rightSelectionRayOrigin - verifyLeftTransform.columns.3.asFloat3()
+            print("verifying vs left eye transform, difference:")
+            print("Test A:", test)
+            print("Test B:", test2)*/
+            
             //print("right pinch eye delta", rightPinchEyeDelta)
         }
-
+        
         // Don't move SteamVR center/bounds when the headset recenters
-        let appleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
         let transform = self.worldTrackingSteamVRTransform.inverse * appleOriginFromAnchor
         let leftTransform = transform * viewTransforms[0]
         let rightTransform = transform * viewTransforms[1]
@@ -1472,10 +1486,9 @@ class WorldTracker {
                 }
                 alvr_send_button(WorldTracker.leftMenuClick, boolVal(false))
             }
-            
-            lastLeftIsPinching = leftIsPinching
-            lastRightIsPinching = rightIsPinching
         }
+        lastLeftIsPinching = leftIsPinching
+        lastRightIsPinching = rightIsPinching
         
         // selection ray tests, replaces left forearm
         /*var testPoseApple = matrix_identity_float4x4
@@ -1513,7 +1526,7 @@ class WorldTracker {
             skeletonRightPtr?.deallocate()
         }.start()
         
-        return deviceAnchor.originFromAnchorTransform
+        return appleOriginFromAnchor
     }
     
     // We want video frames ASAP, so we send a fake view pose/FOVs to keep the frames coming
@@ -1545,7 +1558,7 @@ class WorldTracker {
             )
     }
     
-    // The poses we get back from the ALVR runtime are in SteamVR coordniate space,
+    // The poses we get back from the ALVR runtime are in SteamVR coordinate space,
     // so we need to convert them back to local space
     func convertSteamVRViewPose(_ viewParams: [AlvrViewParams]) -> simd_float4x4 {
         // Shouldn't happen, somehow happened with the Metal renderer?
@@ -1557,8 +1570,9 @@ class WorldTracker {
         let p = viewParams[0].pose.position
         var leftTransform = simd_float4x4(simd_quatf(ix: o.x, iy: o.y, iz: o.z, r: o.w))
         leftTransform.columns.3 = simd_float4(p.0, p.1, p.2, 1.0)
+        leftTransform.columns.3 -= floorCorrectionTransform.asFloat4()
         
-        leftTransform = EventHandler.shared.viewTransforms[0].inverse * leftTransform
+        //leftTransform = EventHandler.shared.viewTransforms[0].inverse * leftTransform
         leftTransform = worldTrackingSteamVRTransform * leftTransform
         
         return leftTransform
@@ -1568,6 +1582,7 @@ class WorldTracker {
         var t = matrix_identity_float4x4
         t.columns.3 = simd_float4(p.x, p.y, p.z, 1.0)
         t = self.worldTrackingSteamVRTransform.inverse * t
+        t.columns.3 += floorCorrectionTransform.asFloat4()
         return simd_float3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
     }
 }
