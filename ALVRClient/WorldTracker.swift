@@ -230,7 +230,6 @@ class WorldTracker {
     
     var leftPinchEyeDelta = simd_float3()
     var rightPinchEyeDelta = simd_float3()
-    var averageViewTransformPositionalComponent = simd_float3()
     var floorCorrectionTransform = simd_float3()
     
     var leftSkeletonDisableHysteresis = 0.0
@@ -1238,14 +1237,7 @@ class WorldTracker {
         var appleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
         appleOriginFromAnchor.columns.3 += floorCorrectionTransform.asFloat4()
         
-        // HACK: The selection ray origin is slightly off (especially for Metal).
-        // I think they subtracted the view transform from the pinch origin twice?
-        // Added instead of subtracted? idk, it's something weird.
-        //
-        // Example: delta.y = 0.020709395
-        // Real head y = 1.1004653
-        // Pinch origin y = 1.0797559
-        // y which lines up the ray correctly = 1.059214
+        // Pinch rising-edge blocks for debugging
         if leftIsPinching && !lastLeftIsPinching && leftSelectionRayOrigin != simd_float3() && leftPinchStartPosition == leftPinchCurrentPosition {
             leftPinchEyeDelta = simd_float3()
 

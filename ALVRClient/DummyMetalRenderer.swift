@@ -46,8 +46,6 @@ class DummyMetalRenderer {
             fatalError("Failed to create command buffer")
         }
         
-        var averageViewTransformPositionalComponent = simd_float4()
-        
         DummyMetalRenderer.renderTangents.removeAll()
         DummyMetalRenderer.renderViewTransforms.removeAll()
         for view in drawable.views {
@@ -57,8 +55,6 @@ class DummyMetalRenderer {
             transform.columns.3 = view.transform.columns.3
             //let transform = view.transform
             DummyMetalRenderer.renderViewTransforms.append(transform)
-            
-            averageViewTransformPositionalComponent += view.transform.columns.3
         }
         
         let vrr = drawable.rasterizationRateMaps[0]
@@ -95,16 +91,6 @@ class DummyMetalRenderer {
                 //print("y", j, rate)
             }
         }
-        
-        // HACK: for some reason Apple's view transforms' positional component has this really weird drift downwards at the start.
-        // Initially, it's off by like 26cm, super weird.
-        averageViewTransformPositionalComponent /= Float(DummyMetalRenderer.renderViewTransforms.count)
-        averageViewTransformPositionalComponent.w = 0.0
-        
-        /*for i in 0..<DummyMetalRenderer.renderViewTransforms.count {
-            DummyMetalRenderer.renderViewTransforms[i].columns.3 -= averageViewTransformPositionalComponent
-        }*/
-        WorldTracker.shared.averageViewTransformPositionalComponent = averageViewTransformPositionalComponent.asFloat3()
         
         drawable.encodePresent(commandBuffer: commandBuffer)
         commandBuffer.commit()
