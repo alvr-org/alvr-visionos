@@ -57,7 +57,7 @@ let useTripleBufferingStaleTextureVisionOS2Hack = true
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
-let rk_panel_depth: Float = 90
+let rk_panel_depth: Float = 80
 
 struct RKQueuedFrame {
     let texture: MTLTexture
@@ -1096,6 +1096,12 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         guard let backdrop = context.scene.findEntity(named: "backdrop_plane") as? ModelEntity else {
             return
         }
+        guard let input_catcher = context.scene.findEntity(named: "input_catcher") as? ModelEntity else {
+            return
+        }
+        
+        input_catcher.isEnabled = !(WorldTracker.shared.eyeTrackingActive && !WorldTracker.shared.eyeIsMipmapMethod)
+        
         let settings = ALVRClientApp.gStore.settings
         
         var commandBuffer: MTLCommandBuffer? = nil

@@ -238,6 +238,8 @@ class WorldTracker {
     var pinchesAreFromRealityKit = false
     var eyeX: Float = 0.0
     var eyeY: Float = 0.0
+    var eyeIsMipmapMethod: Bool = true
+    var eyeTrackingActive: Bool = false
     
     var lastSkeletonLeft:[AlvrPose]? = nil
     var lastSkeletonRight:[AlvrPose]? = nil
@@ -1294,27 +1296,104 @@ class WorldTracker {
         
         // To get the most accurate rotations, we have each eye look at the in-space coordinates
         // we know the HoverEffect is reporting
-        let directionTarget = simd_float3(-eyeX * (DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y) * 0.5 * 50.0, eyeY * (DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w) * 0.5 * 50.0, 50.0)
-        let directionL = viewTransforms[0].columns.3.asFloat3() - directionTarget
-        let directionR = viewTransforms[1].columns.3.asFloat3() - directionTarget
-        let orientL = simd_look(at: -directionL)
-        let orientR = simd_look(at: -directionR)
-        let qL = leftOrientation * simd_quaternion(orientL)
-        let qR = rightOrientation * simd_quaternion(orientR)
-
-        //print(eyeX, eyeY)
+        var qL = simd_quatf()
+        var qR = simd_quatf()
         
         // TODO: Attach SteamVR controller to eyes for input anticipation/hovers.
         // Needs the gazes to be as accurate as the pinch events.
-#if false
-        let directionTargetApple = appleOriginFromAnchor * directionTarget.asFloat4_1()
+        let appleLeft = appleOriginFromAnchor * viewTransforms[0]
+        //let appleRight = appleOriginFromAnchor * viewTransforms[1]
 
-        leftSelectionRayOrigin = appleOriginFromAnchor.columns.3.asFloat3()
-        leftSelectionRayDirection = simd_normalize(appleOriginFromAnchor.columns.3.asFloat3() - directionTargetApple.asFloat3())
-        //leftPinchEyeDelta = simd_float3()
-        leftPinchStartPosition = simd_float3()
-        leftPinchCurrentPosition = simd_float3()
+        if eyeIsMipmapMethod {
+            var directionTarget = simd_float3()
+            if eyeX < 0.0 {
+                directionTarget.x = -eyeX * 0.5 * (DummyMetalRenderer.renderTangents[0].x) * 50.0 // left
+            }
+            else {
+                directionTarget.x = -eyeX * 0.7435 * (DummyMetalRenderer.renderTangents[0].y) * 50.0 // right
+            }
+            if eyeY < 0.0 {
+                directionTarget.y = eyeY * 0.65209925 * (DummyMetalRenderer.renderTangents[0].z) * 50.0 // top
+            }
+            else {
+                directionTarget.y = eyeY * 0.5784546 * (DummyMetalRenderer.renderTangents[0].w) * 50.0 // bottom
+            }
+            directionTarget.z = 50.0
+            
+            let directionL = viewTransforms[0].columns.3.asFloat3() - directionTarget
+            let directionR = viewTransforms[1].columns.3.asFloat3() - directionTarget
+            let orientL = simd_look(at: -directionL)
+            let orientR = simd_look(at: -directionR)
+            qL = leftOrientation * simd_quaternion(orientL)
+            qR = rightOrientation * simd_quaternion(orientR)
+
+            if leftIsPinching {
+                //print(eyeX, eyeY, val)
+            }
+        
+            let directionTargetApple = appleLeft * directionTarget.asFloat4_1()
+#if false
+            leftSelectionRayOrigin = appleLeft.columns.3.asFloat3()
+            leftSelectionRayDirection = simd_normalize(leftSelectionRayOrigin - directionTargetApple.asFloat3())
+            //leftPinchEyeDelta = simd_float3()
+            leftPinchStartPosition = simd_float3()
+            leftPinchCurrentPosition = simd_float3()
+            //leftIsPinching = true
 #endif
+        }
+        else {
+            //let val = Float(sin(CACurrentMediaTime() * 0.125) + 1.0)
+            let panelWidth = max(DummyMetalRenderer.renderTangents[0].x, DummyMetalRenderer.renderTangents[1].x) + max(DummyMetalRenderer.renderTangents[0].y, DummyMetalRenderer.renderTangents[1].y)
+            //let panelWidth = DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[1].x
+            let panelHeight = max(DummyMetalRenderer.renderTangents[0].z, DummyMetalRenderer.renderTangents[1].z) + max(DummyMetalRenderer.renderTangents[0].w, DummyMetalRenderer.renderTangents[1].w)
+            var directionTarget = simd_float3()
+            var eyeXMod = eyeX
+            var eyeYMod = eyeY
+            if eyeXMod < 0.0 {
+                eyeXMod *= DummyMetalRenderer.renderTangents[0].x * 0.5 // left
+            }
+            else {
+                eyeXMod *= DummyMetalRenderer.renderTangents[0].y * 2.0 // right
+            }
+            if eyeYMod > 0.0 {
+                eyeYMod *= DummyMetalRenderer.renderTangents[0].w * 1.3511884 // bottom
+            }
+            else {
+                eyeYMod *= DummyMetalRenderer.renderTangents[0].z * 2.0 // top
+            }
+            
+            // wtf
+            if eyeXMod > 0.0 {
+                eyeYMod -= eyeXMod * 0.5912685
+            }
+            //directionTarget.x = -eyeXMod * panelWidth * 50.0 // left
+            //directionTarget.y = eyeY * panelHeight * 50.0 // top
+            //directionTarget.z = 50.0
+            directionTarget.x = -eyeXMod * panelWidth * rk_panel_depth * 0.5 * 0.5
+            directionTarget.y = eyeYMod * panelHeight * rk_panel_depth * 0.5 * 0.5
+            directionTarget.z = rk_panel_depth * 0.5
+            
+            let directionL = viewTransforms[0].columns.3.asFloat3() - directionTarget
+            let directionR = viewTransforms[1].columns.3.asFloat3() - directionTarget
+            let orientL = simd_look(at: -directionL)
+            let orientR = simd_look(at: -directionR)
+            qL = leftOrientation * simd_quaternion(orientL)
+            qR = rightOrientation * simd_quaternion(orientR)
+
+            if leftIsPinching {
+                //print(eyeXMod, eyeYMod, val)
+            }
+        
+            let directionTargetApple = appleOriginFromAnchor * directionTarget.asFloat4_1()
+#if false
+            leftSelectionRayOrigin = appleOriginFromAnchor.columns.3.asFloat3()
+            leftSelectionRayDirection = simd_normalize(leftSelectionRayOrigin - directionTargetApple.asFloat3())
+            //leftPinchEyeDelta = simd_float3()
+            leftPinchStartPosition = simd_float3()
+            leftPinchCurrentPosition = simd_float3()
+            //leftIsPinching = true
+#endif
+        }
         
         eyeGazeLeftPtr?[0] = AlvrPose(qL, leftTransform.columns.3.asFloat3())
         eyeGazeRightPtr?[0] = AlvrPose(qR, rightTransform.columns.3.asFloat3())

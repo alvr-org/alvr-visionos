@@ -353,11 +353,13 @@ class RealityKitEyeTrackingSystemCorrectlyAssociated : System {
             eyeYPlane.isEnabled = true
             eye2Plane.isEnabled = false
 #endif
+            WorldTracker.shared.eyeTrackingActive = true
         }
         else {
             eyeXPlane.isEnabled = false
             eyeYPlane.isEnabled = false
             eye2Plane.isEnabled = false
+            WorldTracker.shared.eyeTrackingActive = false
         }
         
         if !eyeXPlane.isEnabled && !eyeYPlane.isEnabled && !eye2Plane.isEnabled {
@@ -366,9 +368,11 @@ class RealityKitEyeTrackingSystemCorrectlyAssociated : System {
         
         if CACurrentMediaTime() - lastHeartbeat > 1.0 {
             if eye2Plane.isEnabled {
+                WorldTracker.shared.eyeIsMipmapMethod = false
                 RealityKitEyeTrackingSystem.notificationManager.send("EyeTrackingInfo_UseHoverEffectMethod")
             }
             else {
+                WorldTracker.shared.eyeIsMipmapMethod = true
                 RealityKitEyeTrackingSystem.notificationManager.send("EyeTrackingInfo_UseMipmapMethod")
             }
             lastHeartbeat = CACurrentMediaTime()
@@ -378,7 +382,7 @@ class RealityKitEyeTrackingSystemCorrectlyAssociated : System {
         // start eye track
         //
         
-        let rk_eye_panel_depth = rk_panel_depth * 0.5
+        let rk_eye_panel_depth: Float = rk_panel_depth * 0.5
         let transform = matrix_identity_float4x4 // frame.transform
         var planeTransformX = matrix_identity_float4x4// frame.transform
         planeTransformX.columns.3 -= transform.columns.2 * rk_eye_panel_depth
@@ -401,7 +405,8 @@ class RealityKitEyeTrackingSystemCorrectlyAssociated : System {
         var scaleY = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
         scaleY *= rk_eye_panel_depth
         
-        var scale2 = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
+        var scale2 = simd_float3(max(DummyMetalRenderer.renderTangents[0].x, DummyMetalRenderer.renderTangents[1].x) + max(DummyMetalRenderer.renderTangents[0].y, DummyMetalRenderer.renderTangents[1].y), 1.0, max(DummyMetalRenderer.renderTangents[0].z, DummyMetalRenderer.renderTangents[1].z) + max(DummyMetalRenderer.renderTangents[0].w, DummyMetalRenderer.renderTangents[1].w))
+        //var scale2 = simd_float3(DummyMetalRenderer.renderTangents[0].x + DummyMetalRenderer.renderTangents[0].y, 1.0, DummyMetalRenderer.renderTangents[0].z + DummyMetalRenderer.renderTangents[0].w)
         scale2 *= rk_eye_panel_depth
 
         let orientationXY = /*simd_quatf(frame.transform) **/ simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
