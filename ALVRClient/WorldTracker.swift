@@ -565,12 +565,19 @@ class WorldTracker {
         }
         let linVel = simd_float3(dp.0 / dt, dp.1 / dt, dp.2 / dt)
         
-        var alpha: Float = simd_distance(simd_float3(), linVel) * 0.5 * strength
+        let movementThreshold: Float = 0.15
+        var alpha: Float = simd_distance(simd_float3(), linVel) * 0.6 * strength
+        
+        // make alphas under movementThreshold even lower and higher even higher
+        alpha = alpha / movementThreshold
+        alpha *= alpha
+        alpha *= movementThreshold
+
         if alpha > 1.0 {
             alpha = 1.0
         }
-        else if alpha < 0.2 {
-            alpha = 0.2
+        else if alpha < 0.1 {
+            alpha = 0.01
         }
         let invAlpha = 1.0 - alpha
         
@@ -578,7 +585,7 @@ class WorldTracker {
         var orientationFiltered = simd_slerp(lastPose.orientation.asQuatf(), pose.orientation.asQuatf(), alpha)
         
         if !positionFiltered.x.isFinite || positionFiltered.x.isNaN || !positionFiltered.y.isFinite || positionFiltered.y.isNaN || !positionFiltered.z.isFinite || positionFiltered.z.isNaN {
-            print("nans in hand EMA?")
+            print("nans in hand EWMA?")
             positionFiltered = simd_float3(pose.position.0, pose.position.1, pose.position.2)
             orientationFiltered = pose.orientation.asQuatf()
         }
@@ -589,7 +596,7 @@ class WorldTracker {
     func handAnchorToAlvrDeviceMotion(_ hand: HandAnchor) -> AlvrDeviceMotion {
         let device_id = hand.chirality == .left ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
         let lastPose: AlvrPose = hand.chirality == .left ? lastLeftHandPose : lastRightHandPose
-        let pose: AlvrPose = filterHandPose(lastPose, handAnchorToPose(hand, false), 1.0)
+        let pose: AlvrPose = filterHandPose(lastPose, handAnchorToPose(hand, false), 0.99)
         let dp = (pose.position.0 - lastPose.position.0, pose.position.1 - lastPose.position.1, pose.position.2 - lastPose.position.2)
         var dt = Float(lastHandsUpdatedTs - lastSentHandsTs)
         if dt <= 0.0 {
