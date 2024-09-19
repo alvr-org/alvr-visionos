@@ -546,10 +546,7 @@ class WorldTracker {
                 adjPost20p11 = WorldTracker.leftHandOrientationCorrection * adjPost20p11
             }
             
-            // HACK: Fix hands for only v20.11 and later
-            if (EventHandler.shared.hostAlvrMajor == 20 && EventHandler.shared.hostAlvrMinor >= 11) || (EventHandler.shared.hostAlvrMajor > 20) {
-                orientation = orientation * adjPost20p11
-            }
+            orientation = orientation * adjPost20p11
         }
         
         position += floorCorrectionTransform.asFloat4()
