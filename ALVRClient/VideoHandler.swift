@@ -226,6 +226,7 @@ struct VideoHandler {
         0x61766331: "NonDescriptH264",
         0x68766331: "NonDescriptHVC1"
     ]
+    private static let poll_nal_lock : NSLock = NSLock()
     
     // Get bits per component for video format
     static func getBpcForVideoFormat(_ videoFormat: CMFormatDescription) -> Int {
@@ -458,17 +459,22 @@ struct VideoHandler {
     }
 
     static func pollNal() -> (UInt64, [AlvrViewParams], Data)? {
+        poll_nal_mutex.lock()
+        defer { poll_nal_mutex.unlock()}
         let nalLength = alvr_poll_nal(nil, nil, nil)
         if nalLength == 0 {
             return nil
         }
-        let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength*16)) // HACK: idk how to handle this, there's a ToCToU here
+        let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength))
         let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
         defer { nalBuffer.deallocate() }
         defer { nalViewsPtr.deallocate() }
         var nalTimestamp:UInt64 = 0
         let realNalLength = alvr_poll_nal(&nalTimestamp, nalViewsPtr, nalBuffer.baseAddress)
         
+        guard nalLength == realNalLength else {
+            return nil
+        }
         let nalViews = [nalViewsPtr[0], nalViewsPtr[1]]
         
         let ret = (nalTimestamp, nalViews, Data(bytes: nalBuffer.baseAddress!, count: Int(realNalLength & 0xFFFFFFFF)))
