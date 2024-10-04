@@ -943,7 +943,9 @@ class Renderer {
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
         renderEncoder.setDepthStencilState(depthStateAlways)
+#if !targetEnvironment(simulator)
         renderEncoder.setDepthClipMode(.clamp)
+#endif
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         
@@ -997,7 +999,9 @@ class Renderer {
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
         renderEncoder.setDepthStencilState(depthStateAlways)
+#if !targetEnvironment(simulator)
         renderEncoder.setDepthClipMode(.clamp)
+#endif
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
@@ -1060,8 +1064,10 @@ class Renderer {
         
         renderEncoder.setRenderPipelineState(pipelineState)
         renderEncoder.setDepthStencilState(depthStateGreater)
+#if !targetEnvironment(simulator)
         renderEncoder.setDepthClipMode(.clamp)
-        
+#endif
+
         WorldTracker.shared.lockPlaneAnchors()
         
         // Render planes
@@ -1218,7 +1224,9 @@ class Renderer {
         
         renderEncoder.setCullMode(.none)
         renderEncoder.setFrontFacing(.counterClockwise)
+#if !targetEnvironment(simulator)
         renderEncoder.setDepthClipMode(.clamp)
+#endif
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
 

@@ -93,7 +93,7 @@ class EventHandler: ObservableObject {
             print("Initialize ALVR")
             alvrInitialized = true
             let refreshRates:[Float] = [100, 96, 90]
-            let capabilities = AlvrClientCapabilities(default_view_width: UInt32(renderWidth*2), default_view_height: UInt32(renderHeight*2), external_decoder: true, refresh_rates: refreshRates, refresh_rates_count: Int32(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: false)
+            let capabilities = AlvrClientCapabilities(default_view_width: UInt32(renderWidth*2), default_view_height: UInt32(renderHeight*2), external_decoder: true, refresh_rates: refreshRates, refresh_rates_count: Int32(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1))
             alvr_initialize(/*capabilities=*/capabilities)
             alvr_resume()
         }
@@ -535,6 +535,7 @@ class EventHandler: ObservableObject {
     // The main event thread
     func handleAlvrEvents() {
         print("Start event thread...")
+        var currentCodec = -1
         while inputRunning {
             eventHeartbeat += 1
             // Send periodic updated values, such as battery percentage, once every five seconds
@@ -610,6 +611,7 @@ class EventHandler: ObservableObject {
                     framesSinceLastIDR = 0
                     framesSinceLastDecode = 0
                     lastIpd = -1
+                    currentCodec = -1
                     EventHandler.shared.updateConnectionState(.connected)
                 }
                 if !renderStarted {
@@ -623,6 +625,7 @@ class EventHandler: ObservableObject {
                     stop()
                     timeLastAlvrEvent = CACurrentMediaTime()
                     timeLastFrameSent = CACurrentMediaTime()
+                    currentCodec = -1
                 }
                 Settings.clearSettingsCache()
                 clearHostVersion()
@@ -649,7 +652,8 @@ class EventHandler: ObservableObject {
                 }
             case ALVR_EVENT_DECODER_CONFIG.rawValue:
                 streamingActive = true
-                print("create decoder \(alvrEvent.DECODER_CONFIG)")
+                currentCodec = Int(alvrEvent.DECODER_CONFIG.codec)
+                print("create decoder \(alvrEvent.DECODER_CONFIG) codec ID: \(currentCodec)")
                 Settings.clearSettingsCache()
                 updateHostVersion()
                 // Don't reinstantiate the decoder if it's already created.
@@ -658,28 +662,34 @@ class EventHandler: ObservableObject {
                     handleNals()
                     continue
                 }
-                while alvrInitialized {
-                   guard let (_, _, nal) = VideoHandler.pollNal() else {
-                       print("create decoder: failed to poll nal?!")
-                       break
-                   }
-                   //NSLog("%@", nal as NSData)
-                   //let val = (nal[4] & 0x7E) >> 1
-                   if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
-                       // here we go!
-                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS)
-                       break
-                   } else if (nal[3] == 0x01 && (nal[4] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) || (nal[2] == 0x01 && (nal[3] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) {
-                        // The NAL unit type is 32 (VPS)
-                       (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: HEVC_NAL_TYPE_VPS)
-                       break
-                   }
+                
+                while (alvrInitialized) {
+                    guard let (_, _, nal) = VideoHandler.pollNal() else {
+                        print("create decoder: failed to poll nal?!")
+                        break
+                    }
+                    (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: currentCodec)
+                    nal.deallocate()
+                    break;
                 }
+                
             case ALVR_EVENT_FRAME_READY.rawValue:
                 streamingActive = true
-                //print("frame ready")
-                
-                handleNals()
+
+                if vtDecompressionSession != nil {
+                    handleNals()
+                }
+                else if currentCodec != -1 {
+                    while (alvrInitialized) {
+                        guard let (_, _, nal) = VideoHandler.pollNal() else {
+                            print("create decoder deferred: failed to poll nal?!")
+                            break
+                        }
+                        (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: currentCodec)
+                        nal.deallocate()
+                        break;
+                    }
+                }
                 EventHandler.shared.updateConnectionState(.connected)
                  
                  

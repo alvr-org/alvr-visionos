@@ -6,10 +6,16 @@ import Foundation
 import VideoToolbox
 import AVKit
 
+#if !targetEnvironment(simulator)
 let forceFastSecretTextureFormats = true
+#else
+let forceFastSecretTextureFormats = false
+#endif
 
 let H264_NAL_TYPE_SPS = 7
-let HEVC_NAL_TYPE_VPS = 32
+let HEVC_NAL_TYPE_VPS: UInt8 = 32
+let HEVC_NAL_TYPE_SPS: UInt8 = 33
+let HEVC_NAL_TYPE_PPS: UInt8 = 34
 
 //
 // Non-conclusive list of interesting private Metal pixel formats
@@ -457,26 +463,25 @@ struct VideoHandler {
         }
     }
 
-    static func pollNal() -> (UInt64, [AlvrViewParams], Data)? {
+    static func pollNal() -> (UInt64, [AlvrViewParams], UnsafeMutableBufferPointer<UInt8>)? {
         let nalLength = alvr_poll_nal(nil, nil, nil)
         if nalLength == 0 {
             return nil
         }
-        let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength*16)) // HACK: idk how to handle this, there's a ToCToU here
+        let nalBuffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: Int(nalLength*2)) // HACK: idk how to handle this, there's a ToCToU here
         let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
-        defer { nalBuffer.deallocate() }
         defer { nalViewsPtr.deallocate() }
         var nalTimestamp:UInt64 = 0
         let realNalLength = alvr_poll_nal(&nalTimestamp, nalViewsPtr, nalBuffer.baseAddress)
         
         let nalViews = [nalViewsPtr[0], nalViewsPtr[1]]
         
-        let ret = (nalTimestamp, nalViews, Data(bytes: nalBuffer.baseAddress!, count: Int(realNalLength & 0xFFFFFFFF)))
+        let ret = (nalTimestamp, nalViews, nalBuffer)
         return ret
     }
     
     static func abandonAllPendingNals() {
-        while let _ = VideoHandler.pollNal() {}
+        while let (_, _, buf) = VideoHandler.pollNal() { buf.deallocate() }
     }
     
     static func currentKeyWindow() -> UIWindow? {
@@ -501,16 +506,15 @@ struct VideoHandler {
         }
     }
     
-    static func createVideoDecoder(initialNals: Data, codec: Int) -> (VTDecompressionSession?, CMFormatDescription?) {
+    static func createVideoDecoder(initialNals: UnsafeMutableBufferPointer<UInt8>, codec: Int) -> (VTDecompressionSession?, CMFormatDescription?) {
         let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
         var videoFormat:CMFormatDescription? = nil
         var err:OSStatus = 0
         
-        // First two are the SPS and PPS
-        // https://source.chromium.org/chromium/chromium/src/+/main:third_party/webrtc/sdk/objc/components/video_codec/nalu_rewriter.cc;l=228;drc=6f86f6af008176e631140e6a80e0a0bca9550143
-        
-        if (codec == H264_NAL_TYPE_SPS) {
+        if (codec == ALVR_CODEC_H264.rawValue) {
             err = initialNals.withUnsafeBytes { (b:UnsafeRawBufferPointer) in
+                // First two are the SPS and PPS
+                // https://source.chromium.org/chromium/chromium/src/+/main:third_party/webrtc/sdk/objc/components/video_codec/nalu_rewriter.cc;l=228;drc=6f86f6af008176e631140e6a80e0a0bca9550143
                 let nalOffset0 = b.baseAddress!
                 let nalOffset1 = memmem(nalOffset0 + 4, b.count - 4, nalHeader, nalHeader.count)!
                 let nalLength0 = UnsafeRawPointer(nalOffset1) - nalOffset0 - 4
@@ -520,7 +524,7 @@ struct VideoHandler {
                 let parameterSetSizes = [nalLength0, nalLength1]
                 return CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2, parameterSetPointers: parameterSetPointers, parameterSetSizes: parameterSetSizes, nalUnitHeaderLength: 4, formatDescriptionOut: &videoFormat)
             }
-        } else if (codec == HEVC_NAL_TYPE_VPS) {
+        } else if (codec == ALVR_CODEC_HEVC.rawValue) {
             let (vps, sps, pps) = extractParameterSets(from: initialNals)
             
             // Ensure parameterSetPointers is an array of non-optional UnsafePointer<UInt8>
@@ -560,7 +564,6 @@ struct VideoHandler {
             // Flatten parameterSetPointers to non-optional before passing to the function
             let nonOptionalParameterSetPointers = parameterSetPointers.compactMap { $0 }
             
-            
             // nonOptionalParameterSetPointers is an array of UnsafePointer<UInt8>
             nonOptionalParameterSetPointers.withUnsafeBufferPointer { bufferPointer in
                 guard let baseAddress = bufferPointer.baseAddress else { return }
@@ -595,12 +598,51 @@ struct VideoHandler {
                         print("Failed to create CMVideoFormatDescription.")
                     }
                 }
-                
             }
+        }
+        else if codec == ALVR_CODEC_AV1.rawValue {
+            print("UNHANDLED/WIP AV1!!")
+            
+            /*var s = ""
+            for i in 0..<initialNals.count {
+                s += String(format: "%02x ", initialNals[i])
+            }
+            //print(s)
+            */
+            
+            //var config_blob:[UInt8] = [0x81, 0x05, 0x0c, 0x00, 0x0a, 0x0f, 0x00, 0x00, 0x00, 0x66, 0xEA, 0x7F, 0xE1, 0xF8, 0x04, 0x33, 0x20, 0x21, 0xA0, 0x30, 0x80]
+            
+            // TODO: Parse OBUs for all of this.
+            // https://forums.developer.apple.com/forums/thread/739953
+            var config_blob:[UInt8] = [0x81, 0x05, 0x0c, 0x00, 0x0a, 0x0e, 0x00, 0x00, 0x00, 0x2c, 0xd5, 0x9f, 0x3f, 0xdd, 0xaf, 0x99, 0x01, 0x01, 0x01, 0x04]
+            var atoms:[NSString: AnyObject] = [:]
+            atoms["av1C"] = NSData.init(bytes: config_blob, length: config_blob.count)
+            var av1_exts:[NSString: AnyObject] = [:]
+            av1_exts[kCMFormatDescriptionExtension_BitsPerComponent] = 8 as NSNumber
+            av1_exts[kCMFormatDescriptionExtension_FieldCount] = 1 as NSNumber
+            av1_exts[kCMFormatDescriptionExtension_ChromaLocationBottomField] = kCVImageBufferChromaLocation_Left
+            av1_exts[kCMFormatDescriptionExtension_ChromaLocationTopField] = kCVImageBufferChromaLocation_Left
+            av1_exts[kCMFormatDescriptionExtension_ColorPrimaries] = kCVImageBufferColorPrimaries_ITU_R_709_2
+            av1_exts[kCMFormatDescriptionExtension_TransferFunction] = kCVImageBufferColorPrimaries_ITU_R_709_2
+            av1_exts[kCMFormatDescriptionExtension_YCbCrMatrix] = kCVImageBufferColorPrimaries_ITU_R_709_2
+            av1_exts[kCMFormatDescriptionExtension_Depth] = 24 as NSNumber
+            av1_exts[kCMFormatDescriptionExtension_FormatName] = "av01" as NSString
+            av1_exts[kCMFormatDescriptionExtension_FullRangeVideo] = true as NSNumber
+            av1_exts[kCMFormatDescriptionExtension_RevisionLevel] = 0 as NSNumber
+            av1_exts[kCMFormatDescriptionExtension_SpatialQuality] = 0 as NSNumber
+            av1_exts[kCMFormatDescriptionExtension_TemporalQuality] = 0 as NSNumber
+            //av1_exts[kCMFormatDescriptionExtension_VerbatimISOSampleEntry] =
+            av1_exts[kCMFormatDescriptionExtension_Version] = 0 as NSNumber
+            av1_exts[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] = atoms as CFDictionary
+            err = CMVideoFormatDescriptionCreate(allocator: nil, codecType: kCMVideoCodecType_AV1, width: /*2559+1*/720, height: /*1087+1*/1280, extensions: av1_exts as CFDictionary, formatDescriptionOut: &videoFormat)
+        }
+        else {
+            print("Unknown codec type \(codec)")
+            return (nil, nil)
         }
 
         if err != 0 {
-            print("format?!")
+            print("format fail?! \(err)")
             return (nil, nil)
         }
 
@@ -632,7 +674,7 @@ struct VideoHandler {
         var decompressionSession:VTDecompressionSession? = nil
         err = VTDecompressionSessionCreate(allocator: nil, formatDescription: videoFormat!, decoderSpecification: videoDecoderSpecification as CFDictionary, imageBufferAttributes: destinationImageBufferAttributes as CFDictionary, outputCallback: nil, decompressionSessionOut: &decompressionSession)
         if err != 0 {
-            print("format?!")
+            print("VTDecompressionSessionCreate err?! \(err)")
             return (nil, nil)
         }
         
@@ -648,38 +690,40 @@ struct VideoHandler {
     }
 
     // Function to parse NAL units and extract VPS, SPS, and PPS data
-    static func extractParameterSets(from nalData: Data) -> (vps: [UInt8]?, sps: [UInt8]?, pps: [UInt8]?) {
+    static func extractParameterSets(from nalData: UnsafeMutableBufferPointer<UInt8>) -> (vps: [UInt8]?, sps: [UInt8]?, pps: [UInt8]?) {
         var vps: [UInt8]?
         var sps: [UInt8]?
         var pps: [UInt8]?
         
+        let nalDataNoBounds = nalData.baseAddress!
+        
         var index = 0
         while index < nalData.count - 4 {
             // Find the start code (0x00000001 or 0x000001)
-            if nalData[index] == 0 && nalData[index + 1] == 0 && nalData[index + 2] == 0 && nalData[index + 3] == 1 {
+            if nalDataNoBounds[index] == 0 && nalDataNoBounds[index + 1] == 0 && nalDataNoBounds[index + 2] == 0 && nalDataNoBounds[index + 3] == 1 {
                 // NAL unit starts after the start code
                 let nalUnitStartIndex = index + 4
                 var nalUnitEndIndex = index + 4
                 
                 // Find the next start code to determine the end of this NAL unit
                 for nextIndex in nalUnitStartIndex..<nalData.count - 4 {
-                    if nalData[nextIndex] == 0 && nalData[nextIndex + 1] == 0 && nalData[nextIndex + 2] == 0 && nalData[nextIndex + 3] == 1 {
+                    if nalDataNoBounds[nextIndex] == 0 && nalDataNoBounds[nextIndex + 1] == 0 && nalDataNoBounds[nextIndex + 2] == 0 && nalDataNoBounds[nextIndex + 3] == 1 {
                         nalUnitEndIndex = nextIndex
                         break
                     }
                     nalUnitEndIndex = nalData.count // If no more start codes, this NAL unit goes to the end of the data
                 }
                 
-                let nalUnitType = (nalData[nalUnitStartIndex] & 0x7E) >> 1 // Get NAL unit type (HEVC)
-                let nalUnitData = nalData.subdata(in: nalUnitStartIndex..<nalUnitEndIndex)
+                let nalUnitType = (nalDataNoBounds[nalUnitStartIndex] & 0x7E) >> 1 // Get NAL unit type (HEVC)
+                let nalUnitData = nalData.extracting(nalUnitStartIndex..<nalUnitEndIndex)
                 
                 print("Switch nalUnitType of: \(nalUnitType)")
                 switch nalUnitType {
-                case 32: // VPS
+                case HEVC_NAL_TYPE_VPS:
                     vps = [UInt8](nalUnitData)
-                case 33: // SPS
+                case HEVC_NAL_TYPE_SPS:
                     sps = [UInt8](nalUnitData)
-                case 34: // PPS
+                case HEVC_NAL_TYPE_PPS:
                     pps = [UInt8](nalUnitData)
                 default:
                     break
@@ -697,15 +741,17 @@ struct VideoHandler {
 
 
     // Based on https://webrtc.googlesource.com/src/+/refs/heads/main/common_video/h264/h264_common.cc
-    private static func findNaluIndices(buffer: Data) -> [NaluIndex] {
-        guard buffer.count >= /* kNaluShortStartSequenceSize */ 3 else {
-            return []
+    private static func findNaluIndices(bufferBounded: UnsafeMutableBufferPointer<UInt8>) -> ([NaluIndex], Bool) {
+        var elgibleForModifyInPlace = true
+        guard bufferBounded.count >= /* kNaluShortStartSequenceSize */ 3 else {
+            return ([], false)
         }
         
         var sequences = [NaluIndex]()
         
-        let end = buffer.count - /* kNaluShortStartSequenceSize */ 3
+        let end = bufferBounded.count - /* kNaluShortStartSequenceSize */ 3
         var i = 0
+        let buffer = Data(bytesNoCopy: bufferBounded.baseAddress!, count: bufferBounded.count, deallocator: .none) // ?? why is this faster
         while i < end {
             if buffer[i + 2] > 1 {
                 i += 3
@@ -715,6 +761,9 @@ struct VideoHandler {
                     if index.startOffset > 0 && buffer[index.startOffset - 1] == 0 {
                         index.startOffset -= 1
                         index.threeByteHeader = false
+                    }
+                    else {
+                        elgibleForModifyInPlace = false
                     }
                     
                     if !sequences.isEmpty {
@@ -731,10 +780,10 @@ struct VideoHandler {
         }
         
         if !sequences.isEmpty {
-            sequences[sequences.count - 1].payloadSize = buffer.count - sequences.last!.payloadStartOffset
+            sequences[sequences.count - 1].payloadSize = bufferBounded.count - sequences.last!.payloadStartOffset
         }
         
-        return sequences
+        return (sequences, elgibleForModifyInPlace)
     }
     
     private struct NaluIndex {
@@ -745,12 +794,20 @@ struct VideoHandler {
     }
     
     // Based on https://webrtc.googlesource.com/src/+/refs/heads/main/sdk/objc/components/video_codec/nalu_rewriter.cc
-    private static func annexBBufferToCMSampleBuffer(buffer: Data, videoFormat: CMFormatDescription) -> CMSampleBuffer? {
-        // no SPS/PPS, handled with the initial nals
+    private static func annexBBufferToCMSampleBuffer(buffer: UnsafeMutableBufferPointer<UInt8>, videoFormat: CMFormatDescription) -> CMSampleBuffer? {
+        let (naluIndices, elgibleForModifyInPlace) = findNaluIndices(bufferBounded: buffer)
         
+        if elgibleForModifyInPlace {
+            return annexBBufferToCMSampleBufferModifyInPlace(buffer: buffer, videoFormat: videoFormat, naluIndices: naluIndices)
+        }
+        else {
+            return annexBBufferToCMSampleBufferWithCopy(buffer: buffer, videoFormat: videoFormat, naluIndices: naluIndices)
+        }
+    }
+    
+    private static func annexBBufferToCMSampleBufferWithCopy(buffer: UnsafeMutableBufferPointer<UInt8>, videoFormat: CMFormatDescription, naluIndices: [NaluIndex]) -> CMSampleBuffer? {
         var err: OSStatus = 0
-        
-        let naluIndices = findNaluIndices(buffer: buffer)
+        defer { buffer.deallocate() }
 
         // we're replacing the 3/4 nalu headers with a 4 byte length, so add an extra byte on top of the original length for each 3-byte nalu header
         let blockBufferLength = buffer.count + naluIndices.filter(\.threeByteHeader).count
@@ -775,7 +832,6 @@ struct VideoHandler {
             return nil
         }
         
-        //dataPtr.withMemoryRebound(to: UInt8.self, capacity: blockBufferSize) { pointer in
         let pointer = UnsafeMutablePointer<UInt8>(OpaquePointer(dataPtr))!
         var offset = 0
         
@@ -804,7 +860,35 @@ struct VideoHandler {
         return sampleBuffer
     }
     
-    static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: Data, timestamp: UInt64, videoFormat: CMFormatDescription, callback: @escaping (_ imageBuffer: CVImageBuffer?) -> Void) {
+    private static func annexBBufferToCMSampleBufferModifyInPlace(buffer: UnsafeMutableBufferPointer<UInt8>, videoFormat: CMFormatDescription, naluIndices: [NaluIndex]) -> CMSampleBuffer? {
+        var err: OSStatus = 0
+        var offset = 0
+
+        let umrbp = UnsafeMutableRawBufferPointer(start: buffer.baseAddress, count: buffer.count)
+        let bb = try! CMBlockBuffer.init(buffer: umrbp, deallocator: {(_, _) in buffer.deallocate() }, flags: .assureMemoryNow)
+
+        let pointer = UnsafeMutablePointer<UInt8>(OpaquePointer(buffer.baseAddress!))!
+        for index in naluIndices {
+            pointer.advanced(by: offset+0).pointee = UInt8((index.payloadSize >> 24) & 0xFF)
+            pointer.advanced(by: offset+1).pointee = UInt8((index.payloadSize >> 16) & 0xFF)
+            pointer.advanced(by: offset+2).pointee = UInt8((index.payloadSize >>  8) & 0xFF)
+            pointer.advanced(by: offset+3).pointee = UInt8((index.payloadSize      ) & 0xFF)
+            offset += 4
+            
+            offset += index.payloadSize
+        }
+        
+        var sampleBuffer: CMSampleBuffer!
+        err = CMSampleBufferCreate(allocator: nil, dataBuffer: bb, dataReady: true, makeDataReadyCallback: nil, refcon: nil, formatDescription: videoFormat, sampleCount: 1, sampleTimingEntryCount: 0, sampleTimingArray: nil, sampleSizeEntryCount: 0, sampleSizeArray: nil, sampleBufferOut: &sampleBuffer)
+        if err != 0 {
+            print("CMSampleBufferCreate error")
+            return nil
+        }
+        
+        return sampleBuffer
+    }
+    
+    static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: UnsafeMutableBufferPointer<UInt8>, timestamp: UInt64, videoFormat: CMFormatDescription, callback: @escaping (_ imageBuffer: CVImageBuffer?) -> Void) {
         var err:OSStatus = 0
         guard let sampleBuffer = annexBBufferToCMSampleBuffer(buffer: nals, videoFormat: videoFormat) else {
             print("Failed in annexBBufferToCMSampleBuffer")
