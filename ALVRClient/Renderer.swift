@@ -631,8 +631,12 @@ class Renderer {
             return
         }
         
-        if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
-            alvr_report_compositor_start(queuedFrame!.timestamp)
+        let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+        defer { nalViewsPtr.deallocate() }
+        
+        if queuedFrame != nil && !queuedFrame!.viewParamsValid /*&& EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp*/ {
+            alvr_report_compositor_start(queuedFrame!.timestamp, nalViewsPtr)
+            queuedFrame = QueuedFrame(imageBuffer: queuedFrame!.imageBuffer, timestamp: queuedFrame!.timestamp, viewParamsValid: true, viewParams: [nalViewsPtr[0], nalViewsPtr[1]])
         }
 
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
@@ -662,6 +666,8 @@ class Renderer {
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
                 EventHandler.shared.viewTransforms = [fixTransform(drawable.views[0].transform), drawable.views.count > 1 ? fixTransform(drawable.views[1].transform) : fixTransform(drawable.views[0].transform)]
                 EventHandler.shared.lastIpd = ipd
+                
+                WorldTracker.shared.sendViewParams(viewTransforms:  EventHandler.shared.viewTransforms, viewFovs: EventHandler.shared.viewFovs)
             }
             
             var needsPipelineRebuild = false
@@ -699,6 +705,10 @@ class Renderer {
         objc_sync_enter(EventHandler.shared.frameQueueLock)
         EventHandler.shared.framesSinceLastDecode += 1
         objc_sync_exit(EventHandler.shared.frameQueueLock)
+        
+        if queuedFrame != nil && !queuedFrame!.viewParamsValid {
+            print("aaaaaaaa bad view params")
+        }
         
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))

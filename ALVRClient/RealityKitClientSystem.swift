@@ -1401,6 +1401,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         let startPollTime = CACurrentMediaTime()
         while true {
             sched_yield()
+            Thread.sleep(forTimeInterval: 0.00001)
             
             // If visionOS skipped our last frame, let the queue fill up a bit
             if EventHandler.shared.lastQueuedFrame != nil {
@@ -1438,10 +1439,17 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
-        if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
-            alvr_report_compositor_start(queuedFrame!.timestamp)
+        
+
+        if queuedFrame != nil && !queuedFrame!.viewParamsValid /*&& EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp*/ {
+            let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+            defer { nalViewsPtr.deallocate() }
+            alvr_report_compositor_start(queuedFrame!.timestamp, nalViewsPtr)
+
+            queuedFrame = QueuedFrame(imageBuffer: queuedFrame!.imageBuffer, timestamp: queuedFrame!.timestamp, viewParamsValid: true, viewParams: [nalViewsPtr[0], nalViewsPtr[1]])
         }
 
+        //print(queuedFrame, EventHandler.shared.alvrInitialized, streamingActiveForFrame)
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
             let ipd = DummyMetalRenderer.renderViewTransforms.count > 1 ? simd_length(DummyMetalRenderer.renderViewTransforms[0].columns.3 - DummyMetalRenderer.renderViewTransforms[1].columns.3) : 0.063
             
@@ -1464,6 +1472,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
                 EventHandler.shared.viewTransforms = [DummyMetalRenderer.renderViewTransforms[0], DummyMetalRenderer.renderViewTransforms.count > 1 ? DummyMetalRenderer.renderViewTransforms[1] : DummyMetalRenderer.renderViewTransforms[0]]
                 EventHandler.shared.lastIpd = ipd
+                
+                WorldTracker.shared.sendViewParams(viewTransforms:  EventHandler.shared.viewTransforms, viewFovs: EventHandler.shared.viewFovs)
             }
             
             let settings = ALVRClientApp.gStore.settings
@@ -1510,6 +1520,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         objc_sync_enter(EventHandler.shared.frameQueueLock)
         EventHandler.shared.framesSinceLastDecode += 1
         objc_sync_exit(EventHandler.shared.frameQueueLock)
+        
+        if queuedFrame != nil && !queuedFrame!.viewParamsValid {
+            print("aaaaaaaa bad view params")
+        }
         
         let vsyncTime = visionProVsyncPrediction.nextFrameTime
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil

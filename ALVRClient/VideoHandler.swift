@@ -462,27 +462,6 @@ struct VideoHandler {
             }
         }
     }
-
-    static func pollNal() -> (UInt64, [AlvrViewParams], UnsafeMutableBufferPointer<UInt8>)? {
-        let nalLength = alvr_poll_nal(nil, nil, nil)
-        if nalLength == 0 {
-            return nil
-        }
-        let nalBuffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: Int(nalLength*2)) // HACK: idk how to handle this, there's a ToCToU here
-        let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
-        defer { nalViewsPtr.deallocate() }
-        var nalTimestamp:UInt64 = 0
-        let realNalLength = alvr_poll_nal(&nalTimestamp, nalViewsPtr, nalBuffer.baseAddress)
-        
-        let nalViews = [nalViewsPtr[0], nalViewsPtr[1]]
-        
-        let ret = (nalTimestamp, nalViews, nalBuffer)
-        return ret
-    }
-    
-    static func abandonAllPendingNals() {
-        while let (_, _, buf) = VideoHandler.pollNal() { buf.deallocate() }
-    }
     
     static func currentKeyWindow() -> UIWindow? {
         UIApplication.shared.connectedScenes
@@ -865,7 +844,7 @@ struct VideoHandler {
         var offset = 0
 
         let umrbp = UnsafeMutableRawBufferPointer(start: buffer.baseAddress, count: buffer.count)
-        let bb = try! CMBlockBuffer.init(buffer: umrbp, deallocator: {(_, _) in buffer.deallocate() }, flags: .assureMemoryNow)
+        let bb = try! CMBlockBuffer.init(buffer: umrbp, deallocator: {(_, _) in /*buffer.deallocate()*/ }, flags: .assureMemoryNow)
 
         let pointer = UnsafeMutablePointer<UInt8>(OpaquePointer(buffer.baseAddress!))!
         for index in naluIndices {
@@ -894,14 +873,16 @@ struct VideoHandler {
             print("Failed in annexBBufferToCMSampleBuffer")
             return
         }
-        err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
+        err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: VTDecodeFrameFlags.init(rawValue: 0), infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
             //print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
             //print("status: \(status), image_nil?: \(imageBuffer == nil), infoFlags: \(infoFlags)")
             
             // If the decoder is failing somehow, request an IDR and get back on track
             if status < 0 && EventHandler.shared.framesSinceLastIDR > 90*2 {
                 EventHandler.shared.framesSinceLastIDR = 0
-                alvr_request_idr()
+                //alvr_request_idr() // TODO: Figure this out
+                EventHandler.shared.resetEncoding()
+                alvr_report_fatal_decoder_error("VideoToolbox decoder failed with status: \(status)")
             }
 
             callback(imageBuffer)

@@ -1283,6 +1283,16 @@ class WorldTracker {
         let rightPosition = rightTransform.columns.3
         let rightPose = AlvrPose(rightOrientation, rightPosition)
         
+        let leftTransformHeadLocal = viewTransforms[0]
+        let rightTransformHeadLocal = viewTransforms[1]
+        
+        let leftOrientationHeadLocal = simd_quaternion(leftTransformHeadLocal)
+        let leftPositionHeadLocal = leftTransformHeadLocal.columns.3
+        let leftPoseHeadLocal = AlvrPose(leftOrientationHeadLocal, leftPositionHeadLocal)
+        let rightOrientationHeadLocal = simd_quaternion(rightTransformHeadLocal)
+        let rightPositionHeadLocal = rightTransformHeadLocal.columns.3
+        let rightPoseHeadLocal = AlvrPose(rightOrientationHeadLocal, rightPositionHeadLocal)
+        
         var trackingMotions:[AlvrDeviceMotion] = []
         var skeletonLeft:[AlvrPose]? = nil
         var skeletonRight:[AlvrPose]? = nil
@@ -1565,6 +1575,10 @@ class WorldTracker {
         lastLeftIsPinching = leftIsPinching
         lastRightIsPinching = rightIsPinching
         
+        let headPose = AlvrPose(simd_quaternion(transform), transform.columns.3.asFloat3())
+        let headMotion = AlvrDeviceMotion(device_id: WorldTracker.deviceIdHead, pose: headPose, linear_velocity: (0,0,0), angular_velocity: (0,0,0))
+        trackingMotions.append(headMotion)
+        
         // selection ray tests, replaces left forearm
         /*var testPoseApple = matrix_identity_float4x4
         testPoseApple.columns.3 = simd_float4(self.testPosition.x, self.testPosition.y, self.testPosition.z, 1.0)
@@ -1578,8 +1592,8 @@ class WorldTracker {
         //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
         
         let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
-        viewFovsPtr[0] = AlvrViewParams(pose: leftPose, fov: viewFovs[0])
-        viewFovsPtr[1] = AlvrViewParams(pose: rightPose, fov: viewFovs[1])
+        viewFovsPtr[0] = AlvrViewParams(pose: leftPoseHeadLocal, fov: viewFovs[0])
+        viewFovsPtr[1] = AlvrViewParams(pose: rightPoseHeadLocal, fov: viewFovs[1])
 
         //print((CACurrentMediaTime() - lastSentTime) * 1000.0)
         lastSentTime = CACurrentMediaTime()
@@ -1592,7 +1606,8 @@ class WorldTracker {
 
         Thread {
             //Thread.sleep(forTimeInterval: delay)
-            alvr_send_tracking(reportedTargetTimestampNS, UnsafePointer(viewFovsPtr), trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)])
+            //alvr_send_view_params(UnsafePointer(viewFovsPtr))
+            alvr_send_tracking(reportedTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)])
             
             viewFovsPtr.deallocate()
             eyeGazeLeftPtr?.deallocate()
@@ -1602,6 +1617,24 @@ class WorldTracker {
         }.start()
         
         return appleOriginFromAnchor
+    }
+    
+    func sendViewParams(viewTransforms: [simd_float4x4], viewFovs: [AlvrFov]) {
+        let leftTransformHeadLocal = viewTransforms[0]
+        let rightTransformHeadLocal = viewTransforms[1]
+        
+        let leftOrientationHeadLocal = simd_quaternion(leftTransformHeadLocal)
+        let leftPositionHeadLocal = leftTransformHeadLocal.columns.3
+        let leftPoseHeadLocal = AlvrPose(leftOrientationHeadLocal, leftPositionHeadLocal)
+        let rightOrientationHeadLocal = simd_quaternion(rightTransformHeadLocal)
+        let rightPositionHeadLocal = rightTransformHeadLocal.columns.3
+        let rightPoseHeadLocal = AlvrPose(rightOrientationHeadLocal, rightPositionHeadLocal)
+        
+        let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+        viewFovsPtr[0] = AlvrViewParams(pose: leftPoseHeadLocal, fov: viewFovs[0])
+        viewFovsPtr[1] = AlvrViewParams(pose: rightPoseHeadLocal, fov: viewFovs[1])
+        
+        alvr_send_view_params(UnsafePointer(viewFovsPtr))
     }
     
     // We want video frames ASAP, so we send a fake view pose/FOVs to keep the frames coming
@@ -1616,12 +1649,14 @@ class WorldTracker {
         let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         
         let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+        defer { viewFovsPtr.deallocate() }
         viewFovsPtr[0] = AlvrViewParams(pose: dummyPose, fov: viewFovs[0])
         viewFovsPtr[1] = AlvrViewParams(pose: dummyPose, fov: viewFovs[1])
         
-        alvr_send_tracking(targetTimestampNS, UnsafePointer(viewFovsPtr), nil, 0, nil, nil)
+        alvr_send_view_params(UnsafePointer(viewFovsPtr))
+        alvr_send_tracking(targetTimestampNS, nil, 0, nil, nil)
         
-        viewFovsPtr.deallocate()
+        
     }
     
     func angularVelocityBetweenQuats(_ q1: AlvrQuat, _ q2: AlvrQuat, _ dt: Float) -> (Float, Float, Float) {
@@ -1647,7 +1682,7 @@ class WorldTracker {
         leftTransform.columns.3 = simd_float4(p.0, p.1, p.2, 1.0)
         leftTransform.columns.3 -= floorCorrectionTransform.asFloat4()
         
-        //leftTransform = EventHandler.shared.viewTransforms[0].inverse * leftTransform
+        leftTransform = EventHandler.shared.viewTransforms[0].inverse * leftTransform
         leftTransform = worldTrackingSteamVRTransform * leftTransform
         
         return leftTransform
