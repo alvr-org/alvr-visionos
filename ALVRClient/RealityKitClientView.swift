@@ -188,6 +188,7 @@ struct RealityKitClientView: View {
 
         }
         .newGameControllerSupportForVisionOS2()
+        .persistentSystemOverlays(.hidden)
         .gesture(
             SpatialEventGesture(coordinateSpace: .local)
                 .targetedToAnyEntity()

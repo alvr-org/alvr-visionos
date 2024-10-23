@@ -85,6 +85,11 @@ struct Entry: View {
                     }
                     .toggleStyle(.switch)
                     
+                    Toggle(isOn: $gStore.settings.disablePersistentSystemOverlays) {
+                        Text("Disable persistent system overlays")
+                    }
+                    .toggleStyle(.switch)
+                  
                     Toggle(isOn: $gStore.settings.keepSteamVRCenter) {
                         Text("Crown Button long-press ignored by SteamVR")
                     }
