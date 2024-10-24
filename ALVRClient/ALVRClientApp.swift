@@ -257,7 +257,7 @@ struct ALVRClientApp: App {
         }
         .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
         .immersionStyle(selection: .constant(.mixed), in: .mixed)
-        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .automatic : .hidden)
+        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
 
         ImmersiveSpace(id: "MetalClient") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
@@ -267,6 +267,6 @@ struct ALVRClientApp: App {
         }
         .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
         .immersionStyle(selection: $clientImmersionStyle, in: .mixed, .full)
-        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .automatic : .hidden)
+        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
     }
 }
