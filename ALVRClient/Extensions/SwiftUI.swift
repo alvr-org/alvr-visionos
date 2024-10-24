@@ -5,20 +5,19 @@
 import SwiftUI
 import CompositorServices
 
-//extension ImmersiveSpace<CompositorLayer, Never> {
-//  @ViewBuilder
-//  func disablePersistentSystemOverlaysForVisionOS2() -> some ImmersiveSpace {
-//#if XCODE_BETA_16
-//    if #available(visionOS 2.0, *) {
-//      self.persistentSystemOverlays(ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .visible)
-//    } else {
-//      self
-//    }
-//#else
-//    self
-//#endif
-//  }
-//}
+extension Scene {
+  func disablePersistentSystemOverlaysForVisionOS2(shouldDisable: Visibility) -> some Scene {
+#if XCODE_BETA_16
+    if #available(visionOS 2.0, *) {
+      return self.persistentSystemOverlays(shouldDisable)
+    } else {
+      return self
+    }
+#else
+    return self
+#endif
+  }
+}
 
 extension View {
 
