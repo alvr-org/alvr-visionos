@@ -10,7 +10,7 @@ import SwiftUI
 struct GlobalSettings: Codable {
     var keepSteamVRCenter: Bool = true
     var showHandsOverlaid: Bool = false
-    var disablePersistentSystemOverlays: Bool = false
+    var disablePersistentSystemOverlays: Bool = true
     var streamFPS: String = "90"
     var experimental40ppd: Bool = false
     var chromaKeyEnabled: Bool = false
