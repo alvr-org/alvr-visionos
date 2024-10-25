@@ -880,9 +880,8 @@ struct VideoHandler {
             // If the decoder is failing somehow, request an IDR and get back on track
             if status < 0 && EventHandler.shared.framesSinceLastIDR > 90*2 {
                 EventHandler.shared.framesSinceLastIDR = 0
-                //alvr_request_idr() // TODO: Figure this out
                 EventHandler.shared.resetEncoding()
-                alvr_report_fatal_decoder_error("VideoToolbox decoder failed with status: \(status)")
+                //alvr_report_fatal_decoder_error("VideoToolbox decoder failed with status: \(status)")
             }
 
             callback(imageBuffer)

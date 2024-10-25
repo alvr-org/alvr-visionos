@@ -124,9 +124,9 @@ class Renderer {
         guard let settings = Settings.getAlvrSettings() else {
             fatalError("streaming started: failed to retrieve alvr settings")
         }
-            
-        encodingGamma = settings.video.encoder_config.encoding_gamma
-        hdrEnabled = settings.video.encoder_config.enable_hdr
+
+        encodingGamma = EventHandler.shared.encodingGamma
+        hdrEnabled = EventHandler.shared.enableHdr
         if hdrEnabled {
             currentRenderColorFormat = renderColorFormatHDR
             currentDrawableRenderColorFormat = renderColorFormatDrawableHDR
@@ -203,8 +203,8 @@ class Renderer {
         }
         print("rebuildRenderPipelines")
             
-        encodingGamma = settings.video.encoder_config.encoding_gamma
-        hdrEnabled = settings.video.encoder_config.enable_hdr
+        encodingGamma = EventHandler.shared.encodingGamma
+        hdrEnabled = EventHandler.shared.enableHdr
         if hdrEnabled {
             currentRenderColorFormat = renderColorFormatHDR
             currentDrawableRenderColorFormat = renderColorFormatDrawableHDR
@@ -671,10 +671,8 @@ class Renderer {
             }
             
             var needsPipelineRebuild = false
-            if let otherSettings = Settings.getAlvrSettings() {
-                if otherSettings.video.encoder_config.encoding_gamma != encodingGamma {
-                    needsPipelineRebuild = true
-                }
+            if EventHandler.shared.encodingGamma != encodingGamma {
+                needsPipelineRebuild = true
             }
             
             if CACurrentMediaTime() - lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != chromaKeyEnabled || settings.chromaKeyColorR != chromaKeyColor.x || settings.chromaKeyColorG != chromaKeyColor.y || settings.chromaKeyColorB != chromaKeyColor.z || settings.chromaKeyDistRangeMin != chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != chromaKeyLerpDistRange.y) {
@@ -724,9 +722,9 @@ class Renderer {
             let viewFovs = EventHandler.shared.viewFovs
             let viewTransforms = EventHandler.shared.viewTransforms
             
-            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let targetTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
-            var anchorTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            var anchorTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
             if #available(visionOS 2.0, *) {
                 //anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
             }

@@ -243,6 +243,8 @@ class WorldTracker {
     
     var lastSkeletonLeft:[AlvrPose]? = nil
     var lastSkeletonRight:[AlvrPose]? = nil
+    var lastHeadPose: AlvrPose? = nil
+    var lastHeadTimestamp: Double = 0.0
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -1151,6 +1153,11 @@ class WorldTracker {
         var targetTimestampWalkedBack = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
+        // HACK: In order to get the instantaneous velocity (e.g. with current accelerometer data factored in)
+        // we have to query the last head timestamp again (the anchor will be different than the last time we asked)
+        // HACK: Device anchors have had hidden state in the past, fetch this first
+        var deviceAnchorLastRefetched = worldTracking.queryDeviceAnchor(atTimestamp: lastHeadTimestamp)
+        
         var skeletonsEnabled = false
         var steamVRInput2p0Enabled = false
         if let otherSettings = Settings.getAlvrSettings() {
@@ -1187,7 +1194,11 @@ class WorldTracker {
         // Fallback.
         if deviceAnchor == nil {
             targetTimestampWalkedBack = CACurrentMediaTime()
-            deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestamp)
+            deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: targetTimestampWalkedBack)
+        }
+        
+        if deviceAnchorLastRefetched == nil {
+            deviceAnchorLastRefetched = deviceAnchor // Fallback
         }
 
         // Well, I'm out of ideas.
@@ -1243,6 +1254,9 @@ class WorldTracker {
         var appleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
         appleOriginFromAnchor.columns.3 += floorCorrectionTransform.asFloat4()
         
+        var appleOriginFromAnchorLastRefetched = deviceAnchorLastRefetched?.originFromAnchorTransform ?? deviceAnchor.originFromAnchorTransform
+        appleOriginFromAnchorLastRefetched.columns.3 += floorCorrectionTransform.asFloat4()
+        
         // Pinch rising-edge blocks for debugging
         if leftIsPinching && !lastLeftIsPinching && leftSelectionRayOrigin != simd_float3() && leftPinchStartPosition == leftPinchCurrentPosition {
             leftPinchEyeDelta = simd_float3()
@@ -1273,15 +1287,14 @@ class WorldTracker {
         
         // Don't move SteamVR center/bounds when the headset recenters
         let transform = self.worldTrackingSteamVRTransform.inverse * appleOriginFromAnchor
+        let transformLastRefetched = self.worldTrackingSteamVRTransform.inverse * appleOriginFromAnchorLastRefetched
         let leftTransform = transform * viewTransforms[0]
         let rightTransform = transform * viewTransforms[1]
         
         let leftOrientation = simd_quaternion(leftTransform)
         let leftPosition = leftTransform.columns.3
-        let leftPose = AlvrPose(leftOrientation, leftPosition)
         let rightOrientation = simd_quaternion(rightTransform)
         let rightPosition = rightTransform.columns.3
-        let rightPose = AlvrPose(rightOrientation, rightPosition)
         
         let leftTransformHeadLocal = viewTransforms[0]
         let rightTransformHeadLocal = viewTransforms[1]
@@ -1575,8 +1588,26 @@ class WorldTracker {
         lastLeftIsPinching = leftIsPinching
         lastRightIsPinching = rightIsPinching
         
+        // Calculate the positional/angular velocities for the head
+        var headLinVel: (Float, Float, Float) = (0,0,0)
+        var headAngVel: (Float, Float, Float) = (0,0,0)
         let headPose = AlvrPose(simd_quaternion(transform), transform.columns.3.asFloat3())
-        let headMotion = AlvrDeviceMotion(device_id: WorldTracker.deviceIdHead, pose: headPose, linear_velocity: (0,0,0), angular_velocity: (0,0,0))
+        lastHeadPose = AlvrPose(simd_quaternion(transformLastRefetched), transformLastRefetched.columns.3.asFloat3())
+        if let p = lastHeadPose {
+            let lastPose = p
+            let pose = headPose
+            let dp = (pose.position.0 - lastPose.position.0, pose.position.1 - lastPose.position.1, pose.position.2 - lastPose.position.2)
+            var dt = Float(targetTimestampWalkedBack - lastHeadTimestamp)
+            if dt <= 0.0 {
+                dt = 0.010 // fallback 10ms
+            }
+            headLinVel = (dp.0 / dt, dp.1 / dt, dp.2 / dt)
+            headAngVel = angularVelocityBetweenQuats(lastPose.orientation, pose.orientation, dt)
+        }
+        lastHeadPose = headPose
+        lastHeadTimestamp = targetTimestampWalkedBack
+        
+        let headMotion = AlvrDeviceMotion(device_id: WorldTracker.deviceIdHead, pose: headPose, linear_velocity: headLinVel, angular_velocity: headAngVel)
         trackingMotions.append(headMotion)
         
         // selection ray tests, replaces left forearm

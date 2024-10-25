@@ -85,6 +85,8 @@ class EventHandler: ObservableObject {
     var awdlAlertPresented = false
     var audioIsOff = false
     var needsEncoderReset = true
+    var encodingGamma: Float = 1.0
+    var enableHdr = false
     
     init() {}
     
@@ -94,7 +96,7 @@ class EventHandler: ObservableObject {
             print("Initialize ALVR")
             alvrInitialized = true
             let refreshRates:[Float] = [100, 96, 90]
-            let capabilities = AlvrClientCapabilities(default_view_width: UInt32(renderWidth*2), default_view_height: UInt32(renderHeight*2), refresh_rates: refreshRates, refresh_rates_count: UInt64(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1))
+            let capabilities = AlvrClientCapabilities(default_view_width: UInt32(renderWidth*2), default_view_height: UInt32(renderHeight*2), refresh_rates: refreshRates, refresh_rates_count: UInt64(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1), prefer_10bit: true, prefer_full_range: true, preferred_encoding_gamma: 1.5, prefer_hdr: false)
             alvr_initialize(/*capabilities=*/capabilities)
             alvr_initialize_logging()
             alvr_set_decoder_input_callback(nil, { data in return EventHandler.shared.handleNals(frameData: data) })
@@ -599,9 +601,9 @@ class EventHandler: ObservableObject {
                 }
             }
             
-            //let diffSinceLastEvent = currentTime - timeLastAlvrEvent
+            let diffSinceLastEvent = 0.0//currentTime - timeLastAlvrEvent
             let diffSinceLastNal = currentTime - timeLastFrameGot
-            //let diffSinceLastDecode = currentTime - timeLastFrameSent
+            let diffSinceLastDecode = currentTime - timeLastFrameSent
             /*if (!renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 20.0 || diffSinceLastNal >= 20.0))
                || (renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 30.0 || diffSinceLastNal >= 30.0))
                || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 30.0)) {
@@ -613,6 +615,23 @@ class EventHandler: ObservableObject {
                 print("diffSinceLastDecode:", diffSinceLastDecode)
                 kickAlvr()
             }*/
+            
+            if (!renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 20.0 || diffSinceLastNal >= 20.0))
+               || (renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 30.0 || diffSinceLastNal >= 30.0))
+               || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 30.0)) {
+                EventHandler.shared.updateConnectionState(.disconnected)
+                
+                print("Kick ALVR...")
+                print("diffSinceLastEvent:", diffSinceLastEvent)
+                print("diffSinceLastNal:", diffSinceLastNal)
+                print("diffSinceLastDecode:", diffSinceLastDecode)
+                
+                alvr_report_fatal_decoder_error("Gimme frames >:(")
+                
+                timeLastAlvrEvent = CACurrentMediaTime()
+                timeLastFrameGot = CACurrentMediaTime()
+                timeLastFrameSent = CACurrentMediaTime()
+            }
             
             if alvrInitialized && (diffSinceLastNal >= 5.0) {
                 print("Request IDR")
@@ -644,6 +663,8 @@ class EventHandler: ObservableObject {
                 print("streaming started \(alvrEvent.STREAMING_STARTED)")
                 updateHostVersion()
                 numberOfEventThreadRestarts = 0
+                encodingGamma = alvrEvent.STREAMING_STARTED.encoding_gamma
+                enableHdr = alvrEvent.STREAMING_STARTED.enable_hdr
                 if !streamingActive {
                     streamEvent = alvrEvent
                     streamingActive = true

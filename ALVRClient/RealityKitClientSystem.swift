@@ -1477,10 +1477,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             }
             
             let settings = ALVRClientApp.gStore.settings
-            if let otherSettings = Settings.getAlvrSettings() {
-                if otherSettings.video.encoder_config.encoding_gamma != renderer.encodingGamma {
-                    needsPipelineRebuild = true
-                }
+            if EventHandler.shared.encodingGamma != renderer.encodingGamma {
+                needsPipelineRebuild = true
             }
             
             /*if currentSetRenderScale != realityKitRenderScale {
@@ -1538,9 +1536,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             let rkLatencyLimit = max(WorldTracker.maxPredictionRK, UInt64(visionProVsyncPrediction.vsyncLatency * Double(NSEC_PER_SEC))) //UInt64(Double(visionProVsyncPrediction.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
             let handAnchorLatencyLimit = WorldTracker.maxPrediction //UInt64(Double(visionProVsyncPrediction.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
-            var targetTimestamp = vsyncTime - visionProVsyncPrediction.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
+            var targetTimestamp = vsyncTime //- visionProVsyncPrediction.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
-            var anchorTimestamp = vsyncTime - visionProVsyncPrediction.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), handAnchorLatencyLimit)) / Double(NSEC_PER_SEC))
+            var anchorTimestamp = vsyncTime //- visionProVsyncPrediction.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), handAnchorLatencyLimit)) / Double(NSEC_PER_SEC))
             
             // Make overlay look smooth (at the cost of timewarp)
             if renderer.fadeInOverlayAlpha > 0.0 || currentHzAvg < 65.0 {
