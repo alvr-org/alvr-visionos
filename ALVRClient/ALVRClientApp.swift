@@ -248,20 +248,24 @@ struct ALVRClientApp: App {
                 let renderer = DummyMetalRenderer(layerRenderer)
                 renderer.startRenderLoop()
             }
-        }.immersionStyle(selection: .constant(.full), in: .full)
-        
+        }
+        .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
+        .immersionStyle(selection: .constant(.full), in: .full)
+
         ImmersiveSpace(id: "RealityKitClient") {
             RealityKitClientView()
         }
+        .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
         .immersionStyle(selection: .constant(.mixed), in: .mixed)
         .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
-        
+
         ImmersiveSpace(id: "MetalClient") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
                 let system = MetalClientSystem(layerRenderer)
                 system.startRenderLoop()
             }
         }
+        .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
         .immersionStyle(selection: $clientImmersionStyle, in: .mixed, .full)
         .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
     }
