@@ -1457,9 +1457,15 @@ class WorldTracker {
             if !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (leftIsPinching || leftPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 let handMotion = handAnchorToAlvrDeviceMotion(leftHand)
                 
-                trackingMotions.append(handMotion)
+                // Hand motion overrides skeletons, so only send either or
                 if leftHand.isTracked && leftSkeletonDisableHysteresis <= 0.0 {
                     skeletonLeft = handAnchorToSkeleton(leftHand)
+                    if !steamVRInput2p0Enabled {
+                        trackingMotions.append(handMotion)
+                    }
+                }
+                else {
+                    trackingMotions.append(handMotion)
                 }
             }
         }
@@ -1467,9 +1473,16 @@ class WorldTracker {
             if !(ALVRClientApp.gStore.settings.emulatedPinchInteractions && (rightIsPinching || rightPinchTrigger > 0.0)) /*&& lastHandsUpdatedTs != lastSentHandsTs*/ {
                 let handMotion = handAnchorToAlvrDeviceMotion(rightHand)
 
-                trackingMotions.append(handMotion)
+                
+                // Hand motion overrides skeletons, so only send either or
                 if rightHand.isTracked && rightSkeletonDisableHysteresis <= 0.0 {
                     skeletonRight = handAnchorToSkeleton(rightHand)
+                    if !steamVRInput2p0Enabled {
+                        trackingMotions.append(handMotion)
+                    }
+                }
+                else {
+                    trackingMotions.append(handMotion)
                 }
             }
         }
@@ -1591,8 +1604,13 @@ class WorldTracker {
         // Calculate the positional/angular velocities for the head
         var headLinVel: (Float, Float, Float) = (0,0,0)
         var headAngVel: (Float, Float, Float) = (0,0,0)
-        let headPose = AlvrPose(simd_quaternion(transform), transform.columns.3.asFloat3())
-        lastHeadPose = AlvrPose(simd_quaternion(transformLastRefetched), transformLastRefetched.columns.3.asFloat3())
+        
+        // TODO: What changed that made this necessary?
+        // Did Apple change their headset transform to not be the average of the view transforms maybe?
+        // OpenXR defines the headset pose as the average of the two view transforms, so we have to do this anyhow.
+        let avgViewTransformXYZ = (EventHandler.shared.viewTransforms[0].columns.3.asFloat3() + EventHandler.shared.viewTransforms[1].columns.3.asFloat3()) * 0.5
+        let headPose = AlvrPose(simd_quaternion(transform), transform.columns.3.asFloat3() + (transform.columns.0.asFloat3() * avgViewTransformXYZ.x) + (transform.columns.1.asFloat3() * avgViewTransformXYZ.y) + (transform.columns.2.asFloat3() * avgViewTransformXYZ.z))
+        lastHeadPose = AlvrPose(simd_quaternion(transformLastRefetched), transformLastRefetched.columns.3.asFloat3() + (transformLastRefetched.columns.0.asFloat3() * avgViewTransformXYZ.x) + (transformLastRefetched.columns.1.asFloat3() * avgViewTransformXYZ.y) + (transformLastRefetched.columns.2.asFloat3() * avgViewTransformXYZ.z))
         if let p = lastHeadPose {
             let lastPose = p
             let pose = headPose
@@ -1713,7 +1731,7 @@ class WorldTracker {
         leftTransform.columns.3 = simd_float4(p.0, p.1, p.2, 1.0)
         leftTransform.columns.3 -= floorCorrectionTransform.asFloat4()
         
-        leftTransform = EventHandler.shared.viewTransforms[0].inverse * leftTransform
+        leftTransform = leftTransform * EventHandler.shared.viewTransforms[0].inverse
         leftTransform = worldTrackingSteamVRTransform * leftTransform
         
         return leftTransform

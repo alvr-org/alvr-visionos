@@ -1546,6 +1546,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 targetTimestamp = vsyncTime + visionProVsyncPrediction.vsyncLatency
             }
             
+            if !ALVRClientApp.gStore.settings.targetHandsAtRoundtripLatency {
+                anchorTimestamp = vsyncTime - visionProVsyncPrediction.vsyncLatency
+            }
+            
             let sentAnchor = WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)
             
             // Make overlay look correct

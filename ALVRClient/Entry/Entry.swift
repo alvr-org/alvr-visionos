@@ -245,6 +245,11 @@ struct Entry: View {
                     Text("Increase FoV for timewarp comfort, or sacrifice FoV for sharpness")
                         .font(.system(size: 10))
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Toggle(isOn: $gStore.settings.targetHandsAtRoundtripLatency) {
+                        Text("Target hand prediction at round-trip latency (may cause jittering)")
+                    }
+                    .toggleStyle(.switch)
                 }
                 .frame(minWidth: 450)
                 .padding()

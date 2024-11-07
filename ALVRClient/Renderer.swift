@@ -542,7 +542,7 @@ class Renderer {
             let physSizeR = vrr.physicalSize(layer: 1)
             let physCoordsR = vrr.physicalCoordinates(screenCoordinates: MTLCoordinate2D(x: eyeCenterX, y: eyeCenterY), layer: 1)
             
-            print(Float(physCoordsL.x) / Float(physSizeL.width), Float(physCoordsL.y) / Float(physSizeL.height), ":::", Float(physCoordsR.x) / Float(physSizeR.width), Float(physCoordsR.y) / Float(physSizeR.height))
+            print(physSizeL, physSizeR, vrr.screenSize.width, vrr.screenSize.height, ":::", Float(physCoordsL.x) / Float(physSizeL.width), Float(physCoordsL.y) / Float(physSizeL.height), ":::", Float(physCoordsR.x) / Float(physSizeR.width), Float(physCoordsR.y) / Float(physSizeR.height))
         }
     }
     
@@ -725,8 +725,14 @@ class Renderer {
             let targetTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
             var anchorTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
-            if #available(visionOS 2.0, *) {
-                //anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            
+            if !ALVRClientApp.gStore.settings.targetHandsAtRoundtripLatency {
+                if #available(visionOS 2.0, *) {
+                    anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+                }
+                else {
+                    anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.renderingDeadline).timeInterval
+                }
             }
             
             WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)

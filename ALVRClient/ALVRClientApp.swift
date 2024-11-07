@@ -251,6 +251,7 @@ struct ALVRClientApp: App {
         }
         .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
         .immersionStyle(selection: .constant(.full), in: .full)
+        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
 
         ImmersiveSpace(id: "RealityKitClient") {
             RealityKitClientView()
