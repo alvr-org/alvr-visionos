@@ -93,24 +93,16 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Updated to client runtime v20.11.0. Please be sure to update your streamer.\n\
-    • Improved thermals and battery life by fixing a bug which caused extremely high CPU utilization.\n\
-    • Improved chroma keying to hopefully remove some black pixel false-positives.\n\
-    • Hand tracking is now filtered to remove jittering.\n\
-    • Added gaze-pinch emulation support for other controller emulation types.\n\
-    • The streamer version is now displayed under Connection Info. This will only work on streamer versions after v20.11.0.\n\
+    • Updated to client runtime v20.12.0. Please be sure to update your streamer.\n\
+    • System gestures can now be disabled under General.\n\
+    • Hand tracking prediction is now disabled by default for stability, but can be enabled in Advanced Settings.\n\
+    • Improved default settings to be more suitable for OLED panels: Blacks are less blocky, 10-bit encoding is on by default, and color correction is disabled by default.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
-    • Fixed flickering in right eye when window or Notification Center is placed in front of the streamed scene.\n\
-    • Fixed throwing and waving gestures not working in some games.\n\
-    • Fixed pinch interaction emulation cancelling inputs when doing the menu gesture.\n\
-    • Fixed pinch interaction emulation sometimes leading to stuck inputs on SteamVR dashboard.\n\
-    • Fixed inputs getting dropped with SteamVR Input 2.0 setting enabled.\n\
-    • Fixed gaze-pinch emulation when headset is upside-down.\n\
-    • Fixed view transforms being slightly incorrect, possibly causing floor misalignment.\n\
+    • Fixed another minor view transform bug (headset transform was not the average of the two eye transforms).\n\
     \n\
     ________________________________\n\
     \n\
