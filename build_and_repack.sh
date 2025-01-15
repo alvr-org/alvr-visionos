@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Get ALVR submodule
-git submodule update --init --recursive
+#git submodule update --init --recursive
 
 # Check if Rust is installed
 if command -v rustc &> /dev/null; then
@@ -10,6 +10,8 @@ else
     echo "Rust is not installed. Installing..."
     curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
 fi
+
+unset SDKROOT
 
 # Install or update cbindgen
 cargo install cbindgen
