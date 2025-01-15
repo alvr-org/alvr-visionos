@@ -103,6 +103,7 @@ struct ALVRClientApp: App {
     Bug fixes:\n\
     \n\
     • Fixed another minor view transform bug (headset transform was not the average of the two eye transforms).\n\
+    • Fixed hands not working correctly with SteamVR Input 2.0.\n\
     \n\
     ________________________________\n\
     \n\
