@@ -91,6 +91,10 @@ struct ALVRClientApp: App {
     \n\
     ________________________________\n\
     \n\
+    Hotfix\n\
+    \n\
+    • Resolved an issue where the client would not connect to older streamers. Please update your streamer as soon as you are able to, there's a lot of bugfixes this time around.\n\
+    \n\
     What's changed?\n\
     \n\
     • Updated to client runtime v20.12.0. Please be sure to update your streamer.\n\
