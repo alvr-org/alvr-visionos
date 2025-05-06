@@ -15,9 +15,18 @@ cp "$BUILDDIR/libalvr_client_core.dylib" alvrrepack/ios/$target_lib
 
 install_name_tool -id "@rpath/$target_lib" alvrrepack/ios/$target_lib
 
+# Apple renamed xros to visionos for vtool in newer Xcode
+if xcrun vtool -help 2>&1 | grep -q visionos; then
+	XROSPLATFORM=visionos
+	XROSSIMPLATFORM=visionossim
+else
+	XROSPLATFORM=xros
+	XROSSIMPLATFORM=xrossim
+fi
+
 xcrun vtool -arch arm64 -set-build-version maccatalyst 17.0 17.0 -replace -output alvrrepack/maccatalyst/$target_lib alvrrepack/ios/$target_lib
-xcrun vtool -arch arm64 -set-build-version xros 1.0 1.0 -replace -output alvrrepack/xros/$target_lib alvrrepack/ios/$target_lib
-xcrun vtool -arch arm64 -set-build-version xrossim 1.0 1.0 -replace -output alvrrepack/xrsimulator/$target_lib alvrrepack/ios/$target_lib
+xcrun vtool -arch arm64 -set-build-version $XROSPLATFORM 1.0 1.0 -replace -output alvrrepack/xros/$target_lib alvrrepack/ios/$target_lib
+xcrun vtool -arch arm64 -set-build-version $XROSSIMPLATFORM 1.0 1.0 -replace -output alvrrepack/xrsimulator/$target_lib alvrrepack/ios/$target_lib
 
 rm -rf ALVRClientCore.xcframework
 rm -rf ALVRClient/ALVRClientCore.xcframework
