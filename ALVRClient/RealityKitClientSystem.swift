@@ -527,23 +527,53 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialA_L?.readsDepth = false
+                self.surfaceMaterialA_L?.writesDepth = false
+            }
+#endif
             self.surfaceMaterialB_L = try! await ShaderGraphMaterial(
                 named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialB_L?.readsDepth = false
+                self.surfaceMaterialB_L?.writesDepth = false
+            }
+#endif
             self.surfaceMaterialC_L = try! await ShaderGraphMaterial(
                 named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialC_L?.readsDepth = false
+                self.surfaceMaterialC_L?.writesDepth = false
+            }
+#endif
 
             self.surfaceMaterialA_R = try! await ShaderGraphMaterial(
                 named: base + filter + "_R",
                 from: "SBSMaterial.usda"
             )
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialA_R?.readsDepth = false
+                self.surfaceMaterialA_R?.writesDepth = false
+            }
+#endif
             self.surfaceMaterialB_R = try! await ShaderGraphMaterial(
                 named: base + filter + "_R",
                 from: "SBSMaterial.usda"
             )
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialB_R?.readsDepth = false
+                self.surfaceMaterialB_R?.writesDepth = false
+            }
+#endif
             self.surfaceMaterialC_R = try! await ShaderGraphMaterial(
                 named: base + filter + "_R",
                 from: "SBSMaterial.usda"
@@ -552,18 +582,14 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             // A weird bug happened here, only surfaceMaterialC_R had readsDepth set correctly?
             // Turns out we don't want this anyway, causes the app to render in front of windows
             // and hands
-/*
+
 #if XCODE_BETA_16
             if #available(visionOS 2.0, *) {
-                self.surfaceMaterialA_L?.readsDepth = false
-                self.surfaceMaterialB_L?.readsDepth = false
-                self.surfaceMaterialC_L?.readsDepth = false
-                self.surfaceMaterialA_R?.readsDepth = false
-                self.surfaceMaterialB_R?.readsDepth = false
                 self.surfaceMaterialC_R?.readsDepth = false
+                self.surfaceMaterialC_R?.writesDepth = false
             }
 #endif
-*/
+
         }
         
         recreateFramePool()
@@ -1245,7 +1271,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         // HACK: keep the depths separate to avoid z fighting
         let rk_panel_depth_L = rk_panel_depth
-        let rk_panel_depth_R = rk_panel_depth - 10
+        let rk_panel_depth_R = rk_panel_depth - 10.0
         
         // TL;DR  each eye has asymmetric render tangents, but we can't scale each half individually so we
         // have to do some math to move the center of the plane where it should be.

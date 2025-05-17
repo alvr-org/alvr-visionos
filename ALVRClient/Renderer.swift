@@ -1208,7 +1208,7 @@ class Renderer {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage \(err)")
             }
             guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
-                fatalError("CVMetalTextureCacheCreateTextureFromImage")
+                fatalError("CVMetalTextureGetTexture")
             }
             if !((metalTexture.debugDescription?.contains("decompressedPixelFormat") ?? true) || (metalTexture.debugDescription?.contains("isCompressed = 1") ?? true)) && EventHandler.shared.totalFramesRendered % 90*5 == 0 {
                 print("NO COMPRESSION ON VT FRAME!!!! AAAAAAAAA go file feedback again :(")
