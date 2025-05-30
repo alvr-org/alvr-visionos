@@ -91,23 +91,15 @@ struct ALVRClientApp: App {
     \n\
     ________________________________\n\
     \n\
-    Hotfix\n\
-    \n\
-    • Resolved an issue where the client would not connect to older streamers. Please update your streamer as soon as you are able to, there's a lot of bugfixes this time around.\n\
-    \n\
     What's changed?\n\
     \n\
-    • Updated to client runtime v20.12.0. Please be sure to update your streamer.\n\
-    • System gestures can now be disabled under General.\n\
-    • Hand tracking prediction is now disabled by default for stability, but can be enabled in Advanced Settings.\n\
-    • Improved default settings to be more suitable for OLED panels: Blacks are less blocky, 10-bit encoding is on by default, and color correction is disabled by default.\n\
+    • Updated to client runtime v20.13.0. Please be sure to update your streamer.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
-    • Fixed another minor view transform bug (headset transform was not the average of the two eye transforms).\n\
-    • Fixed hands not working correctly with SteamVR Input 2.0.\n\
+    • Fixed hand gestures not working correctly.\n\
     \n\
     ________________________________\n\
     \n\
