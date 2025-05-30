@@ -10,6 +10,7 @@ import SwiftUI
 struct GlobalSettings: Codable {
     var keepSteamVRCenter: Bool = true
     var showHandsOverlaid: Bool = false
+    var disablePersistentSystemOverlays: Bool = true
     var streamFPS: String = "90"
     var experimental40ppd: Bool = false
     var chromaKeyEnabled: Bool = false
@@ -23,6 +24,7 @@ struct GlobalSettings: Codable {
     var dontShowAWDLAlertAgain: Bool = false
     var fovRenderScale: Float = 1.0
     var forceMipmapEyeTracking = false
+    var targetHandsAtRoundtripLatency = false
     var lastUsedAppVersion = "never launched"
     
     init() {}
@@ -32,6 +34,7 @@ struct GlobalSettings: Codable {
         
         self.keepSteamVRCenter = try container.decodeIfPresent(Bool.self, forKey: .keepSteamVRCenter) ?? self.keepSteamVRCenter
         self.showHandsOverlaid = try container.decodeIfPresent(Bool.self, forKey: .showHandsOverlaid) ?? self.showHandsOverlaid
+        self.disablePersistentSystemOverlays = try container.decodeIfPresent(Bool.self, forKey: .disablePersistentSystemOverlays) ?? self.disablePersistentSystemOverlays
         self.streamFPS = try container.decodeIfPresent(String.self, forKey: .streamFPS) ?? self.streamFPS
         self.experimental40ppd = try container.decodeIfPresent(Bool.self, forKey: .experimental40ppd) ?? self.experimental40ppd
         self.chromaKeyEnabled = try container.decodeIfPresent(Bool.self, forKey: .chromaKeyEnabled) ?? self.chromaKeyEnabled
@@ -45,6 +48,7 @@ struct GlobalSettings: Codable {
         self.dontShowAWDLAlertAgain = try container.decodeIfPresent(Bool.self, forKey: .dontShowAWDLAlertAgain) ?? self.dontShowAWDLAlertAgain
         self.fovRenderScale = try container.decodeIfPresent(Float.self, forKey: .fovRenderScale) ?? self.fovRenderScale
         self.forceMipmapEyeTracking = try container.decodeIfPresent(Bool.self, forKey: .forceMipmapEyeTracking) ?? self.forceMipmapEyeTracking
+        self.targetHandsAtRoundtripLatency = try container.decodeIfPresent(Bool.self, forKey: .targetHandsAtRoundtripLatency) ?? self.targetHandsAtRoundtripLatency
         self.lastUsedAppVersion = try container.decodeIfPresent(String.self, forKey: .lastUsedAppVersion) ?? self.lastUsedAppVersion
     }
 }

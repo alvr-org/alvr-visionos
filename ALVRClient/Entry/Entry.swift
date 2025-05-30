@@ -85,6 +85,11 @@ struct Entry: View {
                     }
                     .toggleStyle(.switch)
                     
+                    Toggle(isOn: $gStore.settings.disablePersistentSystemOverlays) {
+                        Text("Disable persistent system overlays (palm gesture)")
+                    }
+                    .toggleStyle(.switch)
+                  
                     Toggle(isOn: $gStore.settings.keepSteamVRCenter) {
                         Text("Crown Button long-press ignored by SteamVR")
                     }
@@ -240,6 +245,11 @@ struct Entry: View {
                     Text("Increase FoV for timewarp comfort, or sacrifice FoV for sharpness")
                         .font(.system(size: 10))
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Toggle(isOn: $gStore.settings.targetHandsAtRoundtripLatency) {
+                        Text("Target hand prediction at round-trip latency (may cause jittering)")
+                    }
+                    .toggleStyle(.switch)
                 }
                 .frame(minWidth: 450)
                 .padding()
@@ -288,6 +298,7 @@ struct Entry: View {
                 if eventHandler.hostname != "" && eventHandler.IP != "" {
                     let columns = [
                         GridItem(.fixed(100), alignment: .trailing),
+                        GridItem(.fixed(150), alignment: .trailing),
                         GridItem(.fixed(150), alignment: .leading)
                     ]
 
@@ -298,12 +309,24 @@ struct Entry: View {
                         Text(eventHandler.IP)
                         Text("Protocol:")
                         Text(eventHandler.getMdnsProtocolId())
+                        Text("Client Protocol:")
+                        Text(eventHandler.getMdnsProtocolId())
+                        Text("Streamer Version:")
+                        if eventHandler.hostAlvrVersion != "" {
+                            Text(eventHandler.hostAlvrVersion)
+                        }
+                        else {
+                            Text("Disconnected")
+                        }
+                        Text("")
+                        Text("")
                     }
                     .frame(width: 250, alignment: .center)
                     .padding(.bottom)
                 }
             }
             .frame(minHeight: 150)
+            .frame(minHeight: 170)
         }
         .frame(minWidth: 650, maxWidth: 650)
         .glassBackgroundEffect()

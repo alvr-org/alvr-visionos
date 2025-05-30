@@ -57,7 +57,9 @@ let useTripleBufferingStaleTextureVisionOS2Hack = true
 
 // Focal depth of the timewarp panel, ideally would be adjusted based on the depth
 // of what the user is looking at.
+
 let rk_panel_depth: Float = 90
+let rk_panel_depth: Float = 80
 
 struct RKQueuedFrame {
     let texture: MTLTexture
@@ -146,6 +148,12 @@ class RealityKitClientSystem : System {
         
         await MainActor.run {
             let materialBackdrop = UnlitMaterial(color: .black)
+
+            var materialInputCatcher = UnlitMaterial(color: .init(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0))
+            materialInputCatcher.blending = .transparent(opacity: 0.0)
+            if #available(visionOS 2.0, *) {
+                materialInputCatcher.writesDepth = false
+            }
             
             let videoPlaneMeshCollision = MeshResource.generatePlane(width: 1.0, depth: 1.0)
             let cubeMesh = MeshResource.generateBox(size: 1.0)
@@ -161,6 +169,7 @@ class RealityKitClientSystem : System {
             let videoPlaneA_L = Entity()
             videoPlaneA_L.name = "video_plane_a_L"
             videoPlaneA_L.components.set(MagicRealityKitClientSystemComponent())
+
             videoPlaneA_L.components.set(InputTargetComponent())
             videoPlaneA_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneA_L.scale = simd_float3(0.0, 0.0, 0.0)
@@ -169,6 +178,7 @@ class RealityKitClientSystem : System {
             let videoPlaneB_L = Entity()
             videoPlaneB_L.name = "video_plane_b_L"
             videoPlaneB_L.components.set(MagicRealityKitClientSystemComponent())
+
             videoPlaneB_L.components.set(InputTargetComponent())
             videoPlaneB_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneB_L.scale = simd_float3(0.0, 0.0, 0.0)
@@ -177,6 +187,7 @@ class RealityKitClientSystem : System {
             let videoPlaneC_L = Entity()
             videoPlaneC_L.name = "video_plane_c_L"
             videoPlaneC_L.components.set(MagicRealityKitClientSystemComponent())
+
             videoPlaneC_L.components.set(InputTargetComponent())
             videoPlaneC_L.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneC_L.scale = simd_float3(0.0, 0.0, 0.0)
@@ -185,6 +196,7 @@ class RealityKitClientSystem : System {
             let videoPlaneA_R = Entity()
             videoPlaneA_R.name = "video_plane_a_R"
             videoPlaneA_R.components.set(MagicRealityKitClientSystemComponent())
+
             videoPlaneA_R.components.set(InputTargetComponent())
             videoPlaneA_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneA_R.scale = simd_float3(0.0, 0.0, 0.0)
@@ -193,6 +205,7 @@ class RealityKitClientSystem : System {
             let videoPlaneB_R = Entity()
             videoPlaneB_R.name = "video_plane_b_R"
             videoPlaneB_R.components.set(MagicRealityKitClientSystemComponent())
+
             videoPlaneB_R.components.set(InputTargetComponent())
             videoPlaneB_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneB_R.scale = simd_float3(0.0, 0.0, 0.0)
@@ -201,10 +214,19 @@ class RealityKitClientSystem : System {
             let videoPlaneC_R = Entity()
             videoPlaneC_R.name = "video_plane_c_R"
             videoPlaneC_R.components.set(MagicRealityKitClientSystemComponent())
+
             videoPlaneC_R.components.set(InputTargetComponent())
             videoPlaneC_R.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
             videoPlaneC_R.scale = simd_float3(0.0, 0.0, 0.0)
             videoPlaneC_R.isEnabled = false
+            videoPlaneC_R.scale = simd_float3(0.0, 0.0, 0.0)
+            videoPlaneC_R.isEnabled = false
+            
+            let checkFloorLevelingPlane = ModelEntity(mesh: videoPlaneMeshCollision, materials: [materialBackdrop])
+            checkFloorLevelingPlane.name = "check_floor_leveling_plane"
+            checkFloorLevelingPlane.position = simd_float3(0.0, 0.0, 0.0)
+            checkFloorLevelingPlane.scale = simd_float3(0.1, 0.1, 0.1)
+            checkFloorLevelingPlane.isEnabled = false
 
             let backdrop = ModelEntity(mesh: videoPlaneMeshCollision, materials: [materialBackdrop])
             backdrop.name = "backdrop_plane"
@@ -212,12 +234,30 @@ class RealityKitClientSystem : System {
             
             anchor.addChild(backdrop)
 
+            
+            // We need to make sure all input rays hit the input catcher, because if it hits the video planes
+            // then inputs will randomly cancel
+            let input_catcher = ModelEntity(mesh: videoPlaneMeshCollision, materials: [materialInputCatcher])
+            input_catcher.components.set(InputTargetComponent())
+            input_catcher.components.set(CollisionComponent(shapes: [ShapeResource.generateConvex(from: videoPlaneMeshCollision)]))
+            input_catcher.name = "input_catcher"
+            
+            let input_catcher_depth: Float = 1.5//(rk_panel_depth * 0.5)
+            input_catcher.position = simd_float3(0.0, 0.0, -input_catcher_depth)
+            input_catcher.orientation = simd_quatf(angle: 1.5708, axis: simd_float3(1,0,0))
+            input_catcher.scale = simd_float3(input_catcher_depth * 4.0, input_catcher_depth * 4.0, input_catcher_depth * 4.0) // TODO: view tangents over 4.0? idk
+            input_catcher.isEnabled = true
+            
+            anchor.addChild(input_catcher)
+
             content.add(videoPlaneA_L)
             content.add(videoPlaneB_L)
             content.add(videoPlaneC_L)
             content.add(videoPlaneA_R)
             content.add(videoPlaneB_R)
             content.add(videoPlaneC_R)
+
+            content.add(checkFloorLevelingPlane)
             content.add(anchor)
         }
     }
@@ -512,27 +552,64 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
+
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialA_L?.readsDepth = false
+                self.surfaceMaterialA_L?.writesDepth = false
+            }
+#endif
             self.surfaceMaterialB_L = try! await ShaderGraphMaterial(
                 named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
+
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialB_L?.readsDepth = false
+                self.surfaceMaterialB_L?.writesDepth = false
+            }
+#endif
             self.surfaceMaterialC_L = try! await ShaderGraphMaterial(
                 named: base + filter + "_L",
                 from: "SBSMaterial.usda"
             )
+
             
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialC_L?.readsDepth = false
+                self.surfaceMaterialC_L?.writesDepth = false
+            }
+#endif
+
             self.surfaceMaterialA_R = try! await ShaderGraphMaterial(
                 named: base + filter + "_R",
                 from: "SBSMaterial.usda"
             )
+
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialA_R?.readsDepth = false
+                self.surfaceMaterialA_R?.writesDepth = false
+            }
+#endif
             self.surfaceMaterialB_R = try! await ShaderGraphMaterial(
                 named: base + filter + "_R",
                 from: "SBSMaterial.usda"
             )
+
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialB_R?.readsDepth = false
+                self.surfaceMaterialB_R?.writesDepth = false
+            }
+#endif
             self.surfaceMaterialC_R = try! await ShaderGraphMaterial(
                 named: base + filter + "_R",
                 from: "SBSMaterial.usda"
             )
+
             
 #if XCODE_BETA_16
             if #available(visionOS 2.0, *) {
@@ -544,6 +621,18 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 self.surfaceMaterialC_R?.readsDepth = false
             }
 #endif
+
+            // A weird bug happened here, only surfaceMaterialC_R had readsDepth set correctly?
+            // Turns out we don't want this anyway, causes the app to render in front of windows
+            // and hands
+
+#if XCODE_BETA_16
+            if #available(visionOS 2.0, *) {
+                self.surfaceMaterialC_R?.readsDepth = false
+                self.surfaceMaterialC_R?.writesDepth = false
+            }
+#endif
+
         }
         
         recreateFramePool()
@@ -1076,6 +1165,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         guard let backdrop = context.scene.findEntity(named: "backdrop_plane") as? ModelEntity else {
             return
         }
+
+        guard let input_catcher = context.scene.findEntity(named: "input_catcher") as? ModelEntity else {
+            return
+        }
+        
+        input_catcher.isEnabled = !(WorldTracker.shared.eyeTrackingActive && !WorldTracker.shared.eyeIsMipmapMethod)
+        
         let settings = ALVRClientApp.gStore.settings
         
         var commandBuffer: MTLCommandBuffer? = nil
@@ -1110,8 +1206,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             self.setPlaneMaterialA_L = false
             self.setPlaneMaterialB_L = false
+
             self.setPlaneMaterialA_R = false
             self.setPlaneMaterialB_R = false
+            self.setPlaneMaterialC_L = false
+            self.setPlaneMaterialA_R = false
+            self.setPlaneMaterialB_R = false
+            self.setPlaneMaterialC_R = false
             
             renderViewports[0] = MTLViewport(originX: 0, originY: Double(currentOffscreenRenderHeight), width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
             renderViewports[1] = MTLViewport(originX: 0, originY: 0, width: Double(currentOffscreenRenderWidth), height: Double(currentOffscreenRenderHeight), znear: renderZNear, zfar: renderZFar)
@@ -1183,8 +1284,18 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             if whichRkFrame == 0 {
                 drawableQueueA!.present(commandBuffer: commandBuffer)
             }
+
             else {
                 drawableQueueB!.present(commandBuffer: commandBuffer)
+            }
+            else if whichRkFrame == 1 {
+                drawableQueueB!.present(commandBuffer: commandBuffer)
+            }
+            else if whichRkFrame == 2 {
+                drawableQueueC!.present(commandBuffer: commandBuffer)
+            }
+            else {
+                print("aaaaaaaaaa this switch needs extending")
             }
             rkFramesRendered -= 1 // Ensure whichRkFrame is still correct next time around
             
@@ -1211,7 +1322,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         // HACK: keep the depths separate to avoid z fighting
         let rk_panel_depth_L = rk_panel_depth
+
         let rk_panel_depth_R = rk_panel_depth - 10
+        let rk_panel_depth_R = rk_panel_depth - 10.0
         
         // TL;DR  each eye has asymmetric render tangents, but we can't scale each half individually so we
         // have to do some math to move the center of the plane where it should be.
@@ -1335,6 +1448,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             drawableQueueC!.present(commandBuffer: commandBuffer)
         }
 
+        else {
+            print("aaaaaaaaaa this switch needs extending")
+        }
+
         objc_sync_enter(rkFramePoolLock)
 #if !targetEnvironment(simulator)
         //texture.setPurgeableState(.volatile)
@@ -1364,6 +1481,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         let startPollTime = CACurrentMediaTime()
         while true {
             sched_yield()
+
+            Thread.sleep(forTimeInterval: 0.00001)
             
             // If visionOS skipped our last frame, let the queue fill up a bit
             if EventHandler.shared.lastQueuedFrame != nil {
@@ -1401,10 +1520,22 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         let renderingStreaming = streamingActiveForFrame && queuedFrame != nil
         
+
         if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
             alvr_report_compositor_start(queuedFrame!.timestamp)
         }
 
+        
+
+        if queuedFrame != nil && !queuedFrame!.viewParamsValid /*&& EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp*/ {
+            let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+            defer { nalViewsPtr.deallocate() }
+            alvr_report_compositor_start(queuedFrame!.timestamp, nalViewsPtr)
+
+            queuedFrame = QueuedFrame(imageBuffer: queuedFrame!.imageBuffer, timestamp: queuedFrame!.timestamp, viewParamsValid: true, viewParams: [nalViewsPtr[0], nalViewsPtr[1]])
+        }
+
+        //print(queuedFrame, EventHandler.shared.alvrInitialized, streamingActiveForFrame)
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
             let ipd = DummyMetalRenderer.renderViewTransforms.count > 1 ? simd_length(DummyMetalRenderer.renderViewTransforms[0].columns.3 - DummyMetalRenderer.renderViewTransforms[1].columns.3) : 0.063
             
@@ -1427,6 +1558,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
                 EventHandler.shared.viewTransforms = [DummyMetalRenderer.renderViewTransforms[0], DummyMetalRenderer.renderViewTransforms.count > 1 ? DummyMetalRenderer.renderViewTransforms[1] : DummyMetalRenderer.renderViewTransforms[0]]
                 EventHandler.shared.lastIpd = ipd
+
             }
             
             let settings = ALVRClientApp.gStore.settings
@@ -1434,6 +1566,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 if otherSettings.video.encoderConfig.encodingGamma != renderer.encodingGamma {
                     needsPipelineRebuild = true
                 }
+                
+                WorldTracker.shared.sendViewParams(viewTransforms:  EventHandler.shared.viewTransforms, viewFovs: EventHandler.shared.viewFovs)
+            }
+            
+            let settings = ALVRClientApp.gStore.settings
+            if EventHandler.shared.encodingGamma != renderer.encodingGamma {
+                needsPipelineRebuild = true
             }
             
             /*if currentSetRenderScale != realityKitRenderScale {
@@ -1474,6 +1613,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         EventHandler.shared.framesSinceLastDecode += 1
         objc_sync_exit(EventHandler.shared.frameQueueLock)
         
+
+        if queuedFrame != nil && !queuedFrame!.viewParamsValid {
+            print("aaaaaaaa bad view params")
+        }
+        
         let vsyncTime = visionProVsyncPrediction.nextFrameTime
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
         var deviceAnchor = framePreviouslyPredictedPose ?? matrix_identity_float4x4
@@ -1487,14 +1631,23 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             
             let rkLatencyLimit = max(WorldTracker.maxPredictionRK, UInt64(visionProVsyncPrediction.vsyncLatency * Double(NSEC_PER_SEC))) //UInt64(Double(visionProVsyncPrediction.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
             let handAnchorLatencyLimit = WorldTracker.maxPrediction //UInt64(Double(visionProVsyncPrediction.vsyncDelta * 6.0) * Double(NSEC_PER_SEC))
+
             var targetTimestamp = vsyncTime - visionProVsyncPrediction.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
             var anchorTimestamp = vsyncTime - visionProVsyncPrediction.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), handAnchorLatencyLimit)) / Double(NSEC_PER_SEC))
+            var targetTimestamp = vsyncTime //- visionProVsyncPrediction.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), rkLatencyLimit)) / Double(NSEC_PER_SEC))
+            let reportedTargetTimestamp = vsyncTime
+            var anchorTimestamp = vsyncTime //- visionProVsyncPrediction.vsyncLatency + (Double(min(alvr_get_head_prediction_offset_ns(), handAnchorLatencyLimit)) / Double(NSEC_PER_SEC))
             
             // Make overlay look smooth (at the cost of timewarp)
             if renderer.fadeInOverlayAlpha > 0.0 || currentHzAvg < 65.0 {
                 anchorTimestamp = vsyncTime + visionProVsyncPrediction.vsyncLatency
                 targetTimestamp = vsyncTime + visionProVsyncPrediction.vsyncLatency
+            }
+            
+
+            if !ALVRClientApp.gStore.settings.targetHandsAtRoundtripLatency {
+                anchorTimestamp = vsyncTime - visionProVsyncPrediction.vsyncLatency
             }
             
             let sentAnchor = WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)

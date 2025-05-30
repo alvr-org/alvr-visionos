@@ -51,6 +51,7 @@ def Xform "Root"
             float outputs:timeSinceHoverStart
             float2 ui:nodegraph:node:pos = (-368.625, 130.875)
             int ui:nodegraph:node:stackingOrder = 650
+            int ui:nodegraph:node:stackingOrder = 1104
         }
 
         def Shader "Separate3"
@@ -81,6 +82,7 @@ def Xform "Root"
             float3 outputs:out
             float2 ui:nodegraph:node:pos = (152.375, 236.75)
             int ui:nodegraph:node:stackingOrder = 1076
+            int ui:nodegraph:node:stackingOrder = 1126
         }
 
         def Shader "Add"
@@ -91,6 +93,7 @@ def Xform "Root"
             float3 outputs:out
             float2 ui:nodegraph:node:pos = (-20.875, 233.25)
             int ui:nodegraph:node:stackingOrder = 1074
+            int ui:nodegraph:node:stackingOrder = 1125
         }
 
         def Shader "Combine3"
@@ -103,6 +106,7 @@ def Xform "Root"
             float3 outputs:out
             float2 ui:nodegraph:node:pos = (-62.1875, 50.3125)
             int ui:nodegraph:node:stackingOrder = 677
+            int ui:nodegraph:node:stackingOrder = 1122
         }
 
         def Shader "Multiply_1"
@@ -113,6 +117,10 @@ def Xform "Root"
             float3 outputs:out
             float2 ui:nodegraph:node:pos = (114.625, 100.125)
             int ui:nodegraph:node:stackingOrder = 1078
+            float3 inputs:in2 = (0.025, 0.025, 0.025)
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (114.625, 100.125)
+            int ui:nodegraph:node:stackingOrder = 1130
         }
 
         def Shader "Texcoord"
@@ -132,6 +140,11 @@ def Xform "Root"
             float2 outputs:out
             float2 ui:nodegraph:node:pos = (-78.82069, 427.7709)
             int ui:nodegraph:node:stackingOrder = 1081
+            float2 inputs:edge = (0.725, 0)
+            float2 inputs:in.connect = </Root/HoverEdgeTracker/Texcoord.outputs:out>
+            float2 outputs:out
+            float2 ui:nodegraph:node:pos = (-78.82069, 427.7709)
+            int ui:nodegraph:node:stackingOrder = 1132
         }
 
         def Shader "Separate2"

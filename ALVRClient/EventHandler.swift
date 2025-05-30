@@ -36,6 +36,12 @@ class EventHandler: ObservableObject {
     @Published var IP: String = ""
     @Published var alvrVersion: String = ""
     @Published var connectionFlavorText: String = ""
+    @Published var hostAlvrVersion: String = ""
+    @Published var connectionFlavorText: String = ""
+    
+    var hostAlvrMajor = 20
+    var hostAlvrMinor = 11
+    var hostAlvrRevision = 0
     
     var renderStarted = false
     
@@ -79,6 +85,9 @@ class EventHandler: ObservableObject {
     var lastStutterTime = 0.0
     var awdlAlertPresented = false
     var audioIsOff = false
+    var needsEncoderReset = true
+    var encodingGamma: Float = 1.0
+    var enableHdr = false
     
     init() {}
     
@@ -89,7 +98,10 @@ class EventHandler: ObservableObject {
             alvrInitialized = true
             let refreshRates:[Float] = [100, 96, 90]
             let capabilities = AlvrClientCapabilities(default_view_width: UInt32(renderWidth*2), default_view_height: UInt32(renderHeight*2), external_decoder: true, refresh_rates: refreshRates, refresh_rates_count: Int32(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: false)
+            let capabilities = AlvrClientCapabilities(default_view_width: UInt32(renderWidth*2), default_view_height: UInt32(renderHeight*2), refresh_rates: refreshRates, refresh_rates_count: UInt64(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1), prefer_10bit: true, prefer_full_range: true, preferred_encoding_gamma: 1.5, prefer_hdr: false)
             alvr_initialize(/*capabilities=*/capabilities)
+            alvr_initialize_logging()
+            alvr_set_decoder_input_callback(nil, { data in return EventHandler.shared.handleNals(frameData: data) })
             alvr_resume()
         }
     }
@@ -267,12 +279,12 @@ class EventHandler: ObservableObject {
                 }
                 else {
                     print("Event thread is MIA, restarting event thread")
-                    eventsThread = Thread {
+                    /*eventsThread = Thread {
                         self.handleAlvrEvents()
                     }
                     eventsThread?.name = "Events Thread"
                     eventsThread?.start()
-                    numberOfEventThreadRestarts += 1
+                    numberOfEventThreadRestarts += 1*/
                 }
             }
             
@@ -353,14 +365,82 @@ class EventHandler: ObservableObject {
             // TODO: maybe also call this if we fail to decode for too long.
             if lastRequestedTimestamp != 0 && (lagSpiked || framesSinceLastDecode > 90*2) {
                 objc_sync_exit(frameQueueLock)
+    func resetEncoding() {
+        needsEncoderReset = true
+    }
+    
+    // Poll for NALs and and, when decoded, add them to the frameQueue
+    func handleNals(frameData: AlvrVideoFrameData) -> Bool {
+        var retVal = true
+        self.timeLastFrameGot = CACurrentMediaTime()
+        
+        // Prevent NAL buildup
+        if !self.renderStarted {
+            //VideoHandler.abandonAllPendingNals()
+            retVal = true
+            return retVal
+        }
+        
+        if self.needsEncoderReset {
+            self.needsEncoderReset = false
+            print("Resetting encoder")
+            retVal = false
+            return retVal
+        }
+        
+        let timestamp = frameData.timestamp_ns
+        let nal = UnsafeMutableBufferPointer<UInt8>(start: UnsafeMutablePointer(mutating: frameData.buffer_ptr), count: Int(frameData.buffer_size))
+        
+        objc_sync_enter(self.frameQueueLock)
+        self.framesSinceLastIDR += 1
 
-                print("Handle spike!", framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
+        // If we're receiving NALs timestamped from >400ms ago, stop decoding them
+        // to prevent a cascade of needless decoding lag
+        let ns_diff_from_last_req_ts = self.lastRequestedTimestamp > timestamp ? self.lastRequestedTimestamp &- timestamp : 0
+        let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*600 && self.framesSinceLastIDR > 90*2)
+        
+        if CACurrentMediaTime() - self.stutterSampleStart >= 60.0 {
+            print("Stuttter events in the last minute:", self.stutterEventsCounted)
+            self.stutterSampleStart = CACurrentMediaTime()
+            
+            if self.stutterEventsCounted >= 50 {
+                print("AWDL detected!")
+                if ALVRClientApp.gStore.settings.dontShowAWDLAlertAgain {
+                    print("User doesn't want to see the alert.")
+                }
+                else {
+                    DispatchQueue.main.async {
+                        if self.awdlAlertPresented {
+                            return
+                        }
+                        self.awdlAlertPresented = true
+                        
+                        // Not super kosher but I don't see another way.
+                        ALVRClientApp.shared.openWindow(id: "AWDLAlert")
+                    }
+                }
+            }
+            
+            self.stutterEventsCounted = 0
+        }
+        if ns_diff_from_last_req_ts > 1000*1000*40 {
+            if (CACurrentMediaTime() - self.lastStutterTime > 0.25 && CACurrentMediaTime() - self.lastStutterTime < 10.0) || ns_diff_from_last_req_ts > 1000*1000*100 {
+                self.stutterEventsCounted += 1
+                //print(ns_diff_from_last_req_ts, CACurrentMediaTime() - lastStutterTime)
+            }
+            self.lastStutterTime = CACurrentMediaTime()
+        }
+        // TODO: adjustable framerate
+        // TODO: maybe also call this if we fail to decode for too long.
+        if self.lastRequestedTimestamp != 0 && (lagSpiked || self.framesSinceLastDecode > 90*2) {
+            objc_sync_exit(self.frameQueueLock)
 
-                // We have to request an IDR to resume the video feed
-                VideoHandler.abandonAllPendingNals()
-                alvr_request_idr()
-                framesSinceLastIDR = 0
-                framesSinceLastDecode = 0
+            print("Handle spike! lagSpiked=\(lagSpiked) lastRequestedTimestamp=\(self.lastRequestedTimestamp), timestamp=\(timestamp), framesSinceLastDecode=\(self.framesSinceLastDecode) framesSinceLastIDR=\(self.framesSinceLastIDR) ns_diff_from_last_req_ts=\(ns_diff_from_last_req_ts)")
+
+            // We have to request an IDR to resume the video feed
+            
+            self.framesSinceLastIDR = 0
+            self.framesSinceLastDecode = 0
 
                 continue
             }
@@ -391,11 +471,32 @@ class EventHandler: ObservableObject {
                     
                     //print(timestamp, (CACurrentMediaTime() - timeLastFrameDecoded) * 1000.0)
                     timeLastFrameDecoded = CACurrentMediaTime()
+            retVal = false
+            return retVal
+        }
+        objc_sync_exit(self.frameQueueLock)
+        
+        self.framesSinceLastDecode = 0
+        
+        let startedDecodeTime = CACurrentMediaTime()
 
-                    //let imageBufferPtr = Unmanaged.passUnretained(imageBuffer).toOpaque()
-                    //print("finish decode: \(timestamp), \(imageBufferPtr), \(nal_type)")
-
+        if let vtDecompressionSession = self.vtDecompressionSession {
+            VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: self.videoFormat!) { [self] imageBuffer in
+                guard let imageBuffer = imageBuffer else {
+                    //print("Frame not decoded")
+                    return
+                }
+                //print("Frame decoded")
+                
+                if (CACurrentMediaTime() - startedDecodeTime > Double(50*MSEC_PER_SEC)) {
                     objc_sync_enter(frameQueueLock)
+
+                    print("Handle decode overrun!", CACurrentMediaTime() - startedDecodeTime, framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
+
+                    // We have to request an IDR to resume the video feed
+                    resetEncoding()
+                    
+                    framesSinceLastIDR = 0
                     framesSinceLastDecode = 0
                     if frameQueueLastTimestamp != timestamp || true
                     {
@@ -415,25 +516,96 @@ class EventHandler: ObservableObject {
                         if frameQueue.count > 3 {
                             frameQueue.removeFirst()
                         }
-
-
-                        frameQueueLastTimestamp = timestamp
-                        frameQueueLastImageBuffer = imageBuffer
-                        timeLastFrameSent = CACurrentMediaTime()
-                    }
-
-                    // Pull the very last imageBuffer for a given timestamp
-                    if frameQueueLastTimestamp == timestamp {
-                        frameQueueLastImageBuffer = imageBuffer
-                    }
-
                     objc_sync_exit(frameQueueLock)
+
+                    return
                 }
-            } else {
-                alvr_report_frame_decoded(timestamp)
-                alvr_report_compositor_start(timestamp)
-                alvr_report_submit(timestamp, 0)
+                
+                //print(timestamp, (CACurrentMediaTime() - timeLastFrameDecoded) * 1000.0)
+                timeLastFrameDecoded = CACurrentMediaTime()
+
+                //let imageBufferPtr = Unmanaged.passUnretained(imageBuffer).toOpaque()
+                //print("finish decode: \(timestamp), \(framesSinceLastDecode)")
+
+                objc_sync_enter(frameQueueLock)
+                framesSinceLastDecode = 0
+                if frameQueueLastTimestamp != timestamp || true
+                {
+                    alvr_report_frame_decoded(timestamp)
+                    
+                    let dummyPose = AlvrPose()
+                    let viewParamsDummy = [AlvrViewParams(pose: dummyPose, fov: viewFovs[0]), AlvrViewParams(pose: dummyPose, fov: viewFovs[1])]
+
+                    // TODO: For some reason, really low frame rates seem to decode the wrong image for a split second?
+                    // But for whatever reason this is fine at high FPS.
+                    // From what I've read online, the only way to know if an H264 frame has actually completed is if
+                    // the next frame is starting, so keep this around for now just in case.
+                    if frameQueueLastImageBuffer != nil {
+                        //frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
+                        frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, viewParamsValid: false, viewParams: viewParamsDummy))
+                    }
+                    else {
+                        frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, viewParamsValid: false, viewParams: viewParamsDummy))
+                    }
+                    if frameQueue.count > 3 {
+                        frameQueue.removeFirst()
+                    }
+
+
+                    frameQueueLastTimestamp = timestamp
+                    frameQueueLastImageBuffer = imageBuffer
+                    timeLastFrameSent = CACurrentMediaTime()
+                }
+
+                // Pull the very last imageBuffer for a given timestamp
+                if frameQueueLastTimestamp == timestamp {
+                    frameQueueLastImageBuffer = imageBuffer
+                }
+
+                objc_sync_exit(frameQueueLock)
+                //print("End VT callback")
             }
+        } else {
+            let nalViewsPtrDiscarded = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+            defer { nalViewsPtrDiscarded.deallocate() }
+
+            alvr_report_frame_decoded(timestamp)
+            alvr_report_compositor_start(timestamp, nalViewsPtrDiscarded)
+            alvr_report_submit(timestamp, 0)
+            
+            print("Force reset decoder")
+            
+            //return false
+            retVal = false
+            return retVal
+        }
+        
+        //print("Return from callback")
+        
+        if self.needsEncoderReset {
+            self.needsEncoderReset = false
+            //print("Resetting encoder (post)")
+            return false
+        }
+        
+        return retVal
+    }
+    
+    func getHostVersion() -> String {
+        var byteArray = [UInt8](repeating: 0, count: 256)
+
+        byteArray.withUnsafeMutableBytes { (ptr: UnsafeMutableRawBufferPointer) -> Void in
+            let cStringPtr = ptr.bindMemory(to: CChar.self).baseAddress
+            
+            alvr_get_server_version(cStringPtr)
+        }
+        
+        if let utf8String = String(bytes: byteArray, encoding: .utf8) {
+            let ret = utf8String.trimmingCharacters(in: ["\0"]);
+            return ret;
+        } else {
+            print("Unable to decode alvr_get_server_version into a UTF-8 string.")
+            return "failed to decode host version";
         }
     }
     
@@ -505,11 +677,14 @@ class EventHandler: ObservableObject {
         timeLastAlvrEvent = CACurrentMediaTime()
         timeLastFrameGot = CACurrentMediaTime()
         timeLastFrameSent = CACurrentMediaTime()
+        
+        clearHostVersion()
     }
 
     // The main event thread
     func handleAlvrEvents() {
         print("Start event thread...")
+        var currentCodec = -1
         while inputRunning {
             eventHeartbeat += 1
             // Send periodic updated values, such as battery percentage, once every five seconds
@@ -533,9 +708,21 @@ class EventHandler: ObservableObject {
                 }
             }
             
-            let diffSinceLastEvent = currentTime - timeLastAlvrEvent
+            let diffSinceLastEvent = 0.0//currentTime - timeLastAlvrEvent
             let diffSinceLastNal = currentTime - timeLastFrameGot
             let diffSinceLastDecode = currentTime - timeLastFrameSent
+            /*if (!renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 20.0 || diffSinceLastNal >= 20.0))
+               || (renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 30.0 || diffSinceLastNal >= 30.0))
+               || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 30.0)) {
+                EventHandler.shared.updateConnectionState(.disconnected)
+                
+                print("Kick ALVR...")
+                print("diffSinceLastEvent:", diffSinceLastEvent)
+                print("diffSinceLastNal:", diffSinceLastNal)
+                print("diffSinceLastDecode:", diffSinceLastDecode)
+                kickAlvr()
+            }*/
+            
             if (!renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 20.0 || diffSinceLastNal >= 20.0))
                || (renderStarted && timeLastAlvrEvent != 0 && timeLastFrameGot != 0 && (diffSinceLastEvent >= 30.0 || diffSinceLastNal >= 30.0))
                || (renderStarted && timeLastFrameSent != 0 && (diffSinceLastDecode >= 30.0)) {
@@ -546,18 +733,24 @@ class EventHandler: ObservableObject {
                 print("diffSinceLastNal:", diffSinceLastNal)
                 print("diffSinceLastDecode:", diffSinceLastDecode)
                 kickAlvr()
+                
+                alvr_report_fatal_decoder_error("Gimme frames >:(")
+                
+                timeLastAlvrEvent = CACurrentMediaTime()
+                timeLastFrameGot = CACurrentMediaTime()
+                timeLastFrameSent = CACurrentMediaTime()
             }
             
             if alvrInitialized && (diffSinceLastNal >= 5.0) {
                 print("Request IDR")
-                //alvr_request_idr()
+                resetEncoding()
                 timeLastFrameGot = CACurrentMediaTime()
             }
 
             var alvrEvent = AlvrEvent()
             let res = alvr_poll_event(&alvrEvent)
             if !res {
-                usleep(1000)
+                Thread.sleep(forTimeInterval: 0.001)
                 continue
             }
             timeLastAlvrEvent = CACurrentMediaTime()
@@ -572,21 +765,28 @@ class EventHandler: ObservableObject {
                     print(message)
                     hudMessageBuffer.deallocate()
                 }
+                Settings.clearSettingsCache()
+                updateHostVersion()
             case ALVR_EVENT_STREAMING_STARTED.rawValue:
                 print("streaming started \(alvrEvent.STREAMING_STARTED)")
+                updateHostVersion()
                 numberOfEventThreadRestarts = 0
+                encodingGamma = alvrEvent.STREAMING_STARTED.encoding_gamma
+                enableHdr = alvrEvent.STREAMING_STARTED.enable_hdr
                 if !streamingActive {
                     streamEvent = alvrEvent
                     streamingActive = true
-                    alvr_request_idr()
+                    resetEncoding()
                     framesSinceLastIDR = 0
                     framesSinceLastDecode = 0
                     lastIpd = -1
+                    currentCodec = -1
                     EventHandler.shared.updateConnectionState(.connected)
                 }
                 if !renderStarted {
                     WorldTracker.shared.sendFakeTracking(viewFovs: viewFovs, targetTimestamp: CACurrentMediaTime() - 1.0)
                 }
+                Settings.clearSettingsCache()
             case ALVR_EVENT_STREAMING_STOPPED.rawValue:
                 print("streaming stopped")
                 if streamingActive {
@@ -594,7 +794,10 @@ class EventHandler: ObservableObject {
                     stop()
                     timeLastAlvrEvent = CACurrentMediaTime()
                     timeLastFrameSent = CACurrentMediaTime()
+                    currentCodec = -1
                 }
+                Settings.clearSettingsCache()
+                clearHostVersion()
             case ALVR_EVENT_HAPTICS.rawValue:
                 //print("haptics: \(alvrEvent.HAPTICS)")
                 let haptics = alvrEvent.HAPTICS
@@ -618,7 +821,11 @@ class EventHandler: ObservableObject {
                 }
             case ALVR_EVENT_DECODER_CONFIG.rawValue:
                 streamingActive = true
-                print("create decoder \(alvrEvent.DECODER_CONFIG)")
+                currentCodec = Int(alvrEvent.DECODER_CONFIG.codec)
+                print("create decoder \(alvrEvent.DECODER_CONFIG) codec ID: \(currentCodec)")
+                Settings.clearSettingsCache()
+                updateHostVersion()
+
                 // Don't reinstantiate the decoder if it's already created.
                 // TODO: Switching from H264 -> HEVC at runtime?
                 if vtDecompressionSession != nil {
@@ -641,18 +848,26 @@ class EventHandler: ObservableObject {
                        (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: HEVC_NAL_TYPE_VPS)
                        break
                    }
+                if vtDecompressionSession == nil {
+                    let numBytes = alvr_get_decoder_config(nil)
+                    var nalBuffer: UnsafeMutableBufferPointer<UInt8>? = nil
+                    if numBytes > 0 {
+                        nalBuffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: Int(numBytes))
+                    }
+                    else {
+                        nalBuffer = UnsafeMutableBufferPointer<UInt8>.allocate(capacity: Int(1))
+                    }
+                    defer { nalBuffer?.deallocate() }
+                    alvr_get_decoder_config(nalBuffer?.baseAddress)
+
+                    (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nalBuffer!, codec: currentCodec)
                 }
-            case ALVR_EVENT_FRAME_READY.rawValue:
-                streamingActive = true
-                //print("frame ready")
-                
-                handleNals()
+
                 EventHandler.shared.updateConnectionState(.connected)
-                 
-                 
              default:
                  print("msg")
              }
+             Thread.sleep(forTimeInterval: 0.0001)
         }
         
         print("Events thread stopped")
@@ -723,6 +938,25 @@ class EventHandler: ObservableObject {
             self.alvrVersion = newVersion
         }
     }
+    
+    func updateHostVersion() {
+        DispatchQueue.main.async {
+            self.hostAlvrVersion = self.getHostVersion()
+            let majorMinorRev = self.hostAlvrVersion.split(separator: ".")
+            if majorMinorRev.count >= 3 {
+                self.hostAlvrMajor = Int(majorMinorRev[0]) ?? 20
+                self.hostAlvrMinor = Int(majorMinorRev[1]) ?? 11
+                self.hostAlvrRevision = Int(majorMinorRev[2]) ?? 0
+                print("Host version: v\(self.hostAlvrMajor).\(self.hostAlvrMinor).\(self.hostAlvrRevision), raw: \(self.hostAlvrVersion)")
+            }
+        }
+    }
+    
+    func clearHostVersion() {
+        DispatchQueue.main.async {
+            self.hostAlvrVersion = ""
+        }
+    }
 }
 
 enum ConnectionState {
@@ -732,5 +966,6 @@ enum ConnectionState {
 struct QueuedFrame {
     let imageBuffer: CVImageBuffer
     let timestamp: UInt64
+    let viewParamsValid: Bool
     let viewParams: [AlvrViewParams]
 }

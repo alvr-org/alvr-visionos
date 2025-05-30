@@ -127,6 +127,9 @@ class Renderer {
             
         encodingGamma = settings.video.encoderConfig.encodingGamma
         hdrEnabled = settings.video.encoderConfig.enableHdr
+
+        encodingGamma = EventHandler.shared.encodingGamma
+        hdrEnabled = EventHandler.shared.enableHdr
         if hdrEnabled {
             currentRenderColorFormat = renderColorFormatHDR
             currentDrawableRenderColorFormat = renderColorFormatDrawableHDR
@@ -205,6 +208,8 @@ class Renderer {
             
         encodingGamma = settings.video.encoderConfig.encodingGamma
         hdrEnabled = settings.video.encoderConfig.enableHdr
+        encodingGamma = EventHandler.shared.encodingGamma
+        hdrEnabled = EventHandler.shared.enableHdr
         if hdrEnabled {
             currentRenderColorFormat = renderColorFormatHDR
             currentDrawableRenderColorFormat = renderColorFormatDrawableHDR
@@ -215,6 +220,7 @@ class Renderer {
         }
             
         let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
+        let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveated_encoding)
         videoFramePipelineState_YpCbCrBiPlanar = try! buildRenderPipelineForVideoFrameWithDevice(
                             device: device,
                             mtlVertexDescriptor: mtlVertexDescriptor,
@@ -376,6 +382,10 @@ class Renderer {
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.vertexDescriptor = mtlVertexDescriptorNoUV
+
+        pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
+        pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
+
 
         pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
         pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
@@ -543,6 +553,7 @@ class Renderer {
             let physCoordsR = vrr.physicalCoordinates(screenCoordinates: MTLCoordinate2D(x: eyeCenterX, y: eyeCenterY), layer: 1)
             
             print(Float(physCoordsL.x) / Float(physSizeL.width), Float(physCoordsL.y) / Float(physSizeL.height), ":::", Float(physCoordsR.x) / Float(physSizeR.width), Float(physCoordsR.y) / Float(physSizeR.height))
+            print(physSizeL, physSizeR, vrr.screenSize.width, vrr.screenSize.height, ":::", Float(physCoordsL.x) / Float(physSizeL.width), Float(physCoordsL.y) / Float(physSizeL.height), ":::", Float(physCoordsR.x) / Float(physSizeR.width), Float(physCoordsR.y) / Float(physSizeR.height))
         }
     }
     
@@ -651,6 +662,12 @@ class Renderer {
         
         if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
             alvr_report_compositor_start(queuedFrame!.timestamp)
+        let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+        defer { nalViewsPtr.deallocate() }
+        
+        if queuedFrame != nil && !queuedFrame!.viewParamsValid /*&& EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp*/ {
+            alvr_report_compositor_start(queuedFrame!.timestamp, nalViewsPtr)
+            queuedFrame = QueuedFrame(imageBuffer: queuedFrame!.imageBuffer, timestamp: queuedFrame!.timestamp, viewParamsValid: true, viewParams: [nalViewsPtr[0], nalViewsPtr[1]])
         }
 
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
@@ -710,6 +727,12 @@ class Renderer {
                 if otherSettings.video.encoderConfig.encodingGamma != encodingGamma {
                     needsPipelineRebuild = true
                 }
+                WorldTracker.shared.sendViewParams(viewTransforms:  EventHandler.shared.viewTransforms, viewFovs: EventHandler.shared.viewFovs)
+            }
+            
+            var needsPipelineRebuild = false
+            if EventHandler.shared.encodingGamma != encodingGamma {
+                needsPipelineRebuild = true
             }
             
             if CACurrentMediaTime() - lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != chromaKeyEnabled || settings.chromaKeyColorR != chromaKeyColor.x || settings.chromaKeyColorG != chromaKeyColor.y || settings.chromaKeyColorB != chromaKeyColor.z || settings.chromaKeyDistRangeMin != chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != chromaKeyLerpDistRange.y) {
@@ -741,6 +764,10 @@ class Renderer {
         EventHandler.shared.framesSinceLastDecode += 1
         objc_sync_exit(EventHandler.shared.frameQueueLock)
         
+        if queuedFrame != nil && !queuedFrame!.viewParamsValid {
+            print("aaaaaaaa bad view params")
+        }
+        
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
@@ -760,6 +787,17 @@ class Renderer {
             var anchorTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
             if #available(visionOS 2.0, *) {
                 //anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            let targetTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let reportedTargetTimestamp = vsyncTime
+            var anchorTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            
+            if !ALVRClientApp.gStore.settings.targetHandsAtRoundtripLatency {
+                if #available(visionOS 2.0, *) {
+                    anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+                }
+                else {
+                    anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.renderingDeadline).timeInterval
+                }
             }
             
             WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)
@@ -804,6 +842,7 @@ class Renderer {
         let nearZ =  Double(drawable.depthRange.y)
         let farZ = Double(drawable.depthRange.x)
         let simdDeviceAnchor = deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4
+        let simdDeviceAnchor = WorldTracker.shared.floorCorrectionTransform.asFloat4x4() * (deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4)
         let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
         
         if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
@@ -833,6 +872,7 @@ class Renderer {
             reprojectedFramesInARow = 0;
 
             let noFramePose = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
+            let noFramePose = simdDeviceAnchor
             // TODO: draw a cool loading logo
             renderNothing(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
             
@@ -985,6 +1025,9 @@ class Renderer {
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
         renderEncoder.setDepthStencilState(depthStateAlways)
         renderEncoder.setDepthClipMode(.clamp)
+#if !targetEnvironment(simulator)
+        renderEncoder.setDepthClipMode(.clamp)
+#endif
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         
@@ -1039,6 +1082,9 @@ class Renderer {
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
         renderEncoder.setDepthStencilState(depthStateAlways)
         renderEncoder.setDepthClipMode(.clamp)
+#if !targetEnvironment(simulator)
+        renderEncoder.setDepthClipMode(.clamp)
+#endif
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
         renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
@@ -1103,6 +1149,10 @@ class Renderer {
         renderEncoder.setDepthStencilState(depthStateGreater)
         renderEncoder.setDepthClipMode(.clamp)
         
+#if !targetEnvironment(simulator)
+        renderEncoder.setDepthClipMode(.clamp)
+#endif
+
         WorldTracker.shared.lockPlaneAnchors()
         
         // Render planes
@@ -1229,7 +1279,10 @@ class Renderer {
                 fatalError("CVMetalTextureCacheCreateTextureFromImage \(err)")
             }
             guard let metalTexture = CVMetalTextureGetTexture(textureOut) else {
-                fatalError("CVMetalTextureCacheCreateTextureFromImage")
+                fatalError("CVMetalTextureGetTexture")
+            }
+            if !((metalTexture.debugDescription?.contains("decompressedPixelFormat") ?? true) || (metalTexture.debugDescription?.contains("isCompressed = 1") ?? true)) && EventHandler.shared.totalFramesRendered % 90*5 == 0 {
+                print("NO COMPRESSION ON VT FRAME!!!! AAAAAAAAA go file feedback again :(")
             }
             if !((metalTexture.debugDescription?.contains("decompressedPixelFormat") ?? true) || (metalTexture.debugDescription?.contains("isCompressed = 1") ?? true)) && EventHandler.shared.totalFramesRendered % 90*5 == 0 {
                 print("NO COMPRESSION ON VT FRAME!!!! AAAAAAAAA go file feedback again :(")
@@ -1260,6 +1313,9 @@ class Renderer {
         renderEncoder.setCullMode(.none)
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setDepthClipMode(.clamp)
+#if !targetEnvironment(simulator)
+        renderEncoder.setDepthClipMode(.clamp)
+#endif
         
         renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
 

@@ -95,12 +95,24 @@ struct ALVRClientApp: App {
     \n\
     • Improved thermals and battery life by fixing a bug which caused extremely high CPU utilization.\n\
     • Improved chroma keying to hopefully remove some black pixel false-positives.\n\
+    Hotfix\n\
+    \n\
+    • Resolved an issue where the client would not connect to older streamers. Please update your streamer as soon as you are able to, there's a lot of bugfixes this time around.\n\
+    \n\
+    What's changed?\n\
+    \n\
+    • Updated to client runtime v20.12.0. Please be sure to update your streamer.\n\
+    • System gestures can now be disabled under General.\n\
+    • Hand tracking prediction is now disabled by default for stability, but can be enabled in Advanced Settings.\n\
+    • Improved default settings to be more suitable for OLED panels: Blacks are less blocky, 10-bit encoding is on by default, and color correction is disabled by default.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
     • None yet.
+    • Fixed another minor view transform bug (headset transform was not the average of the two eye transforms).\n\
+    • Fixed hands not working correctly with SteamVR Input 2.0.\n\
     \n\
     ________________________________\n\
     \n\
@@ -108,6 +120,7 @@ struct ALVRClientApp: App {
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
     • The control center and other semitransparent windows may flicker in the right eye when in front of the streamed scene.
+    • Controllers may be unstable on streamer versions older than v20.11.0. Please update your streamer to resolve this issue.\n\
     
     """
     
@@ -252,6 +265,37 @@ struct ALVRClientApp: App {
                 system.startRenderLoop()
             }
         }
+            }
+            .persistentSystemOverlays(.hidden)
+            .environmentObject(ALVRClientApp.gStore)
+        }
+        .windowStyle(.plain)
+        .windowResizability(.contentMinSize)
+        
+        ImmersiveSpace(id: "DummyImmersiveSpace") {
+            CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
+                let renderer = DummyMetalRenderer(layerRenderer)
+                renderer.startRenderLoop()
+            }
+        }
+        .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
+        .immersionStyle(selection: .constant(.full), in: .full)
+        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
+
+        ImmersiveSpace(id: "RealityKitClient") {
+            RealityKitClientView()
+        }
+        .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
+
+        ImmersiveSpace(id: "MetalClient") {
+            CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
+                let system = MetalClientSystem(layerRenderer)
+                system.startRenderLoop()
+            }
+        }
+        .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
         .immersionStyle(selection: $clientImmersionStyle, in: .mixed, .full)
         .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
     }
