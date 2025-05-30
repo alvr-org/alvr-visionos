@@ -11,6 +11,13 @@ enum SettingsError: Error {
 
 struct SettingsCodables {
     struct EncoderConfig: Codable {
+        var encodingGamma: Float = 1.0
+        var enableHdr: Bool = false
+
+        enum CodingKeys: String, CodingKey {
+            case encodingGamma = "encoding_gamma"
+            case enableHdr = "enable_hdr"
+        }
         var encoding_gamma: Float = 1.0
         var enable_hdr: Bool = false
     }

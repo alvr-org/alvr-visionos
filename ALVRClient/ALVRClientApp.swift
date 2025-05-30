@@ -91,6 +91,10 @@ struct ALVRClientApp: App {
     \n\
     ________________________________\n\
     \n\
+    What's changed?\n\
+    \n\
+    • Improved thermals and battery life by fixing a bug which caused extremely high CPU utilization.\n\
+    • Improved chroma keying to hopefully remove some black pixel false-positives.\n\
     Hotfix\n\
     \n\
     • Resolved an issue where the client would not connect to older streamers. Please update your streamer as soon as you are able to, there's a lot of bugfixes this time around.\n\
@@ -106,6 +110,7 @@ struct ALVRClientApp: App {
     \n\
     Bug fixes:\n\
     \n\
+    • None yet.
     • Fixed another minor view transform bug (headset transform was not the average of the two eye transforms).\n\
     • Fixed hands not working correctly with SteamVR Input 2.0.\n\
     \n\
@@ -114,6 +119,7 @@ struct ALVRClientApp: App {
     Known issues:\n\
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
+    • The control center and other semitransparent windows may flicker in the right eye when in front of the streamed scene.
     • Controllers may be unstable on streamer versions older than v20.11.0. Please update your streamer to resolve this issue.\n\
     
     """
@@ -233,6 +239,32 @@ struct ALVRClientApp: App {
                 Task {
                     saveSettings()
                 }
+            }
+            .persistentSystemOverlays(.hidden)
+            .environmentObject(ALVRClientApp.gStore)
+        }
+        .windowStyle(.plain)
+        .windowResizability(.contentMinSize)
+        
+        ImmersiveSpace(id: "DummyImmersiveSpace") {
+            CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
+                let renderer = DummyMetalRenderer(layerRenderer)
+                renderer.startRenderLoop()
+            }
+        }.immersionStyle(selection: .constant(.full), in: .full)
+        
+        ImmersiveSpace(id: "RealityKitClient") {
+            RealityKitClientView()
+        }
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+        .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
+        
+        ImmersiveSpace(id: "MetalClient") {
+            CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
+                let system = MetalClientSystem(layerRenderer)
+                system.startRenderLoop()
+            }
+        }
             }
             .persistentSystemOverlays(.hidden)
             .environmentObject(ALVRClientApp.gStore)

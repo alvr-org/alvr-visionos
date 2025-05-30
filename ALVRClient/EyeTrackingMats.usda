@@ -50,6 +50,7 @@ def Xform "Root"
             float3 outputs:position
             float outputs:timeSinceHoverStart
             float2 ui:nodegraph:node:pos = (-368.625, 130.875)
+            int ui:nodegraph:node:stackingOrder = 650
             int ui:nodegraph:node:stackingOrder = 1104
         }
 
@@ -80,6 +81,7 @@ def Xform "Root"
             float3 inputs:in2 = (0.5, 0.5, 0)
             float3 outputs:out
             float2 ui:nodegraph:node:pos = (152.375, 236.75)
+            int ui:nodegraph:node:stackingOrder = 1076
             int ui:nodegraph:node:stackingOrder = 1126
         }
 
@@ -90,6 +92,7 @@ def Xform "Root"
             float3 inputs:in2 = (1, 1, 1)
             float3 outputs:out
             float2 ui:nodegraph:node:pos = (-20.875, 233.25)
+            int ui:nodegraph:node:stackingOrder = 1074
             int ui:nodegraph:node:stackingOrder = 1125
         }
 
@@ -102,6 +105,7 @@ def Xform "Root"
             float inputs:in3 = -0.5
             float3 outputs:out
             float2 ui:nodegraph:node:pos = (-62.1875, 50.3125)
+            int ui:nodegraph:node:stackingOrder = 677
             int ui:nodegraph:node:stackingOrder = 1122
         }
 
@@ -109,6 +113,10 @@ def Xform "Root"
         {
             uniform token info:id = "ND_multiply_vector3"
             float3 inputs:in1.connect = </Root/HoverEdgeTracker/Combine3.outputs:out>
+            float3 inputs:in2 = (0.04, 0.04, 0.04)
+            float3 outputs:out
+            float2 ui:nodegraph:node:pos = (114.625, 100.125)
+            int ui:nodegraph:node:stackingOrder = 1078
             float3 inputs:in2 = (0.025, 0.025, 0.025)
             float3 outputs:out
             float2 ui:nodegraph:node:pos = (114.625, 100.125)
@@ -127,6 +135,11 @@ def Xform "Root"
         def Shader "Step"
         {
             uniform token info:id = "ND_realitykit_step_vector2"
+            float2 inputs:edge = (0.8, 0)
+            float2 inputs:in.connect = </Root/HoverEdgeTracker/Texcoord.outputs:out>
+            float2 outputs:out
+            float2 ui:nodegraph:node:pos = (-78.82069, 427.7709)
+            int ui:nodegraph:node:stackingOrder = 1081
             float2 inputs:edge = (0.725, 0)
             float2 inputs:in.connect = </Root/HoverEdgeTracker/Texcoord.outputs:out>
             float2 outputs:out

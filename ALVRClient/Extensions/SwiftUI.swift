@@ -3,6 +3,9 @@
 //
 
 import SwiftUI
+
+extension View {
+    @ViewBuilder
 import CompositorServices
 
 extension Scene {

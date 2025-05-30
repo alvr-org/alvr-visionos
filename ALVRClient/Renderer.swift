@@ -124,6 +124,9 @@ class Renderer {
         guard let settings = Settings.getAlvrSettings() else {
             fatalError("streaming started: failed to retrieve alvr settings")
         }
+            
+        encodingGamma = settings.video.encoderConfig.encodingGamma
+        hdrEnabled = settings.video.encoderConfig.enableHdr
 
         encodingGamma = EventHandler.shared.encodingGamma
         hdrEnabled = EventHandler.shared.enableHdr
@@ -203,6 +206,8 @@ class Renderer {
         }
         print("rebuildRenderPipelines")
             
+        encodingGamma = settings.video.encoderConfig.encodingGamma
+        hdrEnabled = settings.video.encoderConfig.enableHdr
         encodingGamma = EventHandler.shared.encodingGamma
         hdrEnabled = EventHandler.shared.enableHdr
         if hdrEnabled {
@@ -214,6 +219,7 @@ class Renderer {
             currentDrawableRenderColorFormat = renderColorFormatSDR
         }
             
+        let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveatedEncoding)
         let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveated_encoding)
         videoFramePipelineState_YpCbCrBiPlanar = try! buildRenderPipelineForVideoFrameWithDevice(
                             device: device,
@@ -380,6 +386,10 @@ class Renderer {
         pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
         pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
 
+
+        pipelineDescriptor.colorAttachments[0].pixelFormat = colorFormat
+        pipelineDescriptor.colorAttachments[0].isBlendingEnabled = false
+
         pipelineDescriptor.maxVertexAmplificationCount = viewCount
         
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
@@ -542,6 +552,7 @@ class Renderer {
             let physSizeR = vrr.physicalSize(layer: 1)
             let physCoordsR = vrr.physicalCoordinates(screenCoordinates: MTLCoordinate2D(x: eyeCenterX, y: eyeCenterY), layer: 1)
             
+            print(Float(physCoordsL.x) / Float(physSizeL.width), Float(physCoordsL.y) / Float(physSizeL.height), ":::", Float(physCoordsR.x) / Float(physSizeR.width), Float(physCoordsR.y) / Float(physSizeR.height))
             print(physSizeL, physSizeR, vrr.screenSize.width, vrr.screenSize.height, ":::", Float(physCoordsL.x) / Float(physSizeL.width), Float(physCoordsL.y) / Float(physSizeL.height), ":::", Float(physCoordsR.x) / Float(physSizeR.width), Float(physCoordsR.y) / Float(physSizeR.height))
         }
     }
@@ -631,6 +642,26 @@ class Renderer {
             return
         }
         
+        // HACK: for some reason Apple's view transforms' positional component has this really weird drift downwards at the start.
+        // It seems to drift from the correct position, to an incorrect position 2.6cm away.
+        // Unfortunately, for gazes to be accurate we need to know the real eye positions, so we grab this quickly at the start.
+        if WorldTracker.shared.averageViewTransformPositionalComponent == simd_float3() {
+            var averageViewTransformPositionalComponent = simd_float4()
+            for view in drawable.views {
+                averageViewTransformPositionalComponent += view.transform.columns.3
+            }
+            
+            averageViewTransformPositionalComponent /= Float(drawable.views.count)
+            averageViewTransformPositionalComponent.w = 0.0
+            
+            WorldTracker.shared.averageViewTransformPositionalComponent = averageViewTransformPositionalComponent.asFloat3()
+#if !targetEnvironment(simulator)
+            print("Average offset shared between eyes:", WorldTracker.shared.averageViewTransformPositionalComponent)
+#endif
+        }
+        
+        if queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame!.timestamp {
+            alvr_report_compositor_start(queuedFrame!.timestamp)
         let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
         defer { nalViewsPtr.deallocate() }
         
@@ -667,6 +698,35 @@ class Renderer {
                 EventHandler.shared.viewTransforms = [fixTransform(drawable.views[0].transform), drawable.views.count > 1 ? fixTransform(drawable.views[1].transform) : fixTransform(drawable.views[0].transform)]
                 EventHandler.shared.lastIpd = ipd
                 
+                if #unavailable(visionOS 2.0) {
+                    for i in 0..<EventHandler.shared.viewTransforms.count {
+                       EventHandler.shared.viewTransforms[i].columns.3 -= WorldTracker.shared.averageViewTransformPositionalComponent.asFloat4()
+                    }
+                    
+                    var averageViewTransformPositionalComponent = simd_float4()
+                    for view in drawable.views {
+                        averageViewTransformPositionalComponent += view.transform.columns.3
+                    }
+                    
+                    // HACK: for some reason Apple's view transforms' positional component has this really weird drift downwards at the start.
+                    // It seems to drift from the correct position, to an incorrect position 2.6cm away.
+                    // For consistency, we take the first transform and use that.
+                    averageViewTransformPositionalComponent /= Float(drawable.views.count)
+                    averageViewTransformPositionalComponent.w = 0.0
+                
+                
+                    for i in 0..<EventHandler.shared.viewTransforms.count {
+                       EventHandler.shared.viewTransforms[i].columns.3 -= averageViewTransformPositionalComponent
+                       EventHandler.shared.viewTransforms[i].columns.3 += WorldTracker.shared.averageViewTransformPositionalComponent.asFloat4()
+                    }
+                }
+            }
+            
+            var needsPipelineRebuild = false
+            if let otherSettings = Settings.getAlvrSettings() {
+                if otherSettings.video.encoderConfig.encodingGamma != encodingGamma {
+                    needsPipelineRebuild = true
+                }
                 WorldTracker.shared.sendViewParams(viewTransforms:  EventHandler.shared.viewTransforms, viewFovs: EventHandler.shared.viewFovs)
             }
             
@@ -722,6 +782,11 @@ class Renderer {
             let viewFovs = EventHandler.shared.viewFovs
             let viewTransforms = EventHandler.shared.viewTransforms
             
+            let targetTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let reportedTargetTimestamp = vsyncTime
+            var anchorTimestamp = vsyncTime + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            if #available(visionOS 2.0, *) {
+                //anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
             let targetTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
             var anchorTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
@@ -776,6 +841,7 @@ class Renderer {
         let viewTangents = drawable.views.map { $0.tangents }
         let nearZ =  Double(drawable.depthRange.y)
         let farZ = Double(drawable.depthRange.x)
+        let simdDeviceAnchor = deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4
         let simdDeviceAnchor = WorldTracker.shared.floorCorrectionTransform.asFloat4x4() * (deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4)
         let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
         
@@ -805,6 +871,7 @@ class Renderer {
         {
             reprojectedFramesInARow = 0;
 
+            let noFramePose = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)?.originFromAnchorTransform ?? matrix_identity_float4x4
             let noFramePose = simdDeviceAnchor
             // TODO: draw a cool loading logo
             renderNothing(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
@@ -957,6 +1024,7 @@ class Renderer {
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
         renderEncoder.setDepthStencilState(depthStateAlways)
+        renderEncoder.setDepthClipMode(.clamp)
 #if !targetEnvironment(simulator)
         renderEncoder.setDepthClipMode(.clamp)
 #endif
@@ -1013,6 +1081,7 @@ class Renderer {
         renderEncoder.setFrontFacing(.counterClockwise)
         renderEncoder.setRenderPipelineState(videoFrameDepthPipelineState)
         renderEncoder.setDepthStencilState(depthStateAlways)
+        renderEncoder.setDepthClipMode(.clamp)
 #if !targetEnvironment(simulator)
         renderEncoder.setDepthClipMode(.clamp)
 #endif
@@ -1078,6 +1147,8 @@ class Renderer {
         
         renderEncoder.setRenderPipelineState(pipelineState)
         renderEncoder.setDepthStencilState(depthStateGreater)
+        renderEncoder.setDepthClipMode(.clamp)
+        
 #if !targetEnvironment(simulator)
         renderEncoder.setDepthClipMode(.clamp)
 #endif
@@ -1213,6 +1284,9 @@ class Renderer {
             if !((metalTexture.debugDescription?.contains("decompressedPixelFormat") ?? true) || (metalTexture.debugDescription?.contains("isCompressed = 1") ?? true)) && EventHandler.shared.totalFramesRendered % 90*5 == 0 {
                 print("NO COMPRESSION ON VT FRAME!!!! AAAAAAAAA go file feedback again :(")
             }
+            if !((metalTexture.debugDescription?.contains("decompressedPixelFormat") ?? true) || (metalTexture.debugDescription?.contains("isCompressed = 1") ?? true)) && EventHandler.shared.totalFramesRendered % 90*5 == 0 {
+                print("NO COMPRESSION ON VT FRAME!!!! AAAAAAAAA go file feedback again :(")
+            }
             renderEncoder.setFragmentTexture(metalTexture, index: i)
         }
         
@@ -1238,6 +1312,7 @@ class Renderer {
         
         renderEncoder.setCullMode(.none)
         renderEncoder.setFrontFacing(.counterClockwise)
+        renderEncoder.setDepthClipMode(.clamp)
 #if !targetEnvironment(simulator)
         renderEncoder.setDepthClipMode(.clamp)
 #endif

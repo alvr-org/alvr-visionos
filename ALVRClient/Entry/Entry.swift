@@ -297,6 +297,7 @@ struct Entry: View {
                 
                 if eventHandler.hostname != "" && eventHandler.IP != "" {
                     let columns = [
+                        GridItem(.fixed(100), alignment: .trailing),
                         GridItem(.fixed(150), alignment: .trailing),
                         GridItem(.fixed(150), alignment: .leading)
                     ]
@@ -306,6 +307,8 @@ struct Entry: View {
                         Text(eventHandler.hostname)
                         Text("IP:")
                         Text(eventHandler.IP)
+                        Text("Protocol:")
+                        Text(eventHandler.getMdnsProtocolId())
                         Text("Client Protocol:")
                         Text(eventHandler.getMdnsProtocolId())
                         Text("Streamer Version:")
@@ -322,6 +325,7 @@ struct Entry: View {
                     .padding(.bottom)
                 }
             }
+            .frame(minHeight: 150)
             .frame(minHeight: 170)
         }
         .frame(minWidth: 650, maxWidth: 650)

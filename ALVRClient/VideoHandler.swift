@@ -6,6 +6,7 @@ import Foundation
 import VideoToolbox
 import AVKit
 
+let forceFastSecretTextureFormats = true
 #if !targetEnvironment(simulator)
 let forceFastSecretTextureFormats = true
 #else
@@ -16,6 +17,111 @@ let H264_NAL_TYPE_SPS = 7
 let HEVC_NAL_TYPE_VPS: UInt8 = 32
 let HEVC_NAL_TYPE_SPS: UInt8 = 33
 let HEVC_NAL_TYPE_PPS: UInt8 = 34
+
+//
+// Non-conclusive list of interesting private Metal pixel formats
+//
+let MTLPixelFormatYCBCR8_420_2P: UInt = 500
+let MTLPixelFormatYCBCR8_422_1P: UInt = 501
+let MTLPixelFormatYCBCR8_422_2P: UInt = 502
+let MTLPixelFormatYCBCR8_444_2P: UInt = 503
+let MTLPixelFormatYCBCR10_444_1P: UInt = 504
+let MTLPixelFormatYCBCR10_420_2P: UInt = 505
+let MTLPixelFormatYCBCR10_422_2P: UInt = 506
+let MTLPixelFormatYCBCR10_444_2P: UInt = 507
+let MTLPixelFormatYCBCR10_420_2P_PACKED: UInt = 508
+let MTLPixelFormatYCBCR10_422_2P_PACKED: UInt = 509
+let MTLPixelFormatYCBCR10_444_2P_PACKED: UInt = 510
+
+let MTLPixelFormatYCBCR8_420_2P_sRGB: UInt = 520
+let MTLPixelFormatYCBCR8_422_1P_sRGB: UInt = 521
+let MTLPixelFormatYCBCR8_422_2P_sRGB: UInt = 522
+let MTLPixelFormatYCBCR8_444_2P_sRGB: UInt = 523
+let MTLPixelFormatYCBCR10_444_1P_sRGB: UInt = 524
+let MTLPixelFormatYCBCR10_420_2P_sRGB: UInt = 525
+let MTLPixelFormatYCBCR10_422_2P_sRGB: UInt = 526
+let MTLPixelFormatYCBCR10_444_2P_sRGB: UInt = 527
+let MTLPixelFormatYCBCR10_420_2P_PACKED_sRGB: UInt = 528
+let MTLPixelFormatYCBCR10_422_2P_PACKED_sRGB: UInt = 529
+let MTLPixelFormatYCBCR10_444_2P_PACKED_sRGB: UInt = 530
+
+let MTLPixelFormatRGB8_420_2P: UInt = 540
+let MTLPixelFormatRGB8_422_2P: UInt = 541
+let MTLPixelFormatRGB8_444_2P: UInt = 542
+let MTLPixelFormatRGB10_420_2P: UInt = 543
+let MTLPixelFormatRGB10_422_2P: UInt = 544
+let MTLPixelFormatRGB10_444_2P: UInt = 545
+let MTLPixelFormatRGB10_420_2P_PACKED: UInt = 546
+let MTLPixelFormatRGB10_422_2P_PACKED: UInt = 547
+let MTLPixelFormatRGB10_444_2P_PACKED: UInt = 548
+
+let MTLPixelFormatRGB10A8_2P_XR10: UInt = 550
+let MTLPixelFormatRGB10A8_2P_XR10_sRGB: UInt = 551
+let MTLPixelFormatBGRA10_XR: UInt = 552
+let MTLPixelFormatBGRA10_XR_sRGB: UInt = 553
+let MTLPixelFormatBGR10_XR: UInt = 554
+let MTLPixelFormatBGR10_XR_sRGB: UInt = 555
+let MTLPixelFormatRGBA16Float_XR: UInt = 556
+
+let MTLPixelFormatYCBCRA8_444_1P: UInt = 560
+
+let MTLPixelFormatYCBCR12_420_2P: UInt = 570
+let MTLPixelFormatYCBCR12_422_2P: UInt = 571
+let MTLPixelFormatYCBCR12_444_2P: UInt = 572
+let MTLPixelFormatYCBCR12_420_2P_PQ: UInt = 573
+let MTLPixelFormatYCBCR12_422_2P_PQ: UInt = 574
+let MTLPixelFormatYCBCR12_444_2P_PQ: UInt = 575
+let MTLPixelFormatR10Unorm_X6: UInt = 576
+let MTLPixelFormatR10Unorm_X6_sRGB: UInt = 577
+let MTLPixelFormatRG10Unorm_X12: UInt = 578
+let MTLPixelFormatRG10Unorm_X12_sRGB: UInt = 579
+let MTLPixelFormatYCBCR12_420_2P_PACKED: UInt = 580
+let MTLPixelFormatYCBCR12_422_2P_PACKED: UInt = 581
+let MTLPixelFormatYCBCR12_444_2P_PACKED: UInt = 582
+let MTLPixelFormatYCBCR12_420_2P_PACKED_PQ: UInt = 583
+let MTLPixelFormatYCBCR12_422_2P_PACKED_PQ: UInt = 584
+let MTLPixelFormatYCBCR12_444_2P_PACKED_PQ: UInt = 585
+let MTLPixelFormatRGB10A2Unorm_sRGB: UInt = 586
+let MTLPixelFormatRGB10A2Unorm_PQ: UInt = 587
+let MTLPixelFormatR10Unorm_PACKED: UInt = 588
+let MTLPixelFormatRG10Unorm_PACKED: UInt = 589
+let MTLPixelFormatYCBCR10_444_1P_XR: UInt = 590
+let MTLPixelFormatYCBCR10_420_2P_XR: UInt = 591
+let MTLPixelFormatYCBCR10_422_2P_XR: UInt = 592
+let MTLPixelFormatYCBCR10_444_2P_XR: UInt = 593
+let MTLPixelFormatYCBCR10_420_2P_PACKED_XR: UInt = 594
+let MTLPixelFormatYCBCR10_422_2P_PACKED_XR: UInt = 595
+let MTLPixelFormatYCBCR10_444_2P_PACKED_XR: UInt = 596
+let MTLPixelFormatYCBCR12_420_2P_XR: UInt = 597
+let MTLPixelFormatYCBCR12_422_2P_XR: UInt = 598
+let MTLPixelFormatYCBCR12_444_2P_XR: UInt = 599
+let MTLPixelFormatYCBCR12_420_2P_PACKED_XR: UInt = 600
+let MTLPixelFormatYCBCR12_422_2P_PACKED_XR: UInt = 601
+let MTLPixelFormatYCBCR12_444_2P_PACKED_XR: UInt = 602
+let MTLPixelFormatR12Unorm_X4: UInt = 603
+let MTLPixelFormatR12Unorm_X4_PQ: UInt = 604
+let MTLPixelFormatRG12Unorm_X8: UInt = 605
+let MTLPixelFormatR10Unorm_X6_PQ: UInt = 606
+//
+// end Metal pixel formats
+//
+
+// https://github.com/WebKit/WebKit/blob/f86d3400c875519b3f3c368f1ea9a37ed8a1d11b/Source/WebGPU/WebGPU/BindGroup.mm#L43
+let kCVPixelFormatType_420YpCbCr10PackedBiPlanarFullRange = 0x70663230 as OSType // pf20
+let kCVPixelFormatType_422YpCbCr10PackedBiPlanarFullRange = 0x70663232 as OSType // pf22
+let kCVPixelFormatType_444YpCbCr10PackedBiPlanarFullRange = 0x70663434 as OSType // pf44
+
+let kCVPixelFormatType_420YpCbCr10PackedBiPlanarVideoRange = 0x70343230 as OSType // p420
+let kCVPixelFormatType_422YpCbCr10PackedBiPlanarVideoRange = 0x70343232 as OSType // p422
+let kCVPixelFormatType_444YpCbCr10PackedBiPlanarVideoRange = 0x70343434 as OSType // p444
+
+// Apparently kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange is known as kCVPixelFormatType_AGX_420YpCbCr8BiPlanarVideoRange in WebKit.
+
+// Other formats Apple forgot
+let kCVPixelFormatType_Lossy_420YpCbCr10PackedBiPlanarFullRange = 0x2D786630 as OSType // -xf0
+let kCVPixelFormatType_Lossless_422YpCbCr10PackedBiPlanarFullRange = 0x26786632 as OSType // &xf2
+let kCVPixelFormatType_Lossy_422YpCbCr10PackedBiPlanarFullRange = 0x2D786632 as OSType // -xf2
+let kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange_compat = 0x26786630 as OSType // &xf0
 
 //
 // Non-conclusive list of interesting private Metal pixel formats
@@ -462,6 +568,28 @@ struct VideoHandler {
             }
         }
     }
+
+    static func pollNal() -> (UInt64, [AlvrViewParams], Data)? {
+        let nalLength = alvr_poll_nal(nil, nil, nil)
+        if nalLength == 0 {
+            return nil
+        }
+        let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength*16)) // HACK: idk how to handle this, there's a ToCToU here
+        let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
+        defer { nalBuffer.deallocate() }
+        defer { nalViewsPtr.deallocate() }
+        var nalTimestamp:UInt64 = 0
+        let realNalLength = alvr_poll_nal(&nalTimestamp, nalViewsPtr, nalBuffer.baseAddress)
+        
+        let nalViews = [nalViewsPtr[0], nalViewsPtr[1]]
+        
+        let ret = (nalTimestamp, nalViews, Data(bytes: nalBuffer.baseAddress!, count: Int(realNalLength & 0xFFFFFFFF)))
+        return ret
+    }
+    
+    static func abandonAllPendingNals() {
+        while let _ = VideoHandler.pollNal() {}
+    }
     
     static func currentKeyWindow() -> UIWindow? {
         UIApplication.shared.connectedScenes
@@ -485,6 +613,7 @@ struct VideoHandler {
         }
     }
     
+    static func createVideoDecoder(initialNals: Data, codec: Int) -> (VTDecompressionSession?, CMFormatDescription?) {
     static func createVideoDecoder(initialNals: UnsafeMutableBufferPointer<UInt8>, codec: Int) -> (VTDecompressionSession?, CMFormatDescription?) {
         let nalHeader:[UInt8] = [0x00, 0x00, 0x00, 0x01]
         var videoFormat:CMFormatDescription? = nil
@@ -503,6 +632,7 @@ struct VideoHandler {
                 let parameterSetSizes = [nalLength0, nalLength1]
                 return CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2, parameterSetPointers: parameterSetPointers, parameterSetSizes: parameterSetSizes, nalUnitHeaderLength: 4, formatDescriptionOut: &videoFormat)
             }
+        } else if (codec == HEVC_NAL_TYPE_VPS) {
         } else if (codec == ALVR_CODEC_HEVC.rawValue) {
             let (vps, sps, pps) = extractParameterSets(from: initialNals)
             
@@ -579,6 +709,16 @@ struct VideoHandler {
                 }
             }
         }
+
+        if err != 0 {
+            print("format?!")
+            return (nil, nil)
+        }
+
+        if videoFormat == nil {
+            return (nil, nil)
+        }
+
         else if codec == ALVR_CODEC_AV1.rawValue {
             print("UNHANDLED/WIP AV1!!")
             
@@ -653,6 +793,7 @@ struct VideoHandler {
         var decompressionSession:VTDecompressionSession? = nil
         err = VTDecompressionSessionCreate(allocator: nil, formatDescription: videoFormat!, decoderSpecification: videoDecoderSpecification as CFDictionary, imageBufferAttributes: destinationImageBufferAttributes as CFDictionary, outputCallback: nil, decompressionSessionOut: &decompressionSession)
         if err != 0 {
+            print("format?!")
             print("VTDecompressionSessionCreate err?! \(err)")
             return (nil, nil)
         }
@@ -773,6 +914,8 @@ struct VideoHandler {
     }
     
     // Based on https://webrtc.googlesource.com/src/+/refs/heads/main/sdk/objc/components/video_codec/nalu_rewriter.cc
+    private static func annexBBufferToCMSampleBuffer(buffer: Data, videoFormat: CMFormatDescription) -> CMSampleBuffer? {
+        // no SPS/PPS, handled with the initial nals
     private static func annexBBufferToCMSampleBuffer(buffer: UnsafeMutableBufferPointer<UInt8>, videoFormat: CMFormatDescription) -> CMSampleBuffer? {
         let (naluIndices, elgibleForModifyInPlace) = findNaluIndices(bufferBounded: buffer)
         
@@ -811,6 +954,7 @@ struct VideoHandler {
             return nil
         }
         
+        //dataPtr.withMemoryRebound(to: UInt8.self, capacity: blockBufferSize) { pointer in
         let pointer = UnsafeMutablePointer<UInt8>(OpaquePointer(dataPtr))!
         var offset = 0
         
@@ -873,6 +1017,7 @@ struct VideoHandler {
             print("Failed in annexBBufferToCMSampleBuffer")
             return
         }
+        err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
         err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: VTDecodeFrameFlags.init(rawValue: 0), infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
             //print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
             //print("status: \(status), image_nil?: \(imageBuffer == nil), infoFlags: \(infoFlags)")
