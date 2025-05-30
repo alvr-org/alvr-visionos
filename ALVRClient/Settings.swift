@@ -27,6 +27,10 @@ struct SettingsCodables {
         @DefaultFalse var steamvr_input_2_0: Bool
     }
     
+    struct HandTrackingInteraction: Codable {
+        @DefaultFalse var only_touch: Bool
+    }
+    
     struct ControllersConfig: Codable {
         @DefaultTrue var tracked: Bool
         //@DefaultTrue var enable_skeleton: Bool
@@ -36,6 +40,7 @@ struct SettingsCodables {
         @DefaultEmptyArray var left_hand_tracking_position_offset: [Float]
         @DefaultEmptyArray var left_hand_tracking_rotation_offset: [Float]
         @OptionSwitch var hand_skeleton: HandSkeletonConfig?
+        @OptionSwitch var hand_tracking_interaction: HandTrackingInteraction?
         @DefaultEmptyString var emulation_mode: String
     }
     
