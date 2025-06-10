@@ -22,6 +22,7 @@
 		D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */ = {isa = PBXBuildFile; fileRef = D68FA8082B742F6F0052B7FF /* FFR.swift */; };
 		E702FBDC2B899B8700EE75D0 /* GlobalSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */; };
 		E70C9AEA2C9377F50035B4F9 /* Codable.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70C9AE92C9377F20035B4F9 /* Codable.swift */; };
+		E71352CE2DF784C60079F12B /* GCController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71352CD2DF784BF0079F12B /* GCController.swift */; };
 		E71DEF972C18D478008A2074 /* RealityKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF932C18D325008A2074 /* RealityKit.swift */; };
 		E71DEF982C18D478008A2074 /* SwiftUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF942C18D325008A2074 /* SwiftUI.swift */; };
 		E71DEF9A2C18D4B4008A2074 /* ALVRTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF992C18D4B4008A2074 /* ALVRTypes.swift */; };
@@ -99,6 +100,7 @@
 		D68FA8082B742F6F0052B7FF /* FFR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFR.swift; sourceTree = "<group>"; };
 		E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSettings.swift; sourceTree = "<group>"; };
 		E70C9AE92C9377F20035B4F9 /* Codable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codable.swift; sourceTree = "<group>"; };
+		E71352CD2DF784BF0079F12B /* GCController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GCController.swift; sourceTree = "<group>"; };
 		E71DEF932C18D325008A2074 /* RealityKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKit.swift; sourceTree = "<group>"; };
 		E71DEF942C18D325008A2074 /* SwiftUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUI.swift; sourceTree = "<group>"; };
 		E71DEF992C18D4B4008A2074 /* ALVRTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ALVRTypes.swift; sourceTree = "<group>"; };
@@ -226,6 +228,7 @@
 		E71DEF962C18D425008A2074 /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
+				E71352CD2DF784BF0079F12B /* GCController.swift */,
 				E70C9AE92C9377F20035B4F9 /* Codable.swift */,
 				E71DEF932C18D325008A2074 /* RealityKit.swift */,
 				E71DEF942C18D325008A2074 /* SwiftUI.swift */,
@@ -382,6 +385,7 @@
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
 				E7D606032C1B5D39009E3343 /* RealityKitEyeTrackingSystem.swift in Sources */,
 				E71DEF9C2C18D4DA008A2074 /* simd.swift in Sources */,
+				E71352CE2DF784C60079F12B /* GCController.swift in Sources */,
 				8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -544,6 +548,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ALVR;
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "For connecting to ALVR server on local network.";
@@ -586,6 +591,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "$(TARGET_NAME)/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ALVR;
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "For connecting to ALVR server on local network.";

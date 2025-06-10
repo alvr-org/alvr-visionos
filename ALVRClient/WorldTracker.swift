@@ -72,14 +72,21 @@ func jointIdxIsMoreMobile(_ idx: Int) -> Bool {
     }
 }
 
+#if XCODE_BETA_26
+//@available(visionOS 26.0, *)
+#endif
 class WorldTracker {
     static let shared = WorldTracker()
     
     let arSession: ARKitSession!
-    let worldTracking: WorldTrackingProvider!
-    let handTracking: HandTrackingProvider!
-    let sceneReconstruction: SceneReconstructionProvider!
-    let planeDetection: PlaneDetectionProvider!
+    var worldTracking: WorldTrackingProvider!
+    var handTracking: HandTrackingProvider!
+    var sceneReconstruction: SceneReconstructionProvider!
+    var planeDetection: PlaneDetectionProvider!
+#if XCODE_BETA_26
+    //var accessoryTracking: AccessoryTrackingProvider?
+    var accessoryTracking: (any DataProvider)?
+#endif
     
     // Playspace and boundaries state
     var planeAnchors: [UUID: PlaneAnchor] = [:]
@@ -246,24 +253,22 @@ class WorldTracker {
     var lastHeadPose: AlvrPose? = nil
     var lastHeadTimestamp: Double = 0.0
     
+    var leftControllerPose: simd_float4x4? = nil
+    var rightControllerPose: simd_float4x4? = nil
+    
+    var trackedAccessories: [GCController] = []
+    var arRunning = false
+    
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
         self.worldTracking = worldTracking
         self.handTracking = handTracking
         self.sceneReconstruction = sceneReconstruction
         self.planeDetection = planeDetection
+        self.accessoryTracking = nil
         
         Task {
-            await processReconstructionUpdates()
-        }
-        Task {
-            await processPlaneUpdates()
-        }
-        Task {
-            await processWorldTrackingUpdates()
-        }
-        Task {
-            await processHandTrackingUpdates()
+            await monitorARKitSessionEvents()
         }
     }
     
@@ -279,9 +284,59 @@ class WorldTracker {
     }
     
     func initializeAr() async  {
+        print("initializeAr")
         resetPlayspace()
         
-        let authStatus = await arSession.requestAuthorization(for: [.handTracking, .worldSensing])
+        if self.arRunning {
+            self.arSession.stop()
+            self.arRunning = false
+        }
+        
+        worldTracking = WorldTrackingProvider()
+        handTracking = HandTrackingProvider()
+        sceneReconstruction = SceneReconstructionProvider()
+        planeDetection =  PlaneDetectionProvider(alignments: [.horizontal, .vertical])
+
+        var authStatus: [ARKitSession.AuthorizationType : ARKitSession.AuthorizationStatus] = [:]
+#if XCODE_BETA_26
+        if #available(visionOS 26.0, *) {
+            authStatus = await arSession.requestAuthorization(for: [.handTracking, .worldSensing, .accessoryTracking])
+        }
+        else {
+            authStatus = await arSession.requestAuthorization(for: [.handTracking, .worldSensing])
+        }
+#else
+        authStatus = await arSession.requestAuthorization(for: [.handTracking, .worldSensing])
+#endif
+
+        // TODO: disconnects?
+        if #available(visionOS 26.0, *) {
+#if XCODE_BETA_26
+            if AccessoryTrackingProvider.isSupported {
+                print("AAAAAA accessories supported")
+                
+                print(GCController.controllers())
+                
+                var accessories: [Accessory] = []
+                for spatialController in GCController.spatialControllers() {
+                    do {
+                        let accessory = try await Accessory(device: spatialController)
+                        accessories.append(accessory)
+                    } catch {
+                        print("Error during accessory initialization: \(error)")
+                    }
+                }
+                print("AAAAAA", accessories)
+            
+                self.accessoryTracking = AccessoryTrackingProvider(accessories: accessories)
+            }
+            else {
+                print("AAAAAA accessories not supported")
+            }
+#endif
+        }
+        
+        // TODO: check for authorization changes
         
         var trackingList: [any DataProvider] = [worldTracking]
         if authStatus[.handTracking] == .allowed {
@@ -291,11 +346,41 @@ class WorldTracker {
             trackingList.append(sceneReconstruction)
             trackingList.append(planeDetection)
         }
+#if XCODE_BETA_26
+        if #available(visionOS 26.0, *) {
+            if accessoryTracking == nil {
+                print("Lost the race, accessoryTracking is nil!")
+            }
+            if authStatus[.accessoryTracking] != .allowed {
+                print("Accessory tracking is disallowed.")
+            }
+            if authStatus[.accessoryTracking] == .allowed && accessoryTracking != nil {
+                trackingList.append(accessoryTracking!)
+            }
+        }
+#endif
         
         do {
             try await arSession.run(trackingList)
+            self.arRunning = true
         } catch {
             fatalError("Failed to initialize ARSession")
+        }
+        
+        Task {
+            await processReconstructionUpdates()
+        }
+        Task {
+            await processPlaneUpdates()
+        }
+        Task {
+            await processWorldTrackingUpdates()
+        }
+        Task {
+            await processHandTrackingUpdates()
+        }
+        Task {
+            await processAccessoryTrackingUpdates()
         }
     }
     
@@ -450,6 +535,68 @@ class WorldTracker {
         }
     }
     
+    func processAccessoryTrackingUpdates() async {
+        while self.accessoryTracking == nil {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+#if XCODE_BETA_26
+        if #available(visionOS 26.0, *) {
+            if let accessories = self.accessoryTracking as! AccessoryTrackingProvider? {
+                for await update in accessories.anchorUpdates {
+                    switch update.event {
+                    case .added, .updated:
+                        if update.anchor.accessory.inherentChirality == .left {
+                            leftControllerPose = update.anchor.originFromAnchorTransform
+                        }
+                        else if update.anchor.accessory.inherentChirality == .right {
+                            rightControllerPose = update.anchor.originFromAnchorTransform
+                        }
+                        print("AAAAAA", update.timestamp, update.anchor)
+                        //lastHandsUpdatedTs = update.timestamp
+                        break
+                    case .removed:
+                        break
+                    }
+                }
+            }
+        }
+        
+#endif
+    }
+    
+    private func monitorARKitSessionEvents() async {
+        for await event in arSession.events {
+            switch event {
+            case .dataProviderStateChanged(_, let newState, let error):
+                if newState == .stopped {
+                    if let error {
+                        print("An error occurred: \(error)")
+                        //state = .arkitSessionError
+                    }
+                    //await self.initializeAr()
+                }
+            case .authorizationChanged(let type, let authorizationStatus):
+#if XCODE_BETA_26
+                if #available(visionOS 26.0, *) {
+                    if type == .accessoryTracking {
+                        if authorizationStatus == .denied {
+                            //state = .accessoryTrackingNotAuthorized
+                        } else if authorizationStatus == .allowed {
+                            //state = .startingUp
+                            // Start tracking all connected spatial controllers as soon
+                            // as the user grants accessory-tracking authorization.
+                            //trackAllConnectedSpatialControllers()
+                            await self.initializeAr()
+                        }
+                    }
+                }
+#endif
+            default:
+                break
+            }
+        }
+    }
+    
     func updatePlane(_ anchor: PlaneAnchor) {
         lockPlaneAnchors()
         planeAnchors[anchor.id] = anchor
@@ -597,6 +744,15 @@ class WorldTracker {
 
     func handAnchorToAlvrDeviceMotion(_ hand: HandAnchor) -> AlvrDeviceMotion {
         let device_id = hand.chirality == .left ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
+        let controllerPose = hand.chirality == .left ? self.leftControllerPose : self.rightControllerPose
+        if let controllerPose = controllerPose {
+            let transform = self.worldTrackingSteamVRTransform.inverse * controllerPose
+            let orientation = simd_quaternion(transform)
+            let position = transform.columns.3
+            let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+            return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (0.0, 0.0, 0.0), angular_velocity: (0.0, 0.0, 0.0))
+        }
+        
         let lastPose: AlvrPose = hand.chirality == .left ? lastLeftHandPose : lastRightHandPose
         let pose: AlvrPose = filterHandPose(lastPose, handAnchorToPose(hand, false), 0.99)
         let dp = (pose.position.0 - lastPose.position.0, pose.position.1 - lastPose.position.1, pose.position.2 - lastPose.position.2)
@@ -822,11 +978,28 @@ class WorldTracker {
             }
          */
     
-        //print(GCController.controllers())
+        print(GCController.controllers())
+        if GCController.spatialControllers() != self.trackedAccessories {
+            self.trackedAccessories = GCController.spatialControllers()
+            Task {
+                //self.arSession.stop()
+                await self.initializeAr()
+            }
+        }
+        
         for controller in GCController.controllers() {
-            let isLeft = (controller.vendorName == "Joy-Con (L)")
+            let isLeft = (controller.vendorName == "Joy-Con (L)") || (controller.vendorName == "PlayStation VR2 Sense Controller (L)")
             var isBoth = (controller.vendorName == "Joy-Con (L/R)") || !(controller.vendorName?.contains("Joy-Con") ?? true)
+            if controller.vendorName?.contains("PlayStation VR") ?? false {
+                isBoth = false
+            }
             //print(controller.vendorName, controller.physicalInputProfile.elements, controller.physicalInputProfile.allButtons)
+            
+            if #available(visionOS 26.0, *) {
+                if controller.productCategory == GCProductCategorySpatialController {
+                    print(controller, "spatial")
+                }
+            }
             
             let b = controller.physicalInputProfile.buttons
             let a = controller.physicalInputProfile.axes
@@ -1498,8 +1671,8 @@ class WorldTracker {
         
         // For hand gestures, we have to avoid sending controller motions
         if handGesturesEnabled {
-            trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdLeftHand })
-            trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdRightHand })
+            //trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdLeftHand })
+            //trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdRightHand })
         }
         
         if skeletonLeft != nil {

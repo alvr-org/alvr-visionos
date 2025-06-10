@@ -22,6 +22,15 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
     
         let foveationEnabled = capabilities.supportsFoveation
         configuration.isFoveationEnabled = foveationEnabled
+
+#if XCODE_BETA_26
+        if #available(visionOS 26.0, *) {
+            if foveationEnabled {
+                //configuration.maxRenderQuality = .init(1.0)
+            }
+            //configuration.drawableRenderContextRasterSampleCount = 1
+        }
+#endif
         
         let options: LayerRenderer.Capabilities.SupportedLayoutsOptions = foveationEnabled ? [.foveationEnabled] : []
         let supportedLayouts = capabilities.supportedLayouts(options: options)

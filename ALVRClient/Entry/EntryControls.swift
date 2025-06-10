@@ -23,7 +23,7 @@ struct EntryControls: View {
         @Bindable var model = model
         
         HStack(spacing: 17) {
-            if eventHandler.connectionState == .connected {
+            if eventHandler.connectionState == .connected || true {
                 Toggle(isOn: $model.isShowingClient) {
                     Label("Enter", systemImage: "visionpro")
                         .labelStyle(.titleAndIcon)

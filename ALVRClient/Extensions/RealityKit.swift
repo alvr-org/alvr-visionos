@@ -3,6 +3,7 @@
 //
 
 import RealityKit
+import CompositorServices
 
 public extension MeshResource {
     // call this to create a 2-sided mesh that will then be displayed 
@@ -71,3 +72,36 @@ public extension MeshResource.Part {
 }
 
 struct MagicRealityKitClientSystemComponent : Component {}
+
+public extension LayerRenderer.Drawable {
+    func _extractFrustumTangents(_ P: simd_float4x4) -> simd_float4 {
+        let m00 = P[0,0]
+        let m02 = P[0,2]
+        let m11 = P[1,1]
+        let m12 = P[1,2]
+        
+        // Near plane distance is not directly recoverable from the projection matrix, so we assume n = 1 for computing normalized tangents
+        let n: Float = 1.0
+
+        // Reverse the matrix math to get the tangents
+        let right  =  n * (1 + m02) / m00
+        let left   =  n * (-1 + m02) / m00
+        let top    =  n * (1 + m12) / m11
+        let bottom =  n * (-1 + m12) / m11
+        
+        return simd_float4(left, right, bottom, top)
+    }
+    
+    func gimmeTangents(viewIndex: Int) -> simd_float4 {
+        if #available(visionOS 2.0, *) {
+            let mat = self.computeProjection(viewIndex: viewIndex)
+            
+            // TODO: make this work
+            let renderTangents: [simd_float4] = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
+            return renderTangents[viewIndex]//self._extractFrustumTangents(mat)
+        }
+        else {
+            return self.views[viewIndex].tangents
+        }
+    }
+}

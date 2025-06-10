@@ -120,6 +120,13 @@ class Renderer {
         if layerRenderer == nil {
             isRealityKit = true
         }
+        else {
+#if XCODE_BETA_26
+            if #available(visionOS 26.0, *) {
+                //self.layerRenderer?.renderQuality = .init(1.0)
+            }
+#endif
+        }
         
         guard let settings = Settings.getAlvrSettings() else {
             fatalError("streaming started: failed to retrieve alvr settings")
@@ -641,7 +648,11 @@ class Renderer {
 
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
             let settings = ALVRClientApp.gStore.settings
-            let ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
+            var ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
+#if targetEnvironment(simulator)
+            ipd = 0.063
+            print(EventHandler.shared.lastIpd)
+#endif
             if abs(EventHandler.shared.lastIpd - ipd) > 0.001 {
                 print("Send view config")
                 
@@ -659,8 +670,8 @@ class Renderer {
                     rebuildThread.name = "Rebuild Render Pipelines Thread"
                     rebuildThread.start()
                 }
-                let leftAngles = atan(drawable.views[0].tangents * settings.fovRenderScale)
-                let rightAngles = drawable.views.count > 1 ? atan(drawable.views[1].tangents * settings.fovRenderScale) : leftAngles
+                let leftAngles = atan(drawable.gimmeTangents(viewIndex: 0) * settings.fovRenderScale)
+                let rightAngles = drawable.views.count > 1 ? atan(drawable.gimmeTangents(viewIndex: 1) * settings.fovRenderScale) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
                 let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
@@ -773,7 +784,7 @@ class Renderer {
         let viewports = drawable.views.map { $0.textureMap.viewport }
         let rasterizationRateMap = drawable.rasterizationRateMaps.first
         let viewTransforms = drawable.views.map { $0.transform }
-        let viewTangents = drawable.views.map { $0.tangents }
+        let viewTangents = drawable.views.enumerated().map { (idx, v) in drawable.gimmeTangents(viewIndex: idx) }
         let nearZ =  Double(drawable.depthRange.y)
         let farZ = Double(drawable.depthRange.x)
         let simdDeviceAnchor = WorldTracker.shared.floorCorrectionTransform.asFloat4x4() * (deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4)

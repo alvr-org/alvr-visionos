@@ -163,6 +163,9 @@ class EventHandler: ObservableObject {
     // Various hacks to be performed when the headset is donned and VR is entering.
     func handleHeadsetEntered() {
         fixAudioForDirectStereo()
+        Task {
+            await WorldTracker.shared.initializeAr()
+        }
     }
     
     // To be called when rendering is starting
@@ -582,10 +585,10 @@ class EventHandler: ObservableObject {
             eventHeartbeat += 1
             // Send periodic updated values, such as battery percentage, once every five seconds
             let currentTime = CACurrentMediaTime()
-            if currentTime - timeLastSentPeriodicUpdatedValues >= 5.0 {
+            if currentTime - timeLastSentPeriodicUpdatedValues >= 15.0 {
                 handlePeriodicUpdatedValues()
             }
-            if currentTime - timeLastSentMdnsBroadcast >= 5.0 {
+            if currentTime - timeLastSentMdnsBroadcast >= 15.0 {
                 handleMdnsBroadcasts()
             }
             

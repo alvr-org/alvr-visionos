@@ -51,8 +51,8 @@ class DummyMetalRenderer {
         DummyMetalRenderer.renderTangents.removeAll()
         DummyMetalRenderer.renderViewTransforms.removeAll()
         var averageViewTransform = simd_float4()
-        for view in drawable.views {
-            let tangents = view.tangents
+        for (idx, view) in drawable.views.enumerated() {
+            let tangents = drawable.gimmeTangents(viewIndex: idx)
             DummyMetalRenderer.renderTangents.append(tangents)
             averageViewTransform += view.transform.columns.3
         }
