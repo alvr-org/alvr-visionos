@@ -1798,9 +1798,11 @@ class WorldTracker {
             leftSkeletonDisableHysteresis = 0.0
             rightSkeletonDisableHysteresis = 0.0
         }
+        
+        let controllerPredictionTimestamp = targetTimestamp
 
         if let leftHand = handPoses.leftHand {
-            let handMotion = handAnchorToAlvrDeviceMotion(leftHand, anchorTimestamp)
+            let handMotion = handAnchorToAlvrDeviceMotion(leftHand, controllerPredictionTimestamp)
             
             // Hand motion overrides skeletons, so only send either or
             if leftHand.isTracked && leftSkeletonDisableHysteresis <= 0.0 {
@@ -1814,7 +1816,7 @@ class WorldTracker {
             }
         }
         if let rightHand = handPoses.rightHand {
-            let handMotion = handAnchorToAlvrDeviceMotion(rightHand, anchorTimestamp)
+            let handMotion = handAnchorToAlvrDeviceMotion(rightHand, controllerPredictionTimestamp)
 
             
             // Hand motion overrides skeletons, so only send either or
@@ -1830,8 +1832,8 @@ class WorldTracker {
         }
         
         // Controllers override hand simulated controllers
-        let controllerLeftMotion = controllerToAlvrDeviceMotion(true, anchorTimestamp)
-        let controllerRightMotion = controllerToAlvrDeviceMotion(false, anchorTimestamp)
+        let controllerLeftMotion = controllerToAlvrDeviceMotion(true, controllerPredictionTimestamp)
+        let controllerRightMotion = controllerToAlvrDeviceMotion(false, controllerPredictionTimestamp)
         if controllerLeftMotion != nil {
             trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdLeftHand })
             trackingMotions.append(controllerLeftMotion!)
