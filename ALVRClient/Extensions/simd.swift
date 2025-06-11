@@ -42,6 +42,13 @@ extension simd_float4
     }
 }
 
+extension simd_float4x4
+{
+    func orientationOnly() -> simd_float3x3 {
+        return simd_float3x3(self.columns.0.asFloat3(), self.columns.1.asFloat3(), self.columns.2.asFloat3())
+    }
+}
+
 extension simd_quatd
 {
     func toQuatf() -> simd_quatf

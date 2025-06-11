@@ -824,16 +824,14 @@ class WorldTracker {
             
             if let controllerPose = controllerPose {
                 // Convert from controller space to world space
-                let controllerLinVel = controllerPose * predictedAnchor!.velocity.asFloat4_1()
-                let controllerAngVel = controllerPose * predictedAnchor!.angularVelocity.asFloat4_1()
+                let controllerLinVel = controllerPose.orientationOnly() * predictedAnchor!.velocity
+                let controllerAngVel = controllerPose.orientationOnly() * predictedAnchor!.angularVelocity
                 let transform = self.worldTrackingSteamVRTransform.inverse * controllerPose
                 let orientation = simd_quaternion(transform)
                 let position = transform.columns.3
                 
                 // Convert from Apple space to SteamVR space
-                var steamVROrientTransformOnly = self.worldTrackingSteamVRTransform
-                steamVROrientTransformOnly.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
-                let linVelAdjusted = steamVROrientTransformOnly.inverse * controllerLinVel
+                let linVelAdjusted = self.worldTrackingSteamVRTransform.orientationOnly().inverse * controllerLinVel
                 
                 let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
                 
@@ -1125,7 +1123,7 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(a["Thumbstick Y Axis"]?.value ?? 0.0))
                     
                     if leftPinchTrigger <= 0.0 {
-                        alvr_send_button(WorldTracker.leftSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
+                        //alvr_send_button(WorldTracker.leftSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         alvr_send_button(WorldTracker.leftMenuClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         alvr_send_button(WorldTracker.leftTriggerClick, boolVal(b["Trigger"]?.isPressed ?? false))
                         alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)))
@@ -1151,7 +1149,7 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(a["Thumbstick Y Axis"]?.value ?? 0.0))
                     
                     if rightPinchTrigger <= 0.0 {
-                        alvr_send_button(WorldTracker.rightSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
+                        //alvr_send_button(WorldTracker.rightSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         alvr_send_button(WorldTracker.rightMenuClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         alvr_send_button(WorldTracker.rightTriggerClick, boolVal(b["Trigger"]?.isPressed ?? false))
                         alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)))
