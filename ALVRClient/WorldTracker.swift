@@ -284,6 +284,7 @@ class WorldTracker {
     var rightControllerTimestamp: TimeInterval = TimeInterval()
     var controllerLock = NSObject()
     
+    var arkitLock = NSObject()
     var trackedAccessories: [GCController] = []
     var arRunning = false
     
@@ -315,10 +316,12 @@ class WorldTracker {
         print("initializeAr")
         resetPlayspace()
         
+        objc_sync_enter(arkitLock)
         if self.arRunning {
             self.arSession.stop()
             self.arRunning = false
         }
+        objc_sync_exit(arkitLock)
         
         worldTracking = WorldTrackingProvider()
         handTracking = HandTrackingProvider()
@@ -388,12 +391,14 @@ class WorldTracker {
         }
 #endif
         
+        objc_sync_enter(arkitLock)
         do {
             try await arSession.run(trackingList)
             self.arRunning = true
         } catch {
             fatalError("Failed to initialize ARSession")
         }
+        objc_sync_exit(arkitLock)
         
         Task {
             await processReconstructionUpdates()
