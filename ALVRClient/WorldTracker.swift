@@ -1374,8 +1374,8 @@ class WorldTracker {
     
                     if let engine = leftEngine {
                         //print("haptic!")
-                        var duration = leftHapticsEnd - leftHapticsStart
-                        var amplitude = leftHapticsAmplitude
+                        var duration = (leftHapticsEnd - leftHapticsStart) * (isPsvr ? 1.0 : 1.0)
+                        var amplitude = leftHapticsAmplitude * (isPsvr ? 0.25 : 0.7)
                         if duration < 0 {
                             print("Skip haptic, negative duration?", duration)
                             amplitude = 0.0
@@ -1389,7 +1389,7 @@ class WorldTracker {
                         if duration > 0.5 {
                             duration = 0.5
                         }
-                        if duration < 0.032 {
+                        if duration < 0.032 && !isPsvr {
                             duration = 0.032
                         }
                         do {
@@ -1437,8 +1437,8 @@ class WorldTracker {
     
                     if let engine = rightEngine {
                         //print("haptic!")
-                        var duration = rightHapticsEnd - rightHapticsStart
-                        var amplitude = rightHapticsAmplitude
+                        var duration = (rightHapticsEnd - rightHapticsStart) * (isPsvr ? 1.0 : 1.0)
+                        var amplitude = rightHapticsAmplitude * (isPsvr ? 0.25 : 0.7)
                         if duration < 0 {
                             print("Skip haptic, negative duration?", duration)
                             amplitude = 0.0
@@ -1452,7 +1452,7 @@ class WorldTracker {
                         if duration > 0.5 {
                             duration = 0.5
                         }
-                        if duration < 0.032 {
+                        if duration < 0.032 && !isPsvr {
                             duration = 0.032
                         }
                         do {
