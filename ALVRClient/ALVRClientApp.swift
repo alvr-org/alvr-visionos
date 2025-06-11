@@ -102,13 +102,13 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Updated to client runtime v20.13.0. Please be sure to update your streamer.\n\
+    • (Testflight only) Added support for PSVR2 controllers on visionOS 26 developer beta.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
-    • Fixed hand gestures not working correctly.\n\
+    • None currently.\n\
     \n\
     ________________________________\n\
     \n\
@@ -116,6 +116,8 @@ struct ALVRClientApp: App {
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
     • Controllers may be unstable on streamer versions older than v20.11.0. Please update your streamer to resolve this issue.\n\
+    • (Testflight only) Right system button on PSVR2 controllers doesn't work in SteamVR.\n\
+    • (Testflight only) PSVR2 controllers are currently missing support for button touches (might be an Apple bug).\n\
     
     """
     
