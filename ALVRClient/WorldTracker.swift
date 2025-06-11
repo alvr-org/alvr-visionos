@@ -821,15 +821,20 @@ class WorldTracker {
             }
             
             let controllerPose = predictedAnchor?.originFromAnchorTransform
-            let controllerLinVel = predictedAnchor!.velocity
-            let controllerAngVel = predictedAnchor!.angularVelocity
+            
             if let controllerPose = controllerPose {
+                // Convert from controller space to world space
+                let controllerLinVel = controllerPose * predictedAnchor!.velocity.asFloat4_1()
+                let controllerAngVel = controllerPose * predictedAnchor!.angularVelocity.asFloat4_1()
                 let transform = self.worldTrackingSteamVRTransform.inverse * controllerPose
                 let orientation = simd_quaternion(transform)
                 let position = transform.columns.3
+                
+                // Convert from Apple space to SteamVR space
                 var steamVROrientTransformOnly = self.worldTrackingSteamVRTransform
                 steamVROrientTransformOnly.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
-                let linVelAdjusted = steamVROrientTransformOnly.inverse * controllerLinVel.asFloat4_1()
+                let linVelAdjusted = steamVROrientTransformOnly.inverse * controllerLinVel
+                
                 let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
                 
                 objc_sync_exit(controllerLock)
