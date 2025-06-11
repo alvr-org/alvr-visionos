@@ -282,6 +282,7 @@ class WorldTracker {
     var rightControllerLinVel: simd_float3 = simd_float3()
     var rightControllerAngVel: simd_float3 = simd_float3()
     var rightControllerTimestamp: TimeInterval = TimeInterval()
+    var controllerLock = NSObject()
     
     var trackedAccessories: [GCController] = []
     var arRunning = false
@@ -573,6 +574,7 @@ class WorldTracker {
                     switch update.event {
                     case .added, .updated:
                         if update.anchor.accessory.inherentChirality == .left {
+                            objc_sync_enter(controllerLock)
                             leftControllerAnchor = update.anchor
                             leftControllerPose = update.anchor.originFromAnchorTransform
                             leftControllerLinVel = update.anchor.velocity
@@ -580,8 +582,10 @@ class WorldTracker {
                             //let timestampDiff = update.anchor.timestamp - leftControllerTimestamp
                             leftControllerTimestamp = update.anchor.timestamp
                             //print("left diff", timestampDiff)
+                            objc_sync_exit(controllerLock)
                         }
                         else if update.anchor.accessory.inherentChirality == .right {
+                            objc_sync_enter(controllerLock)
                             rightControllerAnchor = update.anchor
                             rightControllerPose = update.anchor.originFromAnchorTransform
                             rightControllerLinVel = update.anchor.velocity
@@ -589,6 +593,7 @@ class WorldTracker {
                             //let timestampDiff = update.anchor.timestamp - rightControllerTimestamp
                             rightControllerTimestamp = update.anchor.timestamp
                             //print("right diff", timestampDiff)
+                            objc_sync_exit(controllerLock)
                         }
                         print("AAAAAA", update.timestamp, update.anchor)
                         //lastHandsUpdatedTs = update.timestamp
@@ -793,20 +798,25 @@ class WorldTracker {
             return nil
         }
         if #available(visionOS 26.0, *) {
-            if isLeft && self.leftControllerAnchor == nil {
+            objc_sync_enter(controllerLock)
+            if isLeft && self.leftControllerAnchor == nil { // crashes?
+                objc_sync_exit(controllerLock)
                 return nil
             }
-            else if !isLeft && self.rightControllerAnchor == nil {
+            else if !isLeft && self.rightControllerAnchor == nil { // crashes?
+                objc_sync_exit(controllerLock)
                 return nil
             }
             let controllerAnchor = (isLeft ? self.leftControllerAnchor : self.rightControllerAnchor) as? AccessoryAnchor?
             if controllerAnchor == nil {
+                objc_sync_exit(controllerLock)
                 return nil
             }
             let accessoryProvider = self.accessoryTracking as! AccessoryTrackingProvider
             
             let predictedAnchor = accessoryProvider.predictAnchor(for: controllerAnchor!!, at: targetTs)
             if predictedAnchor == nil {
+                objc_sync_exit(controllerLock)
                 return nil
             }
             
@@ -821,8 +831,11 @@ class WorldTracker {
                 steamVROrientTransformOnly.columns.3 = simd_float4(0.0, 0.0, 0.0, 1.0)
                 let linVelAdjusted = steamVROrientTransformOnly.inverse * controllerLinVel.asFloat4_1()
                 let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+                
+                objc_sync_exit(controllerLock)
                 return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (linVelAdjusted.x, linVelAdjusted.y, linVelAdjusted.z), angular_velocity: (controllerAngVel.x, controllerAngVel.y, controllerAngVel.z))
             }
+            objc_sync_exit(controllerLock)
         }
         return nil
     }
