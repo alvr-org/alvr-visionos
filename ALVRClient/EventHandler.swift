@@ -738,8 +738,10 @@ class EventHandler: ObservableObject {
                 }
 
                 EventHandler.shared.updateConnectionState(.connected)
+            case ALVR_EVENT_REAL_TIME_CONFIG.rawValue:
+                print("TODO real-time config")
              default:
-                 print("msg")
+                 print("unknown msg")
              }
              Thread.sleep(forTimeInterval: 0.0001)
         }
