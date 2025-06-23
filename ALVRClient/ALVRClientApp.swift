@@ -108,7 +108,9 @@ struct ALVRClientApp: App {
     \n\
     Bug fixes:\n\
     \n\
-    • None currently.\n\
+    • (Testflight only) Added a hackfix fallback if HEVC fails to initialize, fixes HEVC support on Release builds.\n\
+    • (Testflight only) Toned down the haptics on PSVR2 controllers to avoid tracking precision loss and general discomfort\n\
+      (this apparently isn't accurate to the PCVR box, which was also extremely strong).\n\
     \n\
     ________________________________\n\
     \n\
