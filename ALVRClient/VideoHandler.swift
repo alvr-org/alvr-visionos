@@ -16,6 +16,7 @@ let H264_NAL_TYPE_SPS = 7
 let HEVC_NAL_TYPE_VPS: UInt8 = 32
 let HEVC_NAL_TYPE_SPS: UInt8 = 33
 let HEVC_NAL_TYPE_PPS: UInt8 = 34
+let HEVC_NAL_TYPE_SEI: UInt8 = 39
 
 //
 // Non-conclusive list of interesting private Metal pixel formats
@@ -504,7 +505,7 @@ struct VideoHandler {
                 return CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator: nil, parameterSetCount: 2, parameterSetPointers: parameterSetPointers, parameterSetSizes: parameterSetSizes, nalUnitHeaderLength: 4, formatDescriptionOut: &videoFormat)
             }
         } else if (codec == ALVR_CODEC_HEVC.rawValue) {
-            let (vps, sps, pps) = extractParameterSets(from: initialNals)
+            let (vps, sps, pps, sei) = extractParameterSets(from: initialNals)
             
             // Ensure parameterSetPointers is an array of non-optional UnsafePointer<UInt8>
             var parameterSetPointers: [UnsafePointer<UInt8>?] = []
@@ -540,6 +541,24 @@ struct VideoHandler {
                 }
             }
             
+            if let sei = sei {
+                sei.withUnsafeBytes { rawBufferPointer in
+                    if let baseAddress = rawBufferPointer.baseAddress {
+                        let typedPointer = baseAddress.assumingMemoryBound(to: UInt8.self)
+                        parameterSetPointers.append(typedPointer)
+                        parameterSetSizes.append(sei.count)
+                    }
+                    else {
+                        print("No raw buffer ptr?")
+                    }
+                }
+            }
+            
+            print("VPS", vps)
+            print("SPS:", sps)
+            print("PPS:", pps)
+            print("SEI:", sei)
+            
             // Flatten parameterSetPointers to non-optional before passing to the function
             let nonOptionalParameterSetPointers = parameterSetPointers.compactMap { $0 }
             
@@ -550,7 +569,7 @@ struct VideoHandler {
                 parameterSetSizes.withUnsafeBufferPointer { sizesBufferPointer in
                 guard let sizesBaseAddress = sizesBufferPointer.baseAddress else { return }
                    
-                    let parameterSetCount = [vps, sps, pps].compactMap { $0 }.count // Only count non-nil parameter sets
+                    let parameterSetCount = [vps, sps, pps, sei].compactMap { $0 }.count // Only count non-nil parameter sets
                     print("Parameter set count: \(parameterSetCount)")
 
                     let nalUnitHeaderLength: Int32 = 4 // Typically 4 for HEVC
@@ -573,8 +592,105 @@ struct VideoHandler {
                     if status == noErr, let _ = videoFormat {
                         // Use the format description
                         print("Successfully created CMVideoFormatDescription.")
+                        print(videoFormat!.extensions["SampleDescriptionExtensionAtoms" as NSString]!["hvcC" as NSString])
                     } else {
-                        print("Failed to create CMVideoFormatDescription.")
+                        print("Failed to create CMVideoFormatDescription. Trying fallback method...")
+                        
+                        // Known good config
+                        /*
+                        <CMVideoFormatDescription 0x1376b1170 [0x1fe8f4468]> {
+                                mediaType:'vide'
+                                mediaSubType:'hvc1'
+                                mediaSpecific: {
+                                    codecType: 'hvc1'       dimensions: 4800 x 2048
+                                }
+                                extensions: {{
+                                BitsPerComponent = 10;
+                                CVFieldCount = 1;
+                                CVImageBufferChromaLocationBottomField = Left;
+                                CVImageBufferChromaLocationTopField = Left;
+                                CVImageBufferColorPrimaries = "ITU_R_2020";
+                                CVImageBufferTransferFunction = "IEC_sRGB";
+                                CVImageBufferYCbCrMatrix = "ITU_R_2020";
+                                CVPixelAspectRatio =     {
+                                    HorizontalSpacing = 1;
+                                    VerticalSpacing = 1;
+                                };
+                                FullRangeVideo = 1;
+                                SampleDescriptionExtensionAtoms =     {
+                                    hvcC = {length = 135, bytes = 0x01222000 00009000 00000000 b4f000fc ... 06000000 00001080 };
+                                };
+                            }}
+                            }
+                        */
+                         
+                        let bpc = 10
+                        let fullrange = true
+                        let hevc_w: Int32 = 1280
+                        let hevc_h: Int32 = 720
+                        
+                        //Optional(Optional(<01222000 00009000 00000000 b4f000fc fdfafa00 000f04a0 00010018 40010c01 ffff2220 00000300 90000003 00000300 b4970240 a1000100 32420101 22200000 03009000 00030000 0300b4a0 00960800 80136597 4a421191 7543016e 121a1208 00000300 08000003 02d040a2 00010007 4401c0f3 c0cc90a7 0001000b 4e018806 00000000 001080>))
+                         
+                        /*var config_blob:[UInt8] = [0x01, 0x22, 0x20, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb4, 0xf0, 0x00, 0xfc, 0xfd, 0xfa, 0xfa, 0x00, 0x00, 0x0f, 0x04,
+                        0xa0, 0x00, 0x01, 0x00, 0x18,
+                        0x40, 0x01, 0x0c, 0x01, 0xff, 0xff, 0x22, 0x20, 0x00, 0x00, 0x03, 0x00, 0x90, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03, 0x00, 0xb4, 0x97, 0x02, 0x40,
+                        0xa1, 0x00, 0x01, 0x00, 0x32,
+                        0x42, 0x01, 0x01, 0x22, 0x20, 0x00, 0x00, 0x03, 0x00, 0x90, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03, 0x00, 0xb4, 0xa0, 0x00, 0x96, 0x08, 0x00, 0x80, 0x13, 0x65, 0x97, 0x4a, 0x42, 0x11, 0x91, 0x75, 0x43, 0x01, 0x6e, 0x12, 0x1a, 0x12, 0x08, 0x00, 0x00, 0x03, 0x00, 0x08, 0x00, 0x00, 0x03, 0x02, 0xd0, 0x40,
+                        0xa2, 0x00, 0x01, 0x00, 0x07,
+                        0x44, 0x01, 0xc0, 0xf3, 0xc0, 0xcc, 0x90,
+                        0xa7, 0x00, 0x01, 0x00, 0x0b,
+                        0x4e, 0x01, 0x88, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x80]*/
+                        var config_blob:[UInt8] = [0x01, 0x22, 0x20, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb4, 0xf0, 0x00, 0xfc, 0xfd, 0xfa, 0xfa, 0x00, 0x00, 0x0f, 0x04]
+                        if let vps = vps {
+                            config_blob.append(contentsOf: [0xa0, 0x00, 0x01, UInt8((vps.count >> 8) & 0xFF), UInt8(vps.count & 0xFF)])
+                            config_blob.append(contentsOf: vps)
+                        }
+                        if let sps = sps {
+                            config_blob.append(contentsOf: [0xa1, 0x00, 0x01, UInt8((sps.count >> 8) & 0xFF), UInt8(sps.count & 0xFF)])
+                            config_blob.append(contentsOf: sps)
+                        }
+                        if let pps = pps {
+                            config_blob.append(contentsOf: [0xa2, 0x00, 0x01, UInt8((pps.count >> 8) & 0xFF), UInt8(pps.count & 0xFF)])
+                            config_blob.append(contentsOf: pps)
+                        }
+                        if let sei = sei {
+                            config_blob.append(contentsOf: [0xa7, 0x00, 0x01, UInt8((sei.count >> 8) & 0xFF), UInt8(sei.count & 0xFF)])
+                            config_blob.append(contentsOf: sei)
+                        }
+                        
+                        // Most of this is apparently ignored and read from the atoms, lol ok
+                        var atoms:[NSString: AnyObject] = [:]
+                        atoms["hvcC"] = NSData.init(bytes: config_blob, length: config_blob.count)
+                         
+                         var hevc_exts:[NSString: AnyObject] = [:]
+                        hevc_exts[kCMFormatDescriptionExtension_BitsPerComponent] = bpc as NSNumber
+                        hevc_exts[kCMFormatDescriptionExtension_FieldCount] = 1 as NSNumber
+                        hevc_exts[kCMFormatDescriptionExtension_ChromaLocationBottomField] = kCVImageBufferChromaLocation_Left
+                        hevc_exts[kCMFormatDescriptionExtension_ChromaLocationTopField] = kCVImageBufferChromaLocation_Left
+                        hevc_exts[kCMFormatDescriptionExtension_ColorPrimaries] = (bpc == 10) ? kCVImageBufferColorPrimaries_ITU_R_2020 : kCVImageBufferColorPrimaries_ITU_R_709_2
+                        hevc_exts[kCMFormatDescriptionExtension_TransferFunction] = kCVImageBufferTransferFunction_sRGB
+                        hevc_exts[kCMFormatDescriptionExtension_YCbCrMatrix] = (bpc == 10) ? kCVImageBufferColorPrimaries_ITU_R_2020 : kCVImageBufferColorPrimaries_ITU_R_709_2
+                        //hevc_exts[kCMFormatDescriptionExtension_Depth] = 24 as NSNumber
+                        //hevc_exts[kCMFormatDescriptionExtension_FormatName] = "av01" as NSString
+                        hevc_exts[kCMFormatDescriptionExtension_FullRangeVideo] = fullrange as NSNumber
+                        //hevc_exts[kCMFormatDescriptionExtension_RevisionLevel] = 0 as NSNumber
+                        //hevc_exts[kCMFormatDescriptionExtension_SpatialQuality] = 0 as NSNumber
+                        //hevc_exts[kCMFormatDescriptionExtension_TemporalQuality] = 0 as NSNumber
+                        var pixelAspect:[NSString: AnyObject] = [:]
+                        pixelAspect[kCMFormatDescriptionKey_PixelAspectRatioHorizontalSpacing] = 1 as NSNumber
+                        pixelAspect[kCMFormatDescriptionKey_PixelAspectRatioVerticalSpacing] = 1 as NSNumber
+                        hevc_exts[kCMFormatDescriptionExtension_PixelAspectRatio] = pixelAspect as CFDictionary
+                        //hevc_exts[kCMFormatDescriptionExtension_VerbatimISOSampleEntry] =
+                        hevc_exts[kCMFormatDescriptionExtension_Version] = 0 as NSNumber
+                        hevc_exts[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] = atoms as CFDictionary
+                        err = CMVideoFormatDescriptionCreate(allocator: nil, codecType: kCMVideoCodecType_HEVC, width: /*2559+1*/hevc_w, height: /*1087+1*/hevc_h, extensions: hevc_exts as CFDictionary, formatDescriptionOut: &videoFormat)
+                        
+                        if status == noErr, let _ = videoFormat {
+                            // Use the format description
+                            print("Successfully created fallback CMVideoFormatDescription.")
+                        } else {
+                            print("Failed to create fallback CMVideoFormatDescription.")
+                        }
                     }
                 }
             }
@@ -668,11 +784,12 @@ struct VideoHandler {
         return (decompressionSession!, videoFormat!)
     }
 
-    // Function to parse NAL units and extract VPS, SPS, and PPS data
-    static func extractParameterSets(from nalData: UnsafeMutableBufferPointer<UInt8>) -> (vps: [UInt8]?, sps: [UInt8]?, pps: [UInt8]?) {
+    // Function to parse NAL units and extract VPS, SPS, PPS, and SEI data
+    static func extractParameterSets(from nalData: UnsafeMutableBufferPointer<UInt8>) -> (vps: [UInt8]?, sps: [UInt8]?, pps: [UInt8]?, sei: [UInt8]?) {
         var vps: [UInt8]?
         var sps: [UInt8]?
         var pps: [UInt8]?
+        var sei: [UInt8]? // = [0x4E, 0x01, 0x88, 0x06, 0,0,0,0,0, 0x10, 0x80]
         
         let nalDataNoBounds = nalData.baseAddress!
         
@@ -704,6 +821,8 @@ struct VideoHandler {
                     sps = [UInt8](nalUnitData)
                 case HEVC_NAL_TYPE_PPS:
                     pps = [UInt8](nalUnitData)
+                case HEVC_NAL_TYPE_SEI:
+                    sei = [UInt8](nalUnitData)
                 default:
                     break
                 }
@@ -714,7 +833,7 @@ struct VideoHandler {
             }
         }
         
-        return (vps, sps, pps)
+        return (vps, sps, pps, sei)
     }
 
 

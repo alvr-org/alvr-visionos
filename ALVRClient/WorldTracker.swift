@@ -346,7 +346,7 @@ class WorldTracker {
             if AccessoryTrackingProvider.isSupported {
                 print("AAAAAA accessories supported")
                 
-                print(GCController.controllers())
+                //print(GCController.controllers())
                 
                 var accessories: [Accessory] = []
                 for spatialController in GCController.spatialControllers() {
@@ -600,7 +600,7 @@ class WorldTracker {
                             //print("right diff", timestampDiff)
                             objc_sync_exit(controllerLock)
                         }
-                        print("AAAAAA", update.timestamp, update.anchor)
+                        //print("AAAAAA", update.timestamp, update.anchor)
                         //lastHandsUpdatedTs = update.timestamp
                         break
                     case .removed:
