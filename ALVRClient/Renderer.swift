@@ -637,7 +637,12 @@ class Renderer {
         var drawable = LayerRenderer.Drawable()
         if #available(visionOS 26.0, *) {
             let drawables = frame.queryDrawables()
-            //print(drawables)
+            if drawables.isEmpty {
+                if queuedFrame != nil {
+                    EventHandler.shared.lastQueuedFrame = queuedFrame
+                }
+                return
+            }
             // TODO fix this
             drawable = drawables[0]
             //print(drawable.rasterizationRateMaps[0].screenSize, drawable.rasterizationRateMaps[0].physicalSize(layer: 0))
