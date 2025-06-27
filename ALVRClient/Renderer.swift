@@ -630,13 +630,35 @@ class Renderer {
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             fatalError("Failed to create command buffer")
         }
-        
+
+#if XCODE_BETA_26
+        // MTLSize(width: 4338, height: 3478, depth: 1) MTLSize(width: 1888, height: 1792, depth: 1) by default
+        // MTLSize(width: 6262, height: 5020, depth: 1) MTLSize(width: 2496, height: 2432, depth: 1) at 1.0 render quality
+        var drawable = LayerRenderer.Drawable()
+        if #available(visionOS 26.0, *) {
+            let drawables = frame.queryDrawables()
+            //print(drawables)
+            // TODO fix this
+            drawable = drawables[0]
+            //print(drawable.rasterizationRateMaps[0].screenSize, drawable.rasterizationRateMaps[0].physicalSize(layer: 0))
+        }
+        else {
+            guard let _drawable = frame.queryDrawable() else {
+                if queuedFrame != nil {
+                    EventHandler.shared.lastQueuedFrame = queuedFrame
+                }
+                return
+            }
+            drawable = _drawable
+        }
+#else
         guard let drawable = frame.queryDrawable() else {
             if queuedFrame != nil {
                 EventHandler.shared.lastQueuedFrame = queuedFrame
             }
             return
         }
+#endif
         
         let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
         defer { nalViewsPtr.deallocate() }

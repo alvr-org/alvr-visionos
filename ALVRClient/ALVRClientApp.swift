@@ -26,7 +26,7 @@ struct ContentStageConfiguration: CompositorLayerConfiguration {
 #if XCODE_BETA_26
         if #available(visionOS 26.0, *) {
             if foveationEnabled {
-                //configuration.maxRenderQuality = .init(1.0)
+                configuration.maxRenderQuality = .init(1.0)
             }
             //configuration.drawableRenderContextRasterSampleCount = 1
         }
