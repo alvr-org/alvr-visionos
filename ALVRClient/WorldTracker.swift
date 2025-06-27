@@ -825,25 +825,27 @@ class WorldTracker {
                 return nil
             }
             
-            let controllerPose = predictedAnchor?.originFromAnchorTransform
-            
-            if let controllerPose = controllerPose {
-                // Convert from controller space to world space
-                let controllerLinVel = controllerPose.orientationOnly() * predictedAnchor!.velocity
-                let controllerAngVel = controllerPose.orientationOnly() * predictedAnchor!.angularVelocity
-                let transform = self.worldTrackingSteamVRTransform.inverse * controllerPose
-                let orientation = simd_quaternion(transform)
-                let position = transform.columns.3
-                
-                // Convert from Apple space to SteamVR space
-                let linVelAdjusted = self.worldTrackingSteamVRTransform.orientationOnly().inverse * controllerLinVel
-                
-                let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
-                
-                objc_sync_exit(controllerLock)
-                return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (linVelAdjusted.x, linVelAdjusted.y, linVelAdjusted.z), angular_velocity: (controllerAngVel.x, controllerAngVel.y, controllerAngVel.z))
+            var rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 20.0), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
+            if predictedAnchor?.accessory.name.contains("PlayStation VR") ?? false {
+                // The 5.037 originates from the SteamVR PSVR2 controller model JSON
+                rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 20.0+5.037), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
             }
+            let controllerPose = predictedAnchor!.coordinateSpace(for: .grip, correction: .none).ancestorFromSpaceTransformFloat().matrix
+            
+            // Convert from controller space to world space
+            let controllerLinVel = controllerPose.orientationOnly() * predictedAnchor!.velocity
+            let controllerAngVel = controllerPose.orientationOnly() * predictedAnchor!.angularVelocity
+            let transform = self.worldTrackingSteamVRTransform.inverse * controllerPose
+            let orientation = simd_quaternion(transform) * rotationCorrection
+            let position = transform.columns.3
+            
+            // Convert from Apple space to SteamVR space
+            let linVelAdjusted = self.worldTrackingSteamVRTransform.orientationOnly().inverse * controllerLinVel
+            
+            let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
+            
             objc_sync_exit(controllerLock)
+            return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (linVelAdjusted.x, linVelAdjusted.y, linVelAdjusted.z), angular_velocity: (controllerAngVel.x, controllerAngVel.y, controllerAngVel.z))
         }
         return nil
     }
