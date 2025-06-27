@@ -157,8 +157,8 @@ class WorldTracker {
     static let leftButtonYTouched = alvr_path_string_to_id("/user/hand/left/input/y/touch")
     static let leftTriggerTouched = alvr_path_string_to_id("/user/hand/left/input/trigger/touch")
     static let leftThumbstickTouched = alvr_path_string_to_id("/user/hand/left/input/thumbstick/touch")
-    static let leftSystemTouched = alvr_path_string_to_id("/user/hand/left/input/menu/touch")
-    static let leftMenuTouched = alvr_path_string_to_id("/user/hand/left/input/system/touch")
+    static let leftSystemTouched = alvr_path_string_to_id("/user/hand/left/input/system/touch")
+    static let leftMenuTouched = alvr_path_string_to_id("/user/hand/left/input/menu/touch")
     
     // Right hand inputs
     static let rightButtonA = alvr_path_string_to_id("/user/hand/right/input/a/click")
@@ -182,8 +182,8 @@ class WorldTracker {
     static let rightButtonYTouched = alvr_path_string_to_id("/user/hand/right/input/y/touch")
     static let rightTriggerTouched = alvr_path_string_to_id("/user/hand/right/input/trigger/touch")
     static let rightThumbstickTouched = alvr_path_string_to_id("/user/hand/right/input/thumbstick/touch")
-    static let rightSystemTouched = alvr_path_string_to_id("/user/hand/right/input/menu/touch")
-    static let rightMenuTouched = alvr_path_string_to_id("/user/hand/right/input/system/touch")
+    static let rightSystemTouched = alvr_path_string_to_id("/user/hand/right/input/system/touch")
+    static let rightMenuTouched = alvr_path_string_to_id("/user/hand/right/input/menu/touch")
     
     static let appleHandToSteamVRIndex = [
         //eBone_Root
@@ -1130,7 +1130,7 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(a["Thumbstick Y Axis"]?.value ?? 0.0))
                     
                     if leftPinchTrigger <= 0.0 {
-                        //alvr_send_button(WorldTracker.leftSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
+                        alvr_send_button(WorldTracker.leftSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         alvr_send_button(WorldTracker.leftMenuClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         alvr_send_button(WorldTracker.leftTriggerClick, boolVal(b["Trigger"]?.isPressed ?? false))
                         alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)))
@@ -1156,7 +1156,7 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(a["Thumbstick Y Axis"]?.value ?? 0.0))
                     
                     if rightPinchTrigger <= 0.0 {
-                        //alvr_send_button(WorldTracker.rightSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
+                        alvr_send_button(WorldTracker.rightSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         alvr_send_button(WorldTracker.rightMenuClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         alvr_send_button(WorldTracker.rightTriggerClick, boolVal(b["Trigger"]?.isPressed ?? false))
                         alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)))
