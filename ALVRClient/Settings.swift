@@ -10,14 +10,8 @@ enum SettingsError: Error {
 }
 
 struct SettingsCodables {
-    struct EncoderConfig: Codable {
-        var encoding_gamma: Float = 1.0
-        var enable_hdr: Bool = false
-    }
-
     struct VideoConfig: Codable {
         @OptionSwitch var foveated_encoding: FoveationSettings?
-        let encoder_config: EncoderConfig
     }
     
     //
