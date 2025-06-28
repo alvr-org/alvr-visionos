@@ -72,6 +72,7 @@ class EventHandler: ObservableObject {
     
     var timeLastSentPeriodicUpdatedValues: Double = 0.0
     var timeLastSentMdnsBroadcast: Double = 0.0
+    var timeLastCheckedBackgrounded: Double = 0.0
     var timeLastAlvrEvent: Double = 0.0
     var timeLastFrameGot: Double = 0.0
     var timeLastFrameSent: Double = 0.0
@@ -580,6 +581,7 @@ class EventHandler: ObservableObject {
     // The main event thread
     func handleAlvrEvents() {
         print("Start event thread...")
+        Thread.setThreadPriority(0.9)
         var currentCodec = -1
         while inputRunning {
             eventHeartbeat += 1
@@ -592,15 +594,18 @@ class EventHandler: ObservableObject {
                 handleMdnsBroadcasts()
             }
             
-            DispatchQueue.main.async {
-                let state = UIApplication.shared.applicationState
-                if state == .background {
-                    print("App in background, exiting")
-                    if let service = self.mdnsListener {
-                        service.cancel()
-                        self.mdnsListener = nil
+            if currentTime - timeLastCheckedBackgrounded >= 1.0 {
+                timeLastCheckedBackgrounded = CACurrentMediaTime()
+                DispatchQueue.main.async {
+                    let state = UIApplication.shared.applicationState
+                    if state == .background {
+                        print("App in background, exiting")
+                        if let service = self.mdnsListener {
+                            service.cancel()
+                            self.mdnsListener = nil
+                        }
+                        exit(0)
                     }
-                    exit(0)
                 }
             }
             
@@ -738,7 +743,7 @@ class EventHandler: ObservableObject {
                 }
 
                 EventHandler.shared.updateConnectionState(.connected)
-            case ALVR_EVENT_REAL_TIME_CONFIG.rawValue:
+             case ALVR_EVENT_REAL_TIME_CONFIG.rawValue:
                 print("TODO real-time config")
              default:
                  print("unknown msg")
