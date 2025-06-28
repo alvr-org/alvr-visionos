@@ -103,6 +103,7 @@ struct ALVRClientApp: App {
     What's changed?\n\
     \n\
     • (Testflight only) Added support for PSVR2 controllers on visionOS 26 developer beta.\n\
+    • (Testflight only) Added support for high-resolution rendering in Metal (default) backend.\n\
     \n\
     ________________________________\n\
     \n\
