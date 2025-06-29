@@ -111,19 +111,21 @@ class DummyMetalRenderer {
             let xCells = Int(physSize.width / granularity.width)
             let yCells = Int(physSize.height / granularity.height)
             //print(i, "Cell amt:", xCells, "x", yCells)
+            let horizontalPPDEstimate = Float(vrr.screenSize.width) / 1920.0 * 18.387
+            let verticalPPDEstimate = Float(vrr.screenSize.height) / 1824.0 * 19.339
             
             for j in 0..<xCells {
                 let screenX1 = vrr.screenCoordinates(physicalCoordinates: MTLCoordinate2D(x: Float(j*granularity.width), y: 0), layer: i).x
                 let screenX2 = vrr.screenCoordinates(physicalCoordinates: MTLCoordinate2D(x: Float((j+1)*granularity.width), y: 0), layer: i).x
                 let rate = Float(granularity.width)/(screenX2-screenX1)
-                //print("x", j, rate)
+                //print("x", j, rate, "est PPD:", rate*horizontalPPDEstimate)
             }
             
             for j in 0..<yCells {
                 let screenY1 = vrr.screenCoordinates(physicalCoordinates: MTLCoordinate2D(x: 0, y: Float(j*granularity.height)), layer: i).y
                 let screenY2 = vrr.screenCoordinates(physicalCoordinates: MTLCoordinate2D(x: 0, y: Float((j+1)*granularity.height)), layer: i).y
                 let rate = Float(granularity.height)/(screenY2-screenY1)
-                //print("y", j, rate)
+                //print("y", j, rate, "est PPD:", rate*verticalPPDEstimate)
             }
         }
         

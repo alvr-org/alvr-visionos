@@ -89,7 +89,7 @@ public extension LayerRenderer.Drawable {
         let top    =  n * (1 + m12) / m11
         let bottom =  n * (-1 + m12) / m11
         
-        return simd_float4(left, right, bottom, top)
+        return simd_float4(abs(left), abs(right), abs(bottom), abs(top))
     }
     
     func gimmeTangents(viewIndex: Int) -> simd_float4 {
@@ -97,8 +97,11 @@ public extension LayerRenderer.Drawable {
             let mat = self.computeProjection(viewIndex: viewIndex)
             
             // TODO: make this work
-            let renderTangents: [simd_float4] = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
-            return renderTangents[viewIndex]//self._extractFrustumTangents(mat)
+            //let renderTangents: [simd_float4] = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
+            //return renderTangents[viewIndex]
+            let res = self._extractFrustumTangents(mat)
+            print(res)
+            return res
         }
         else {
             return self.views[viewIndex].tangents

@@ -704,6 +704,13 @@ class Renderer {
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
                 EventHandler.shared.viewTransforms = [fixTransform(drawable.views[0].transform), drawable.views.count > 1 ? fixTransform(drawable.views[1].transform) : fixTransform(drawable.views[0].transform)]
                 EventHandler.shared.lastIpd = ipd
+                if drawable.views.count > 1 {
+                    EventHandler.shared.sentViewTangents = [drawable.gimmeTangents(viewIndex: 0), drawable.gimmeTangents(viewIndex: 1)]
+                }
+                else {
+                    EventHandler.shared.sentViewTangents = [drawable.gimmeTangents(viewIndex: 0), drawable.gimmeTangents(viewIndex: 0)]
+                }
+                
                 
                 WorldTracker.shared.sendViewParams(viewTransforms:  EventHandler.shared.viewTransforms, viewFovs: EventHandler.shared.viewFovs)
             }
@@ -811,7 +818,7 @@ class Renderer {
         let viewports = drawable.views.map { $0.textureMap.viewport }
         let rasterizationRateMap = drawable.rasterizationRateMaps.first
         let viewTransforms = drawable.views.map { $0.transform }
-        let viewTangents = drawable.views.enumerated().map { (idx, v) in drawable.gimmeTangents(viewIndex: idx) }
+        let viewTangents = drawable.views.enumerated().map { (idx, v) in EventHandler.shared.sentViewTangents[idx] }
         let nearZ =  Double(drawable.depthRange.y)
         let farZ = Double(drawable.depthRange.x)
         let simdDeviceAnchor = WorldTracker.shared.floorCorrectionTransform.asFloat4x4() * (deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4)

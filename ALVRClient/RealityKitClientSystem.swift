@@ -1499,6 +1499,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 EventHandler.shared.viewTransforms = [DummyMetalRenderer.renderViewTransforms[0], DummyMetalRenderer.renderViewTransforms.count > 1 ? DummyMetalRenderer.renderViewTransforms[1] : DummyMetalRenderer.renderViewTransforms[0]]
                 EventHandler.shared.lastIpd = ipd
                 
+                EventHandler.shared.sentViewTangents = DummyMetalRenderer.renderTangents
+                
                 WorldTracker.shared.sendViewParams(viewTransforms:  EventHandler.shared.viewTransforms, viewFovs: EventHandler.shared.viewFovs)
             }
             
