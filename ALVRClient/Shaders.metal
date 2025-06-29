@@ -351,8 +351,8 @@ fragment half4 videoFrameFragmentShader_SecretYpCbCrFormats(ColorInOut in [[stag
     }
     
     constexpr sampler colorSampler(mip_filter::none,
-                                   mag_filter::linear,
-                                   min_filter::linear);
+                                   mag_filter::bicubic,
+                                   min_filter::bicubic);
     
     half3 color = in_tex_y.sample(colorSampler, sampleCoord).rgb;
     
