@@ -54,6 +54,11 @@ struct AWDLAlertView: View {
             // TODO fallback buttons
 
             //Text("\nSignificant stuttering was detected within the last minute.\n\nMake sure your PC is directly connected to your router and that the headset is in the line of sight of the router.\n\nMake sure you have AirDrop and Handoff disabled in Settings > General > AirDrop/Handoff.\n\nAlternatively, ensure your router is set to Channel 149 (NA) or 44 (EU).")
+            Button(action: {
+                dismissWindow(id: "AWDLAlert")
+            }) {
+                Text("OK")
+            }
         }
         .frame(minWidth: 650, maxWidth: 650, minHeight: 900, maxHeight: 900)
         .onAppear() {
