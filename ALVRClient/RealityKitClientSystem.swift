@@ -1319,7 +1319,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 //print("blit", (CACurrentMediaTime() - submitTime) * 1000.0)
                 let lastRenderTime = (CACurrentMediaTime() - startUpdateTime) + self.visionProVsyncPrediction.vsyncDelta
                 self.visionProVsyncPrediction.rkAvgRenderTime = (self.visionProVsyncPrediction.rkAvgRenderTime + lastRenderTime) * 0.5
-                Task {
+                Task(priority: .userInteractive) {
                     alvr_report_submit(timestamp, vsyncTimeNs &- currentTimeNs)
                 }
                 

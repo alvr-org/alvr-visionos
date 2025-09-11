@@ -1132,10 +1132,14 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(a["Thumbstick Y Axis"]?.value ?? 0.0))
                     
                     if leftPinchTrigger <= 0.0 {
+                        let triggerVal = b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)
+                        let triggerBool = b["Trigger"]?.isPressed ?? false
+                        //let triggerBool = triggerVal > 0.2
+                        
                         //alvr_send_button(WorldTracker.leftSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         alvr_send_button(WorldTracker.leftMenuClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.leftTriggerClick, boolVal(b["Trigger"]?.isPressed ?? false))
-                        alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)))
+                        alvr_send_button(WorldTracker.leftTriggerClick, boolVal(triggerBool))
+                        alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(triggerVal))
                     }
                     
                     alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(b["Grip"]?.isPressed ?? false))
@@ -1159,10 +1163,14 @@ class WorldTracker {
                     alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(a["Thumbstick Y Axis"]?.value ?? 0.0))
                     
                     if rightPinchTrigger <= 0.0 {
+                        let triggerVal = b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)
+                        let triggerBool = b["Trigger"]?.isPressed ?? false
+                        //let triggerBool = triggerVal > 0.2
+                        
                         alvr_send_button(WorldTracker.rightSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
                         //alvr_send_button(WorldTracker.rightMenuClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.rightTriggerClick, boolVal(b["Trigger"]?.isPressed ?? false))
-                        alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)))
+                        alvr_send_button(WorldTracker.rightTriggerClick, boolVal(triggerBool))
+                        alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(triggerVal))
                     }
                     
                     alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(b["Grip"]?.isPressed ?? false))

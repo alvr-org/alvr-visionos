@@ -117,12 +117,14 @@ class EventHandler: ObservableObject {
             eventsThread = Thread {
                 self.handleAlvrEvents()
             }
+            eventsThread?.qualityOfService = .userInteractive
             eventsThread?.name = "Events Thread"
             eventsThread?.start()
             
             eventsWatchThread = Thread {
                 self.eventsWatchdog()
             }
+            eventsThread?.qualityOfService = .background
             eventsWatchThread?.name = "Events Watchdog Thread"
             eventsWatchThread?.start()
         }
@@ -245,15 +247,17 @@ class EventHandler: ObservableObject {
                     default:
                         break
                     }
+                    self.timeLastSentMdnsBroadcast = CACurrentMediaTime()
                 }
                 listener.serviceRegistrationUpdateHandler = { change in
                     print("mDNS registration updated:", change)
+                    self.timeLastSentMdnsBroadcast = CACurrentMediaTime()
                 }
                 listener.newConnectionHandler = { connection in
                     connection.cancel()
                 }
 
-                listener.start(queue: DispatchQueue.main)
+                listener.start(queue: DispatchQueue.global(qos: .background))
             }
         }
     }
@@ -591,11 +595,11 @@ class EventHandler: ObservableObject {
             if currentTime - timeLastSentPeriodicUpdatedValues >= 15.0 {
                 handlePeriodicUpdatedValues()
             }
-            if currentTime - timeLastSentMdnsBroadcast >= 15.0 {
+            if currentTime - timeLastSentMdnsBroadcast >= 5.0 {
                 handleMdnsBroadcasts()
             }
             
-            if currentTime - timeLastCheckedBackgrounded >= 1.0 {
+            if currentTime - timeLastCheckedBackgrounded >= 0.1 {
                 timeLastCheckedBackgrounded = CACurrentMediaTime()
                 DispatchQueue.main.async {
                     let state = UIApplication.shared.applicationState

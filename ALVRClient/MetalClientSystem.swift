@@ -33,7 +33,7 @@ class MetalClientSystem {
     }
     
     func startRenderLoop() {
-        Task {
+        Task(priority: .userInteractive) {
             renderer.rebuildRenderPipelines()
             let renderThread = Thread {
                 self.renderLoop()

@@ -139,7 +139,7 @@ class DummyMetalRenderer {
     }
     
     func startRenderLoop() {
-        Task {
+        Task(priority: .userInteractive) {
             let renderThread = Thread {
                 self.renderLoop()
             }
