@@ -4,6 +4,18 @@
 
 import Spatial
 
+extension Float {
+    func isUnsanitary() -> Bool {
+        return self.isNaN || self.isInfinite || self.isSubnormal
+    }
+}
+
+extension Double {
+    func isUnsanitary() -> Bool {
+        return self.isNaN || self.isInfinite || self.isSubnormal
+    }
+}
+
 extension simd_float3
 {
     func asArray3() -> (Float, Float, Float)
@@ -27,6 +39,16 @@ extension simd_float3
         ret.columns.3 = self.asFloat4_1()
         return ret
     }
+    
+    func isUnsanitary() -> Bool {
+        return self.x.isUnsanitary() || self.y.isUnsanitary() || self.z.isUnsanitary()
+    }
+    
+    func asSanitized() -> simd_float3 {
+        return simd_float3((self.x.isUnsanitary()) ? 0.0 : self.x,
+            (self.y.isUnsanitary()) ? 0.0 : self.y,
+            (self.z.isUnsanitary()) ? 0.0 : self.z)
+    }
 }
 
 extension simd_float4
@@ -40,12 +62,65 @@ extension simd_float4
     {
         return simd_float3(self.x, self.y, self.z)
     }
+    
+    func isUnsanitary() -> Bool {
+        return self.x.isUnsanitary() || self.y.isUnsanitary() || self.z.isUnsanitary() || self.w.isUnsanitary()
+    }
+    
+    func asSanitized() -> simd_float4 {
+        return simd_float4((self.x.isUnsanitary()) ? 0.0 : self.x,
+            (self.y.isUnsanitary()) ? 0.0 : self.y,
+            (self.z.isUnsanitary()) ? 0.0 : self.z,
+            (self.w.isUnsanitary()) ? 0.0 : self.w)
+    }
+}
+
+extension simd_float3x3 {
+    func isUnsanitary() -> Bool {
+        return self.columns.0.isUnsanitary() || self.columns.1.isUnsanitary() || self.columns.2.isUnsanitary()
+    }
+    
+    func asSanitized() -> simd_float3x3 {
+        if self.isUnsanitary() {
+            return simd_float3x3()
+        }
+        return self
+    }
 }
 
 extension simd_float4x4
 {
     func orientationOnly() -> simd_float3x3 {
         return simd_float3x3(self.columns.0.asFloat3(), self.columns.1.asFloat3(), self.columns.2.asFloat3())
+    }
+    
+    func isUnsanitary() -> Bool {
+        return self.columns.0.isUnsanitary() || self.columns.1.isUnsanitary() || self.columns.2.isUnsanitary() || self.columns.3.isUnsanitary()
+    }
+    
+    func asSanitized() -> simd_float4x4 {
+        if self.isUnsanitary() {
+            return simd_float4x4()
+        }
+        return self
+    }
+}
+
+extension simd_quatf
+{
+    func isUnsanitary() -> Bool {
+        return self.vector.x.isUnsanitary()
+            || self.vector.y.isUnsanitary()
+            || self.vector.z.isUnsanitary()
+            || self.vector.w.isUnsanitary()
+    }
+    
+    func asSanitized() -> simd_quatf {
+        // TODO: simplify this by taking the length and checking for 1 or something?
+        if self.isUnsanitary() {
+            return simd_quatf()
+        }
+        return self
     }
 }
 
@@ -54,6 +129,21 @@ extension simd_quatd
     func toQuatf() -> simd_quatf
     {
         return simd_quatf(ix: Float(self.vector.x), iy: Float(self.vector.y), iz: Float(self.vector.z), r: Float(self.vector.w))
+    }
+    
+    func isUnsanitary() -> Bool {
+        return self.vector.x.isUnsanitary()
+            || self.vector.y.isUnsanitary()
+            || self.vector.z.isUnsanitary()
+            || self.vector.w.isUnsanitary()
+    }
+    
+    func asSanitized() -> simd_quatd {
+        // TODO: simplify this by taking the length and checking for 1 or something?
+        if self.isUnsanitary() {
+            return simd_quatd()
+        }
+        return self
     }
 }
 

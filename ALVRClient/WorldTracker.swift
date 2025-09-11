@@ -583,9 +583,9 @@ class WorldTracker {
                         if update.anchor.accessory.inherentChirality == .left {
                             objc_sync_enter(controllerLock)
                             leftControllerAnchor = update.anchor
-                            leftControllerPose = update.anchor.originFromAnchorTransform
-                            leftControllerLinVel = update.anchor.velocity
-                            leftControllerAngVel = update.anchor.angularVelocity
+                            leftControllerPose = update.anchor.originFromAnchorTransform.asSanitized()
+                            leftControllerLinVel = update.anchor.velocity.asSanitized()
+                            leftControllerAngVel = update.anchor.angularVelocity.asSanitized()
                             //let timestampDiff = update.anchor.timestamp - leftControllerTimestamp
                             leftControllerTimestamp = update.anchor.timestamp
                             //print("left diff", timestampDiff)
@@ -594,9 +594,9 @@ class WorldTracker {
                         else if update.anchor.accessory.inherentChirality == .right {
                             objc_sync_enter(controllerLock)
                             rightControllerAnchor = update.anchor
-                            rightControllerPose = update.anchor.originFromAnchorTransform
-                            rightControllerLinVel = update.anchor.velocity
-                            rightControllerAngVel = update.anchor.angularVelocity
+                            rightControllerPose = update.anchor.originFromAnchorTransform.asSanitized()
+                            rightControllerLinVel = update.anchor.velocity.asSanitized()
+                            rightControllerAngVel = update.anchor.angularVelocity.asSanitized()
                             //let timestampDiff = update.anchor.timestamp - rightControllerTimestamp
                             rightControllerTimestamp = update.anchor.timestamp
                             //print("right diff", timestampDiff)
@@ -694,7 +694,8 @@ class WorldTracker {
                 orientation = orientation * WorldTracker.leftHandOrientationCorrection
             }
         }
-        let position = transform.columns.3
+        let position = transform.columns.3.asSanitized()
+        orientation = orientation.asSanitized()
         let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
         return pose
     }
@@ -755,6 +756,9 @@ class WorldTracker {
             orientation = orientation * adjPost20p11
         }
         
+        orientation = orientation.asSanitized()
+        position = position.asSanitized()
+        
         position += floorCorrectionTransform.asFloat4()
         
         let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
@@ -790,13 +794,13 @@ class WorldTracker {
         var positionFiltered = simd_float3(pose.position.0 * alpha + lastPose.position.0 * invAlpha, pose.position.1 * alpha + lastPose.position.1 * invAlpha, pose.position.2 * alpha + lastPose.position.2 * invAlpha)
         var orientationFiltered = simd_slerp(lastPose.orientation.asQuatf(), pose.orientation.asQuatf(), alpha)
         
-        if !positionFiltered.x.isFinite || positionFiltered.x.isNaN || !positionFiltered.y.isFinite || positionFiltered.y.isNaN || !positionFiltered.z.isFinite || positionFiltered.z.isNaN {
+        if positionFiltered.isUnsanitary() {
             print("nans in hand EWMA?")
             positionFiltered = simd_float3(pose.position.0, pose.position.1, pose.position.2)
             orientationFiltered = pose.orientation.asQuatf()
         }
         
-        return AlvrPose(orientationFiltered, positionFiltered)
+        return AlvrPose(orientationFiltered.asSanitized(), positionFiltered.asSanitized())
     }
     
     func controllerToAlvrDeviceMotion(_ isLeft: Bool, _ targetTs: Double) -> AlvrDeviceMotion? {
@@ -832,17 +836,17 @@ class WorldTracker {
                 // The 5.037 originates from the SteamVR PSVR2 controller model JSON
                 rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 20.0+5.037), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
             }
-            let controllerPose = predictedAnchor!.coordinateSpace(for: .grip, correction: .none).ancestorFromSpaceTransformFloat().matrix
+            let controllerPose = predictedAnchor!.coordinateSpace(for: .grip, correction: .none).ancestorFromSpaceTransformFloat().matrix.asSanitized()
             
             // Convert from controller space to world space
-            let controllerLinVel = controllerPose.orientationOnly() * predictedAnchor!.velocity
-            let controllerAngVel = controllerPose.orientationOnly() * predictedAnchor!.angularVelocity
+            let controllerLinVel = controllerPose.orientationOnly() * predictedAnchor!.velocity.asSanitized()
+            let controllerAngVel = controllerPose.orientationOnly() * predictedAnchor!.angularVelocity.asSanitized()
             let transform = self.worldTrackingSteamVRTransform.inverse * controllerPose
-            let orientation = simd_quaternion(transform) * rotationCorrection
-            let position = transform.columns.3
+            let orientation = (simd_quaternion(transform) * rotationCorrection).asSanitized()
+            let position = transform.columns.3.asSanitized()
             
             // Convert from Apple space to SteamVR space
-            let linVelAdjusted = self.worldTrackingSteamVRTransform.orientationOnly().inverse * controllerLinVel
+            let linVelAdjusted = (self.worldTrackingSteamVRTransform.orientationOnly().inverse * controllerLinVel).asSanitized()
             
             let pose = AlvrPose(orientation: AlvrQuat(x: orientation.vector.x, y: orientation.vector.y, z: orientation.vector.z, w: orientation.vector.w), position: (position.x, position.y, position.z))
             
@@ -2129,7 +2133,9 @@ class WorldTracker {
         return leftTransform
     }
     
-    func convertApplePositionToSteamVR(_ p: simd_float3) -> simd_float3 {
+    func convertApplePositionToSteamVR(_ _p: simd_float3) -> simd_float3 {
+        let p = _p.asSanitized()
+
         var t = matrix_identity_float4x4
         t.columns.3 = simd_float4(p.x, p.y, p.z, 1.0)
         t = self.worldTrackingSteamVRTransform.inverse * t
