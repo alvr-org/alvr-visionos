@@ -565,6 +565,10 @@ class Renderer {
     func fixTangents(_ tangents: simd_float4) -> simd_float4 {
         return tangents
     }
+    
+    func renderToDrawable(_ drawable: LayerRenderer.Drawable) {
+        
+    }
 
     // Render the frame, only used in MetalClientSystem renderer.
     func renderFrame() {
@@ -634,17 +638,17 @@ class Renderer {
 #if XCODE_BETA_26
         // MTLSize(width: 4338, height: 3478, depth: 1) MTLSize(width: 1888, height: 1792, depth: 1) by default
         // MTLSize(width: 6262, height: 5020, depth: 1) MTLSize(width: 2496, height: 2432, depth: 1) at 1.0 render quality
-        var drawable = LayerRenderer.Drawable()
+        var mainDrawable = LayerRenderer.Drawable()
+        var drawables: [LayerRenderer.Drawable] = []
         if #available(visionOS 26.0, *) {
-            let drawables = frame.queryDrawables()
+            drawables = frame.queryDrawables()
             if drawables.isEmpty {
                 if queuedFrame != nil {
                     EventHandler.shared.lastQueuedFrame = queuedFrame
                 }
                 return
             }
-            // TODO fix this
-            drawable = drawables[0]
+            mainDrawable = drawables[0]
             //print(drawable.rasterizationRateMaps[0].screenSize, drawable.rasterizationRateMaps[0].physicalSize(layer: 0))
         }
         else {
@@ -654,15 +658,18 @@ class Renderer {
                 }
                 return
             }
-            drawable = _drawable
+            mainDrawable = _drawable
+            drawables = [_drawable]
         }
 #else
-        guard let drawable = frame.queryDrawable() else {
+        guard let _drawable = frame.queryDrawable() else {
             if queuedFrame != nil {
                 EventHandler.shared.lastQueuedFrame = queuedFrame
             }
             return
         }
+        var mainDrawable = _drawable
+        var drawables: [LayerRenderer.Drawable] = [_drawable]
 #endif
         
         let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
@@ -675,7 +682,7 @@ class Renderer {
 
         if EventHandler.shared.alvrInitialized && streamingActiveForFrame {
             let settings = ALVRClientApp.gStore.settings
-            var ipd = drawable.views.count > 1 ? simd_length(drawable.views[0].transform.columns.3 - drawable.views[1].transform.columns.3) : 0.063
+            var ipd = mainDrawable.views.count > 1 ? simd_length(mainDrawable.views[0].transform.columns.3 - mainDrawable.views[1].transform.columns.3) : 0.063
 #if targetEnvironment(simulator)
             ipd = 0.063
             print(EventHandler.shared.lastIpd)
@@ -697,18 +704,18 @@ class Renderer {
                     rebuildThread.name = "Rebuild Render Pipelines Thread"
                     rebuildThread.start()
                 }
-                let leftAngles = atan(drawable.gimmeTangents(viewIndex: 0) * settings.fovRenderScale)
-                let rightAngles = drawable.views.count > 1 ? atan(drawable.gimmeTangents(viewIndex: 1) * settings.fovRenderScale) : leftAngles
+                let leftAngles = atan(mainDrawable.gimmeTangents(viewIndex: 0) * settings.fovRenderScale)
+                let rightAngles = mainDrawable.views.count > 1 ? atan(mainDrawable.gimmeTangents(viewIndex: 1) * settings.fovRenderScale) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
                 let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
                 EventHandler.shared.viewFovs = [leftFov, rightFov]
-                EventHandler.shared.viewTransforms = [fixTransform(drawable.views[0].transform), drawable.views.count > 1 ? fixTransform(drawable.views[1].transform) : fixTransform(drawable.views[0].transform)]
+                EventHandler.shared.viewTransforms = [fixTransform(mainDrawable.views[0].transform), mainDrawable.views.count > 1 ? fixTransform(mainDrawable.views[1].transform) : fixTransform(mainDrawable.views[0].transform)]
                 EventHandler.shared.lastIpd = ipd
-                if drawable.views.count > 1 {
-                    EventHandler.shared.sentViewTangents = [drawable.gimmeTangents(viewIndex: 0), drawable.gimmeTangents(viewIndex: 1)]
+                if mainDrawable.views.count > 1 {
+                    EventHandler.shared.sentViewTangents = [mainDrawable.gimmeTangents(viewIndex: 0), mainDrawable.gimmeTangents(viewIndex: 1)]
                 }
                 else {
-                    EventHandler.shared.sentViewTangents = [drawable.gimmeTangents(viewIndex: 0), drawable.gimmeTangents(viewIndex: 0)]
+                    EventHandler.shared.sentViewTangents = [mainDrawable.gimmeTangents(viewIndex: 0), mainDrawable.gimmeTangents(viewIndex: 0)]
                 }
                 
                 
@@ -743,7 +750,7 @@ class Renderer {
             }
         }
         
-        //checkEyes(drawable: drawable)
+        //checkEyes(drawable: mainDrawable)
         
         objc_sync_enter(EventHandler.shared.frameQueueLock)
         EventHandler.shared.framesSinceLastDecode += 1
@@ -753,14 +760,14 @@ class Renderer {
             print("aaaaaaaa bad view params")
         }
         
-        let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.presentationTime).timeInterval
+        let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: mainDrawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized && EventHandler.shared.lastIpd != -1 {
             if #available(visionOS 2.0, *) {
-                EventHandler.shared.viewTransforms = [fixTransform(drawable.views[0].transform), drawable.views.count > 1 ? fixTransform(drawable.views[1].transform) : fixTransform(drawable.views[0].transform)]
+                EventHandler.shared.viewTransforms = [fixTransform(mainDrawable.views[0].transform), mainDrawable.views.count > 1 ? fixTransform(mainDrawable.views[1].transform) : fixTransform(mainDrawable.views[0].transform)]
             }
             // TODO: I suspect Apple changes view transforms every frame to account for pupil swim, figure out how to fit the latest view transforms in?
             // Since pupil swim is purely an axial thing, maybe we can just timewarp the view transforms as well idk
@@ -769,14 +776,14 @@ class Renderer {
             
             let targetTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
             let reportedTargetTimestamp = vsyncTime
-            var anchorTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+            var anchorTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: mainDrawable.frameTiming.trackableAnchorTime).timeInterval
             
             if !ALVRClientApp.gStore.settings.targetHandsAtRoundtripLatency {
                 if #available(visionOS 2.0, *) {
-                    anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.trackableAnchorTime).timeInterval
+                    anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: mainDrawable.frameTiming.trackableAnchorTime).timeInterval
                 }
                 else {
-                    anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: drawable.frameTiming.renderingDeadline).timeInterval
+                    anchorTimestamp = LayerRenderer.Clock.Instant.epoch.duration(to: mainDrawable.frameTiming.renderingDeadline).timeInterval
                 }
             }
             
@@ -784,7 +791,6 @@ class Renderer {
         }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
-        drawable.deviceAnchor = deviceAnchor
         
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             if EventHandler.shared.alvrInitialized && queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame?.timestamp {
@@ -794,7 +800,7 @@ class Renderer {
                 EventHandler.shared.lastSubmittedTimestamp = queuedFrame!.timestamp
             }
         }
-        
+
         // List of reasons to not display a frame
         var frameIsSuitableForDisplaying = true
         //print(EventHandler.shared.lastIpd, WorldTracker.shared.worldTrackingAddedOriginAnchor, EventHandler.shared.framesRendered)
@@ -814,27 +820,23 @@ class Renderer {
             print("Missing video format, no frame")
         }
         
-        // TODO: check layerRenderer.configuration.layout == .layered ?
-        let viewports = drawable.views.map { $0.textureMap.viewport }
-        let rasterizationRateMap = drawable.rasterizationRateMaps.first
-        let viewTransforms = drawable.views.map { $0.transform }
-        let viewTangents = drawable.views.enumerated().map { (idx, v) in EventHandler.shared.sentViewTangents[idx] }
-        let nearZ =  Double(drawable.depthRange.y)
-        let farZ = Double(drawable.depthRange.x)
-        let simdDeviceAnchor = WorldTracker.shared.floorCorrectionTransform.asFloat4x4() * (deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4)
-        let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
-        
-        if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
-            //print("render")
-            if let encoder = beginRenderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable) {
-                renderStreamingFrame(0, commandBuffer: commandBuffer, renderEncoder: encoder, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
-                endRenderStreamingFrame(renderEncoder: encoder)
+        if !(renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil) {
+            // Things to do once if no frame is rendering (show the wireframe)
+            if EventHandler.shared.totalFramesRendered > 300 {
+                fadeInOverlayAlpha += 0.02
             }
-            renderStreamingFrameOverlays(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
+        }
+        else {
+            // Things to do if a frame is rendering (fade wireframe, or show wireframe is reprojection is too long)
+            fadeInOverlayAlpha -= 0.01
+            if fadeInOverlayAlpha < 0.0 {
+                fadeInOverlayAlpha = 0.0
+            }
             
             if isReprojected && useApplesReprojection {
-                LayerRenderer.Clock().wait(until: drawable.frameTiming.renderingDeadline)
+                LayerRenderer.Clock().wait(until: mainDrawable.frameTiming.renderingDeadline)
             }
+            
             if isReprojected {
                 reprojectedFramesInARow += 1
                 if reprojectedFramesInARow > 90 {
@@ -846,22 +848,43 @@ class Renderer {
                 fadeInOverlayAlpha -= 0.02
             }
         }
-        else
-        {
-            reprojectedFramesInARow = 0;
 
-            let noFramePose = simdDeviceAnchor
-            // TODO: draw a cool loading logo
-            renderNothing(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
+        for drawable in drawables {
+            drawable.deviceAnchor = deviceAnchor
             
-            if EventHandler.shared.totalFramesRendered > 300 {
-                fadeInOverlayAlpha += 0.02
+            // TODO: check layerRenderer.configuration.layout == .layered ?
+            let viewports = drawable.views.map { $0.textureMap.viewport }
+            let rasterizationRateMap = drawable.rasterizationRateMaps.first
+            let viewTransforms = drawable.views.map { $0.transform }
+            let viewTangents = drawable.views.enumerated().map { (idx, v) in EventHandler.shared.sentViewTangents[idx] }
+            let nearZ =  Double(drawable.depthRange.y)
+            let farZ = Double(drawable.depthRange.x)
+            let simdDeviceAnchor = WorldTracker.shared.floorCorrectionTransform.asFloat4x4() * (deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4)
+            let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
+            
+            if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
+                //print("render")
+                if let encoder = beginRenderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable) {
+                    renderStreamingFrame(0, commandBuffer: commandBuffer, renderEncoder: encoder, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+                    endRenderStreamingFrame(renderEncoder: encoder)
+                }
+                renderStreamingFrameOverlays(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
+            }
+            else
+            {
+                reprojectedFramesInARow = 0;
+
+                let noFramePose = simdDeviceAnchor
+                // TODO: draw a cool loading logo
+                renderNothing(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable)
+                
+                renderOverlay(commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor)
+                if !isRealityKit {
+                    renderStreamingFrameDepth(commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame)
+                }
             }
             
-            renderOverlay(commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: noFramePose, simdDeviceAnchor: simdDeviceAnchor)
-            if !isRealityKit {
-                renderStreamingFrameDepth(commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame)
-            }
+            drawable.encodePresent(commandBuffer: commandBuffer)
         }
         
         coolPulsingColorsTime += 0.005
@@ -876,7 +899,6 @@ class Renderer {
             fadeInOverlayAlpha = 0.0
         }
         
-        drawable.encodePresent(commandBuffer: commandBuffer)
         commandBuffer.commit()
         frame.endSubmission()
         
@@ -1188,10 +1210,13 @@ class Renderer {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return nil
         }
-
-        fadeInOverlayAlpha -= 0.01
-        if fadeInOverlayAlpha < 0.0 {
-            fadeInOverlayAlpha = 0.0
+        
+        // TODO refactor this
+        if isRealityKit {
+            fadeInOverlayAlpha -= 0.01
+            if fadeInOverlayAlpha < 0.0 {
+                fadeInOverlayAlpha = 0.0
+            }
         }
     
         self.updateDynamicBufferState()
