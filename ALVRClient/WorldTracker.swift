@@ -123,6 +123,11 @@ class WorldTracker {
     var rightHapticsAmplitude: Float = 0.0
     var rightEngine: CHHapticEngine? = nil
     
+    // Controller click-together to toggle hand tracking
+    var firstControllerClickTime = 0.0
+    var secondControllerClickTime = 0.0
+    var controllersAreDisabledByClickTogether = false
+    
     static let maxPrediction = 30 * NSEC_PER_MSEC
     static let maxPredictionRK = 70 * NSEC_PER_MSEC
     static let deviceIdHead = alvr_path_string_to_id("/user/head")
@@ -275,12 +280,14 @@ class WorldTracker {
     
     var leftControllerAnchor: Any? = nil
     var leftControllerPose: simd_float4x4? = nil
+    var leftControllerLastLinVel: simd_float3 = simd_float3()
     var leftControllerLinVel: simd_float3 = simd_float3()
     var leftControllerAngVel: simd_float3 = simd_float3()
     var leftControllerTimestamp: TimeInterval = TimeInterval()
     
     var rightControllerAnchor: Any? = nil
     var rightControllerPose: simd_float4x4? = nil
+    var rightControllerLastLinVel: simd_float3 = simd_float3()
     var rightControllerLinVel: simd_float3 = simd_float3()
     var rightControllerAngVel: simd_float3 = simd_float3()
     var rightControllerTimestamp: TimeInterval = TimeInterval()
@@ -312,6 +319,7 @@ class WorldTracker {
         self.lastUpdatedTs = 0
         self.crownPressCount = 0
         self.sentPoses = 0
+        self.controllersAreDisabledByClickTogether = false
     }
     
     func initializeAr() async  {
@@ -805,7 +813,7 @@ class WorldTracker {
     
     func controllerToAlvrDeviceMotion(_ isLeft: Bool, _ targetTs: Double) -> AlvrDeviceMotion? {
         let device_id = isLeft ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
-        if (isLeft ? self.leftControllerPose : self.rightControllerPose) == nil || self.accessoryTracking == nil {
+        if (isLeft ? self.leftControllerPose : self.rightControllerPose) == nil || self.accessoryTracking == nil || self.controllersAreDisabledByClickTogether {
             return nil
         }
         if #available(visionOS 26.0, *) {
@@ -839,8 +847,8 @@ class WorldTracker {
             let controllerPose = predictedAnchor!.coordinateSpace(for: .grip, correction: .none).ancestorFromSpaceTransformFloat().matrix.asSanitized()
             
             // Convert from controller space to world space
-            let controllerLinVel = controllerPose.orientationOnly() * predictedAnchor!.velocity.asSanitized()
-            let controllerAngVel = controllerPose.orientationOnly() * predictedAnchor!.angularVelocity.asSanitized()
+            let controllerLinVel = (controllerPose.orientationOnly() * predictedAnchor!.velocity).asSanitized()
+            let controllerAngVel = (controllerPose.orientationOnly() * predictedAnchor!.angularVelocity).asSanitized()
             let transform = self.worldTrackingSteamVRTransform.inverse * controllerPose
             let orientation = (simd_quaternion(transform) * rotationCorrection).asSanitized()
             let position = transform.columns.3.asSanitized()
@@ -1793,12 +1801,19 @@ class WorldTracker {
         eyeGazeLeftPtr?[0] = AlvrPose(qL, leftTransform.columns.3.asFloat3())
         eyeGazeRightPtr?[0] = AlvrPose(qR, rightTransform.columns.3.asFloat3())
         
-        var handPoses = handTracking.latestAnchors
+        var handPoses: (leftHand: HandAnchor?, rightHand: HandAnchor?) = (nil, nil)
+        if handTracking.state == .running {
 #if XCODE_BETA_16
-        if #available(visionOS 2.0, *) {
-            handPoses = handTracking.handAnchors(at: anchorTimestamp)
-        }
+            if #available(visionOS 2.0, *) {
+                handPoses = handTracking.handAnchors(at: anchorTimestamp)
+            }
+            else {
+                handPoses = handTracking.latestAnchors
+            }
+#else
+            handPoses = handTracking.latestAnchors
 #endif
+        }
         
         // Skeleton disabling for SteamVR input 2.0
         leftSkeletonDisableHysteresis -= 0.01
@@ -1822,6 +1837,42 @@ class WorldTracker {
         }
         
         let controllerPredictionTimestamp = targetTimestamp
+        
+        // Controller clack-together to enable hand tracking
+        let leftPosApple = leftControllerPose?.columns.3.asFloat3() ?? simd_float3()
+        let rightPosApple = rightControllerPose?.columns.3.asFloat3() ?? simd_float3()
+        let headsetZForwardForClack = appleOriginFromAnchor.columns.3.asFloat3() + (appleOriginFromAnchor.columns.2.asFloat3() * -0.25) // We use the Z-basis to weight the distance towards actually looking at the controllers, to prevent misfires
+        let leftRightDist = simd_distance(leftPosApple, rightPosApple)
+        let leftDistToHeadset = simd_distance(leftPosApple, headsetZForwardForClack)
+        let rightDistToHeadset = simd_distance(rightPosApple, headsetZForwardForClack)
+        let leftVelMag = simd_distance(simd_float3(), leftControllerLinVel)
+        let rightVelMag = simd_distance(simd_float3(), rightControllerLinVel)
+        let leftAcc = leftControllerLastLinVel - leftControllerLinVel
+        let rightAcc = rightControllerLastLinVel - rightControllerLinVel
+        let leftMag = simd_distance(simd_float3(), leftAcc)
+        let rightMag = simd_distance(simd_float3(), rightAcc)
+        let crossMag = simd_distance(simd_float3(), simd_cross(leftAcc, rightAcc))
+        let dotLeftRight = simd_dot(leftControllerLastLinVel, rightControllerLastLinVel)
+        let validClickTogether = (leftMag > 0.1 && rightMag > 0.1)
+            && (leftMag < 0.5 && rightMag < 0.5)
+            && leftDistToHeadset < 0.25
+            && rightDistToHeadset < 0.25
+            && leftRightDist < 0.17
+        if validClickTogether && (CACurrentMediaTime() - firstControllerClickTime) > 1.0 {
+            firstControllerClickTime = CACurrentMediaTime()
+            secondControllerClickTime = 0.0
+            print("first clack", leftMag, rightMag, leftVelMag, rightVelMag, crossMag, dotLeftRight, leftRightDist, leftDistToHeadset, rightDistToHeadset)
+        }
+        else if validClickTogether && (CACurrentMediaTime() - firstControllerClickTime) > 0.2 && (CACurrentMediaTime() - secondControllerClickTime) > 1.0 {
+            secondControllerClickTime = CACurrentMediaTime()
+            print("second clack", leftMag, rightMag, leftVelMag, rightVelMag, crossMag, dotLeftRight, leftRightDist, leftDistToHeadset, rightDistToHeadset)
+            controllersAreDisabledByClickTogether = !controllersAreDisabledByClickTogether
+        }
+        else if validClickTogether {
+            print("other clack", leftMag, rightMag, crossMag, dotLeftRight, leftRightDist, CACurrentMediaTime() - firstControllerClickTime)
+        }
+        leftControllerLastLinVel = leftControllerLinVel
+        rightControllerLastLinVel = rightControllerLinVel
 
         if let leftHand = handPoses.leftHand {
             let handMotion = handAnchorToAlvrDeviceMotion(leftHand, controllerPredictionTimestamp)
