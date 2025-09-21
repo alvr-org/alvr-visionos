@@ -118,6 +118,7 @@ struct ALVRClientApp: App {
     Bug fixes:\n\
     \n\
     • Added a hackfix fallback if HEVC fails to initialize, fixes HEVC support on Release builds.\n\
+    • Added additional sanitization to headset/controller tracking to ensure SteamVR doesn't get stuck in weird states due to NaNs/infs.\n\
     \n\
     ________________________________\n\
     \n\
