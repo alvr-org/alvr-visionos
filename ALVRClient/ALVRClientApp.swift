@@ -110,7 +110,8 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Added support for PSVR2 controllers on visionOS 26. Controllers and hand tracking can be swapped by clacking the PSVR2 controller tracking rings together twice.\n\
+    • Updated client runtime to v20.14.1. Please make sure to update your streamer to the same version!\n\
+    • Added support for PSVR2 controllers on visionOS 26.\n  Controllers and hand tracking can be swapped by clacking the PSVR2 controller tracking rings together twice.\n\
     • Added support for high-resolution rendering in Metal (default) backend on visionOS 26.\n\
     \n\
     ________________________________\n\
