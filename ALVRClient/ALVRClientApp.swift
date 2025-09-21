@@ -110,16 +110,14 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • (Testflight only) Added support for PSVR2 controllers on visionOS 26 developer beta.\n\
-    • (Testflight only) Added support for high-resolution rendering in Metal (default) backend.\n\
+    • Added support for PSVR2 controllers on visionOS 26. Controllers and hand tracking can be swapped by clacking the PSVR2 controller tracking rings together twice.\n\
+    • Added support for high-resolution rendering in Metal (default) backend on visionOS 26.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
-    • (Testflight only) Added a hackfix fallback if HEVC fails to initialize, fixes HEVC support on Release builds.\n\
-    • (Testflight only) Toned down the haptics on PSVR2 controllers to avoid tracking precision loss and general discomfort\n\
-      (this apparently isn't accurate to the PCVR box, which was also extremely strong).\n\
+    • Added a hackfix fallback if HEVC fails to initialize, fixes HEVC support on Release builds.\n\
     \n\
     ________________________________\n\
     \n\
@@ -127,8 +125,8 @@ struct ALVRClientApp: App {
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
     • Controllers may be unstable on streamer versions older than v20.11.0. Please update your streamer to resolve this issue.\n\
-    • (Testflight only) Right system button on PSVR2 controllers doesn't work in SteamVR.\n\
-    • (Testflight only) PSVR2 controllers are currently missing support for button touches (might be an Apple bug).\n\
+    • The client may fail to connect to the streamer is microphone streaming is enabled. Add the client IP address manually to the streamer to resolve the issue.\n\
+    • PSVR2 controllers are currently missing support for button touches, please file feedback with Apple if this feature is important to you.\n\
     
     """
     
