@@ -99,6 +99,10 @@ class WorldTracker {
     var lastUpdatedTs: TimeInterval = 0
     var crownPressCount = 0
     var sentPoses = 0
+    var debuggableMats: [simd_float4x4] = []
+    var debuggableScales: [Float] = []
+    var debuggablesLock = NSObject()
+    var currentAppleOriginFromAnchor: simd_float4x4 = simd_float4x4()
     
     // Hand tracking
     var lastHandsUpdatedTs: TimeInterval = 0
@@ -520,14 +524,14 @@ class WorldTracker {
                     
                     // Crown-press shenanigans
                     if update.event == .updated {
-                        let sinceLast = update.timestamp - lastUpdatedTs
+                        let sinceLast = CACurrentMediaTime() - lastUpdatedTs
                         if sinceLast < 1.5 && sinceLast > 0.5 {
                             crownPressCount += 1
                         }
-                        else {
+                        else if sinceLast > 1.5 {
                             crownPressCount = 0
                         }
-                        lastUpdatedTs = update.timestamp
+                        lastUpdatedTs = CACurrentMediaTime()
                         
                         // Triple-press crown to purge nearby anchors and recenter
                         if crownPressCount >= 2 && keepSteamVRCenter {
@@ -554,6 +558,7 @@ class WorldTracker {
                             crownPressCount = 0
                         }
                         else if !keepSteamVRCenter {
+                            print("No recentering for SteamVR")
                             crownPressCount = 0
                         }
                     }
@@ -680,6 +685,19 @@ class WorldTracker {
     
     func unlockPlaneAnchors() {
          objc_sync_exit(planeLock)
+    }
+    
+    func lockDebuggables() {
+        objc_sync_enter(debuggablesLock)
+    }
+    
+    func unlockDebuggables() {
+         objc_sync_exit(debuggablesLock)
+    }
+    
+    func addDebuggablePose(_ mat: simd_float4x4, _ scale: Float) {
+        WorldTracker.shared.debuggableMats.append(mat)
+        WorldTracker.shared.debuggableScales.append(scale)
     }
     
     // Wrist-only pose
@@ -839,12 +857,46 @@ class WorldTracker {
                 return nil
             }
             
-            var rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 20.0), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
+            var rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 0.0), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
             if predictedAnchor?.accessory.name.contains("PlayStation VR") ?? false {
                 // The 5.037 originates from the SteamVR PSVR2 controller model JSON
-                rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 20.0+5.037), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
+                rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 5.037), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
             }
-            let controllerPose = predictedAnchor!.coordinateSpace(for: .grip, correction: .none).ancestorFromSpaceTransformFloat().matrix.asSanitized()
+            
+#if DEBUG_ALVR_TRACKING
+            WorldTracker.shared.lockDebuggables()
+            let baseMat = predictedAnchor!.originFromAnchorTransform
+            let aimMat = predictedAnchor!.coordinateSpace(for: .aim, correction: .none).ancestorFromSpaceTransformFloat().matrix.asSanitized()
+            let gripMat = predictedAnchor!.coordinateSpace(for: .grip, correction: .none).ancestorFromSpaceTransformFloat().matrix.asSanitized()
+            let gripSurfaceMat = predictedAnchor!.coordinateSpace(for: .gripSurface, correction: .none).ancestorFromSpaceTransformFloat().matrix.asSanitized()
+            
+            //SIMD4<Float>(0.023110688, 0.014057219, -0.08093621, 1.0) aim to base
+            //SIMD4<Float>(0.024390697, -0.018602788, -0.008736208, 1.0) grip to base
+            //SIMD4<Float>(0.007912636, -0.018511564, -0.0137318075, 1.0) grip surface to base
+            //SIMD4<Float>(0.0012800097, -0.032660007, 0.0722, 0.0) aim to grip
+            // SteamVR aim to grip SIMD3<Float>(0.0, -0.03711825, -0.09245126)
+            // aim to grip to aim to grip (0.0012800097, 0.004458243, 0.16465126)
+            
+            let aimMatBaseRelative =  baseMat.inverse * aimMat
+            let gripMatBaseRelative =  baseMat.inverse * gripMat
+            let gripSurfaceMatBaseRelative = baseMat.inverse * gripSurfaceMat
+            //print(aimMatBaseRelative.columns.3, gripMatBaseRelative.columns.3, gripSurfaceMatBaseRelative.columns.3, gripMatBaseRelative.columns.3 - aimMatBaseRelative.columns.3)
+            WorldTracker.shared.addDebuggablePose(gripMat, 0.025)
+            WorldTracker.shared.addDebuggablePose(gripSurfaceMat, 0.025)
+            WorldTracker.shared.addDebuggablePose(aimMat, 0.025)
+            WorldTracker.shared.addDebuggablePose(baseMat, 0.05)
+            WorldTracker.shared.unlockDebuggables()
+#endif
+            
+            var controllerPose = predictedAnchor!.coordinateSpace(for: .grip, correction: .rendered).ancestorFromSpaceTransformFloat().matrix.asSanitized()
+            let correctPsvr2Origin = simd_float3(0.002, 0.000, -0.01).asFloat4x4()
+            //let basePos = simd_float3(-0.0034, -0.0034, 0.1491).asFloat4x4()
+            //let otherBasePos = simd_float3(0.0012800097, 0.004458243, -0.16465126)
+            //let oxrAimPos = simd_float3(0.007,  -0.03894766, 0.00949694).asFloat4x4()
+            //let oxrGripPos = simd_float3(0.007, -0.00182941, 0.1019482).asFloat4x4()
+            //let handgripPos = simd_float3(0.0, 0.003, 0.097).asFloat4x4()
+            //print("base", oxrAimPos-oxrGripPos) // SIMD3<Float>(0.0, -0.03711825, -0.09245126)
+            controllerPose = controllerPose * correctPsvr2Origin //* handgripPos.inverse * basePos
             
             // Convert from controller space to world space
             let controllerLinVel = (controllerPose.orientationOnly() * predictedAnchor!.velocity).asSanitized()
@@ -943,6 +995,12 @@ class WorldTracker {
             else if emulationMode == "Quest2Touch" || emulationMode == "Quest3Plus" {
                 adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.5898746)))
                 adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3((isLeft ? 1.0 : -1.0) * 0.01, 0.0, 1.0)))
+            }
+            else if emulationMode == "PSVR2Sense" {
+                adjUpDown = simd_quatf(from: simd_float3(0.0, 1.0, 0.0), to: simd_normalize(simd_float3(0.0, 1.0, 1.5898746)))
+                adjLeftRight = simd_quatf(from: simd_float3(0.0, 0.0, 1.0), to: simd_normalize(simd_float3((isLeft ? 1.0 : -1.0) * 0.01, 0.0, 1.0)))
+                
+                adjUpDown = adjUpDown * simd_quatf(real: 0.9848077, imag: simd_float3(0.17364818, 0.0, 0.0)).inverse
             }
             
             // TODO: ViveWand and ViveTracker
@@ -1629,6 +1687,7 @@ class WorldTracker {
 
         var appleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
         appleOriginFromAnchor.columns.3 += floorCorrectionTransform.asFloat4()
+        WorldTracker.shared.currentAppleOriginFromAnchor = appleOriginFromAnchor
         
         var appleOriginFromAnchorLastRefetched = deviceAnchorLastRefetched?.originFromAnchorTransform ?? deviceAnchor.originFromAnchorTransform
         appleOriginFromAnchorLastRefetched.columns.3 += floorCorrectionTransform.asFloat4()
@@ -1965,21 +2024,31 @@ class WorldTracker {
         if ALVRClientApp.gStore.settings.emulatedPinchInteractions {
             // Menu press with two pinches
             // (have to override triggers to prevent screenshot send)
+            var systemButton = WorldTracker.leftMenuClick
+            var systemIsRight = false
+            if let otherSettings = Settings.getAlvrSettings() {
+                let emulationMode = otherSettings.headset.controllers?.emulation_mode ?? ""
+                if emulationMode == "PSVR2Sense" {
+                    systemButton = WorldTracker.rightSystemClick
+                    systemIsRight = true
+                }
+            }
+            
             if (rightIsPinching && leftIsPinching) {
                 leftPinchTrigger -= 0.1
                 if leftPinchTrigger < 0.0 {
-                    leftPinchTrigger = 0.0
+                    leftPinchTrigger = 0.1
                 }
                 rightPinchTrigger -= 0.1
                 if rightPinchTrigger < 0.0 {
-                    rightPinchTrigger = 0.0
+                    rightPinchTrigger = 0.1
                 }
-                
-                if leftPinchTrigger <= 0.0 && rightPinchTrigger <= 0.0 {
-                    alvr_send_button(WorldTracker.leftMenuClick, boolVal(true))
+        
+                if leftPinchTrigger <= 0.1 && rightPinchTrigger <= 0.1 {
+                    alvr_send_button(systemButton, boolVal(true))
                 }
                 else {
-                    alvr_send_button(WorldTracker.leftMenuClick, boolVal(false))
+                    alvr_send_button(systemButton, boolVal(false))
                 }
                 alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
                 alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
@@ -2042,7 +2111,13 @@ class WorldTracker {
                         rightPinchTrigger = 0.0
                     }
                 }
-                alvr_send_button(WorldTracker.leftMenuClick, boolVal(false))
+                
+                if leftPinchTrigger > 0.0 && !systemIsRight {
+                    alvr_send_button(systemButton, boolVal(false))
+                }
+                else if rightPinchTrigger > 0.0 && systemIsRight {
+                    alvr_send_button(systemButton, boolVal(false))
+                }
             }
         }
         lastLeftIsPinching = leftIsPinching
@@ -2099,6 +2174,30 @@ class WorldTracker {
         if delay == 0.0 {
             sendGamepadInputs()
         }
+        
+#if DEBUG_ALVR_TRACKING
+        WorldTracker.shared.lockDebuggables()
+        for motion in trackingMotions {
+            if motion.device_id == WorldTracker.deviceIdHead {
+                continue
+            }
+            
+            WorldTracker.shared.addDebuggablePose(convertSteamVRPoseToApple(motion.pose.asFloat4x4()), 0.1)
+        }
+        
+        if let skeletonLeft = skeletonLeft {
+            for pose in skeletonLeft {
+                WorldTracker.shared.addDebuggablePose(convertSteamVRPoseToApple(pose.asFloat4x4()), 0.1)
+            }
+        }
+        
+        if let skeletonRight = skeletonRight {
+            for pose in skeletonRight {
+                WorldTracker.shared.addDebuggablePose(convertSteamVRPoseToApple(pose.asFloat4x4()), 0.1)
+            }
+        }
+        WorldTracker.shared.unlockDebuggables()
+#endif
 
         Thread {
             //Thread.sleep(forTimeInterval: delay)
@@ -2192,5 +2291,12 @@ class WorldTracker {
         t = self.worldTrackingSteamVRTransform.inverse * t
         t.columns.3 += floorCorrectionTransform.asFloat4()
         return simd_float3(t.columns.3.x, t.columns.3.y, t.columns.3.z)
+    }
+    
+    func convertSteamVRPoseToApple(_ _m: simd_float4x4) -> simd_float4x4 {
+        var mat = _m.asSanitized()
+        mat.columns.3 -= floorCorrectionTransform.asFloat4()
+        mat = worldTrackingSteamVRTransform * mat
+        return mat
     }
 }

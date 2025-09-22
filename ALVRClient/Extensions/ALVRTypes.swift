@@ -29,4 +29,8 @@ extension AlvrPose
     init(_ q: simd_quatf, _ p: simd_float4) {
         self.init(orientation: AlvrQuat(q), position: p.asArray3())
     }
+    
+    func asFloat4x4() -> simd_float4x4 {
+        return simd_float3(self.position.0, self.position.1, self.position.2).asFloat4x4() * simd_float4x4(self.orientation.asQuatf())
+    }
 }

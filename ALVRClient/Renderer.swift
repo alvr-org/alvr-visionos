@@ -42,6 +42,23 @@ let fullscreenQuadVertices:[Float] = [-panel_depth, -panel_depth, -panel_depth,
                                        0.5, 1,
                                        0, 0,
                                        0.5, 0]
+                                       
+let unitVectorXYZVertices:[Float] = [0.0, 0.0, 0.0,
+                                       1.0, 0.0, 0.0,
+                                       0.01,0.0,0.0,
+                                       
+                                       0.0, 0.0, 0.0,
+                                       0.0, 1.0, 0.0,
+                                       0.0,0.01,0.0,
+                                       
+                                       0.0, 0.0, 0.0,
+                                       0.0, 0.0, 1.0,
+                                       0.0,0.0,0.01,
+                                       
+                                       0, 1,
+                                       0.5, 1,
+                                       0, 0,
+                                       0.5, 0]
 
 func NonlinearToLinearRGB(_ color: simd_float3) -> simd_float3 {
     let DIV12: Float = 1.0 / 12.92;
@@ -82,6 +99,7 @@ class Renderer {
     var videoFramePipelineState_SecretYpCbCrFormats: MTLRenderPipelineState!
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
+    var unitVectorXYZBuffer:MTLBuffer!
     var encodingGamma: Float = 1.0
     var lastReconfigureTime: Double = 0.0
     
@@ -188,6 +206,10 @@ class Renderer {
         }
         fullscreenQuadVertices.withUnsafeBytes {
             fullscreenQuadBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
+        }
+        
+        unitVectorXYZVertices.withUnsafeBytes {
+            unitVectorXYZBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
         }
         
         self.videoFrameDepthPipelineState = try! Renderer.buildRenderPipelineForVideoFrameDepthWithDevice(
@@ -537,9 +559,10 @@ class Renderer {
     
     // Checks if eye tracking was secretly added, maybe, hard to know really.
     func checkEyes(drawable: LayerRenderer.Drawable) {
+        print("begin -----")
         print(drawable.colorTextures.first?.width as Any, drawable.colorTextures.first?.height as Any)
-        print(drawable.views[0].transform - EventHandler.shared.viewTransforms[0])
-        print(drawable.views[1].transform - EventHandler.shared.viewTransforms[1])
+        //print(drawable.views[0].transform - EventHandler.shared.viewTransforms[0])
+        //print(drawable.views[1].transform - EventHandler.shared.viewTransforms[1])
         if let vrr = drawable.rasterizationRateMaps.first {
             let eyeCenterX = Float(vrr.screenSize.width) / 2.0
             let eyeCenterY = Float(vrr.screenSize.height) / 2.0
@@ -551,6 +574,8 @@ class Renderer {
             
             print(physSizeL, physSizeR, vrr.screenSize.width, vrr.screenSize.height, ":::", Float(physCoordsL.x) / Float(physSizeL.width), Float(physCoordsL.y) / Float(physSizeL.height), ":::", Float(physCoordsR.x) / Float(physSizeR.width), Float(physCoordsR.y) / Float(physSizeR.height))
         }
+        
+        print("end -------")
     }
     
     // Adjust view transforms for debugging various issues.
@@ -862,6 +887,20 @@ class Renderer {
             let simdDeviceAnchor = WorldTracker.shared.floorCorrectionTransform.asFloat4x4() * (deviceAnchor?.originFromAnchorTransform ?? matrix_identity_float4x4)
             let framePose = framePreviouslyPredictedPose ?? matrix_identity_float4x4
             
+#if DEBUG_ALVR_TRACKING
+            WorldTracker.shared.lockDebuggables()
+            
+            let headDebug = (simdDeviceAnchor.columns.3.asFloat3() - simdDeviceAnchor.columns.2.asFloat3()).asFloat4x4() * simdDeviceAnchor.orientationOnly().asFloat4x4()
+            WorldTracker.shared.addDebuggablePose(headDebug, 0.1)
+            
+            for transform in viewTransforms {
+                let mat = headDebug * transform
+                WorldTracker.shared.addDebuggablePose(mat, 0.05)
+            }
+            
+            WorldTracker.shared.unlockDebuggables()
+#endif
+            
             if renderingStreaming && frameIsSuitableForDisplaying && queuedFrame != nil {
                 //print("render")
                 if let encoder = beginRenderStreamingFrame(0, commandBuffer: commandBuffer, renderTargetColor: drawable.colorTextures[0], renderTargetDepth: drawable.depthTextures[0], viewports: viewports, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor, drawable: drawable) {
@@ -1151,56 +1190,110 @@ class Renderer {
 
         WorldTracker.shared.lockPlaneAnchors()
         
-        // Render planes
         var firstBind = true
-        for plane in WorldTracker.shared.planeAnchors {
-            let plane = plane.value
-            let faces = plane.geometry.meshFaces
-            renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.position.rawValue)
-            renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.texcoord.rawValue)
-            
-            //self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose, planeTransform: plane.originFromAnchorTransform)
-            selectNextPlaneUniformBuffer()
-            self.planeUniforms[0].planeTransform = plane.originFromAnchorTransform
-            self.planeUniforms[0].planeColor = planeToColor(plane: plane)
-            self.planeUniforms[0].planeDoProximity = 1.0
-            if firstBind {
-                renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
-                firstBind = false
-            } else {
-                renderEncoder.setVertexBufferOffset(planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+        if fadeInOverlayAlpha > 0.0 {
+            // Render planes
+            for plane in WorldTracker.shared.planeAnchors {
+                let plane = plane.value
+                let faces = plane.geometry.meshFaces
+                
+                // VRR can't do lines
+                if faces.primitive != GeometryElement.Primitive.triangle {
+                    continue
+                }
+                
+                renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.position.rawValue)
+                renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.texcoord.rawValue)
+                
+                //self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose, planeTransform: plane.originFromAnchorTransform)
+                selectNextPlaneUniformBuffer()
+                self.planeUniforms[0].planeTransform = plane.originFromAnchorTransform
+                self.planeUniforms[0].planeColor = planeToColor(plane: plane)
+                self.planeUniforms[0].planeDoProximity = 1.0
+                if firstBind {
+                    renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                    firstBind = false
+                } else {
+                    renderEncoder.setVertexBufferOffset(planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                }
+                
+                renderEncoder.setTriangleFillMode(.fill)
+                renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
+                                                    indexCount: faces.count*3,
+                                                    indexType: faces.bytesPerIndex == 2 ? MTLIndexType.uint16 : MTLIndexType.uint32,
+                                                    indexBuffer: faces.buffer,
+                                                    indexBufferOffset: 0)
             }
             
-            renderEncoder.setTriangleFillMode(.fill)
-            renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
-                                                indexCount: faces.count*3,
-                                                indexType: faces.bytesPerIndex == 2 ? MTLIndexType.uint16 : MTLIndexType.uint32,
-                                                indexBuffer: faces.buffer,
-                                                indexBufferOffset: 0)
+            // Render lines
+            for plane in WorldTracker.shared.planeAnchors {
+                let plane = plane.value
+                let faces = plane.geometry.meshFaces
+                
+                // VRR can't do lines
+                if faces.primitive != GeometryElement.Primitive.triangle {
+                    continue
+                }
+                
+                renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.position.rawValue)
+                renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.texcoord.rawValue)
+                
+                //self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose, planeTransform: plane.originFromAnchorTransform)
+                selectNextPlaneUniformBuffer()
+                self.planeUniforms[0].planeTransform = plane.originFromAnchorTransform
+                self.planeUniforms[0].planeColor = planeToLineColor(plane: plane)
+                self.planeUniforms[0].planeDoProximity = 0.0
+                if firstBind {
+                    renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                    firstBind = false
+                } else {
+                    renderEncoder.setVertexBufferOffset(planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                }
+                
+                renderEncoder.setTriangleFillMode(.lines)
+                renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
+                                                    indexCount: faces.count*3,
+                                                    indexType: faces.bytesPerIndex == 2 ? MTLIndexType.uint16 : MTLIndexType.uint32,
+                                                    indexBuffer: faces.buffer,
+                                                    indexBufferOffset: 0)
+            }
         }
         
-        // Render lines
-        for plane in WorldTracker.shared.planeAnchors {
-            let plane = plane.value
-            let faces = plane.geometry.meshFaces
-            renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.position.rawValue)
-            renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.texcoord.rawValue)
-            
-            //self.updateGameStateForVideoFrame(drawable: drawable, framePose: framePose, planeTransform: plane.originFromAnchorTransform)
-            selectNextPlaneUniformBuffer()
-            self.planeUniforms[0].planeTransform = plane.originFromAnchorTransform
-            self.planeUniforms[0].planeColor = planeToLineColor(plane: plane)
-            self.planeUniforms[0].planeDoProximity = 0.0
-            renderEncoder.setVertexBufferOffset(planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
-            
-            renderEncoder.setTriangleFillMode(.lines)
-            renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
-                                                indexCount: faces.count*3,
-                                                indexType: faces.bytesPerIndex == 2 ? MTLIndexType.uint16 : MTLIndexType.uint32,
-                                                indexBuffer: faces.buffer,
-                                                indexBufferOffset: 0)
-        }
         WorldTracker.shared.unlockPlaneAnchors()
+        
+        WorldTracker.shared.lockDebuggables()
+        
+        // Render lines
+        for i in 0..<WorldTracker.shared.debuggableMats.count {
+            let matTransform = WorldTracker.shared.debuggableMats[i]
+            let basisColors = [simd_float4(1.0, 0.0, 0.0, 1.0), simd_float4(0.0, 1.0, 0.0, 1.0), simd_float4(0.0, 0.0, 1.0, 1.0)]
+            let basisScaleFactor: Float = WorldTracker.shared.debuggableScales[i]
+            let basisScale = simd_float3x3(basisScaleFactor).asFloat4x4()
+            
+            for i in 0..<3 {
+                renderEncoder.setVertexBuffer(unitVectorXYZBuffer, offset: 0, index: VertexAttribute.position.rawValue)
+                renderEncoder.setVertexBuffer(unitVectorXYZBuffer, offset: (3*4)*4, index: VertexAttribute.texcoord.rawValue)
+                
+                selectNextPlaneUniformBuffer()
+                self.planeUniforms[0].planeTransform = (matTransform.columns.3.asFloat3()).asFloat4x4() * (basisScale * matTransform.orientationOnly().asFloat4x4())
+                self.planeUniforms[0].planeColor = basisColors[i]
+                self.planeUniforms[0].planeDoProximity = 0.0
+                if firstBind {
+                    renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                    firstBind = false
+                } else {
+                    renderEncoder.setVertexBufferOffset(planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                }
+                
+                renderEncoder.setTriangleFillMode(.lines)
+                renderEncoder.drawPrimitives(type: .triangle, vertexStart: 3*i, vertexCount: 3)
+            }
+        }
+        
+        WorldTracker.shared.debuggableMats = []
+        WorldTracker.shared.debuggableScales = []
+        WorldTracker.shared.unlockDebuggables()
+        
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
     }
@@ -1352,7 +1445,7 @@ class Renderer {
         
         self.updateGameStateForVideoFrame(whichIdx, drawable: drawable, viewTransforms: viewTransforms, viewTangents: viewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
         
-        if fadeInOverlayAlpha > 0.0 {
+        if fadeInOverlayAlpha > 0.0 || WorldTracker.shared.debuggableMats.count > 0 {
             // Not super kosher--we need the depth to be correct for the video frame box, but we can't have the view
             // outside of the video frame box be 0.0 depth or it won't get rastered by the compositor at all.
             // So we re-render the frame depth.

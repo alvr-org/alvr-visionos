@@ -86,12 +86,20 @@ extension simd_float3x3 {
         }
         return self
     }
+    
+    func asFloat4x4() -> simd_float4x4 {
+        return simd_float4x4(self.columns.0.asFloat4(), self.columns.1.asFloat4(), self.columns.2.asFloat4(), simd_float4(0.0, 0.0, 0.0, 1.0))
+    }
 }
 
 extension simd_float4x4
 {
     func orientationOnly() -> simd_float3x3 {
         return simd_float3x3(self.columns.0.asFloat3(), self.columns.1.asFloat3(), self.columns.2.asFloat3())
+    }
+    
+    func translationOnly() -> simd_float4x4 {
+        return simd_float4x4(simd_float4(1.0, 0.0, 0.0, 0.0), simd_float4(0.0, 1.0, 0.0, 0.0), simd_float4(0.0, 0.0, 1.0, 0.0), self.columns.3)
     }
     
     func isUnsanitary() -> Bool {
