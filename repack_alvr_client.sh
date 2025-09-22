@@ -16,8 +16,8 @@ cp "$BUILDDIR/libalvr_client_core.dylib" alvrrepack/ios/$target_lib
 install_name_tool -id "@rpath/$target_lib" alvrrepack/ios/$target_lib
 
 xcrun vtool -arch arm64 -set-build-version maccatalyst 17.0 17.0 -replace -output alvrrepack/maccatalyst/$target_lib alvrrepack/ios/$target_lib
-xcrun vtool -arch arm64 -set-build-version xros 1.0 1.0 -replace -output alvrrepack/xros/$target_lib alvrrepack/ios/$target_lib
-xcrun vtool -arch arm64 -set-build-version xrossim 1.0 1.0 -replace -output alvrrepack/xrsimulator/$target_lib alvrrepack/ios/$target_lib
+xcrun vtool -arch arm64 -set-build-version visionos 1.0 1.0 -replace -output alvrrepack/xros/$target_lib alvrrepack/ios/$target_lib
+xcrun vtool -arch arm64 -set-build-version visionossim 1.0 1.0 -replace -output alvrrepack/xrsimulator/$target_lib alvrrepack/ios/$target_lib
 
 rm -rf ALVRClientCore.xcframework
 rm -rf ALVRClient/ALVRClientCore.xcframework
