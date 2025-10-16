@@ -1171,258 +1171,317 @@ class WorldTracker {
                 isPsvr = true
             }
             //print(controller.vendorName, controller.physicalInputProfile.elements, controller.physicalInputProfile.allButtons)
-            
-            let b = controller.physicalInputProfile.buttons
-            let a = controller.physicalInputProfile.axes
-            
+
+            let buttons = controller.input.buttons
+            let dpads = controller.input.dpads
+            let axes = controller.input.axes
+
             // PSVR buttons:
             // Thumbstick Left, Thumbstick Right, Grip, Trigger, Thumbstick Button, Button B, Button A, Button Menu, Thumbstick Down, Thumbstick Up
             // PSVR Axis:
             // Thumbstick X Axis, Thumbstick Y Axis
-            // AAAAAAAAAAAA WHERE ARE THE BUTTON HOVERS
-            // STOP HALF ASSING GAMECONTROLLER.FRAMEWORK OMFG
-            
+
             var leftAssociatedButtons: [String] = []
             var rightAssociatedButtons: [String] = []
             var leftAssociatedAxis: [String] = []
             var rightAssociatedAxis: [String] = []
+            var leftAssociatedDpads: [String] = []
+            var rightAssociatedDpads: [String] = []
             
             // Special-case PSVR controllers because we plan to support them specifically
-            if isPsvr {
-                leftAssociatedButtons = ["Thumbstick Left", "Thumbstick Right", "Grip", "Trigger", "Thumbstick Button", "Button B", "Button A", "Button Menu", "Thumbstick Down", "Thumbstick Up"]
-                leftAssociatedAxis = ["Thumbstick X Axis", "Thumbstick Y Axis"]
-                rightAssociatedButtons = leftAssociatedButtons
-                rightAssociatedAxis = leftAssociatedAxis
-                
-                if isLeft {
-                    alvr_send_button(WorldTracker.leftButtonX, boolVal(b["Button A"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftButtonY, boolVal(b["Button B"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftThumbstickClick, boolVal(b["Thumbstick Button"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(a["Thumbstick X Axis"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(a["Thumbstick Y Axis"]?.value ?? 0.0))
-                    
-                    if leftPinchTrigger <= 0.0 {
-                        let triggerVal = b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)
-                        let triggerBool = b["Trigger"]?.isPressed ?? false
-                        //let triggerBool = triggerVal > 0.2
-                        
-                        //alvr_send_button(WorldTracker.leftSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.leftMenuClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.leftTriggerClick, boolVal(triggerBool))
-                        alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(triggerVal))
-                    }
-                    
-                    alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(b["Grip"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(b["Grip"]?.value ?? ((b["Grip"]?.isPressed ?? false) ? 1.0 : 0.0)))
-                    alvr_send_button(WorldTracker.leftSqueezeTouched, boolVal(b["Grip"]?.isTouched ?? false))
-                    //alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal(b["Grip"]?.value ?? ((b["Grip"]?.isPressed ?? false) ? 1.0 : 0.0)))
-                    
-                    alvr_send_button(WorldTracker.leftButtonXTouched, boolVal(b["Button A"]?.isTouched ?? false))
-                    alvr_send_button(WorldTracker.leftButtonYTouched, boolVal(b["Button B"]?.isTouched ?? false))
-                    alvr_send_button(WorldTracker.leftThumbstickTouched, boolVal(b["Thumbstick"]?.isTouched ?? false))
-                    //alvr_send_button(WorldTracker.leftSqueezeTouched, boolVal(b["Thumbstick"]?.isTouched ?? false))
-                    alvr_send_button(WorldTracker.leftTriggerTouched, boolVal(b["Trigger"]?.isTouched ?? false))
-                    alvr_send_button(WorldTracker.leftMenuTouched, boolVal(b["Button Menu"]?.isTouched ?? false))
-                    //alvr_send_button(WorldTracker.leftSystemTouched, boolVal(b["Button Menu"]?.isTouched ?? false))
-                }
-                else {
-                    alvr_send_button(WorldTracker.rightButtonA, boolVal(b["Button A"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonB, boolVal(b["Button B"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(b["Thumbstick Button"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(a["Thumbstick X Axis"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(a["Thumbstick Y Axis"]?.value ?? 0.0))
-                    
-                    if rightPinchTrigger <= 0.0 {
-                        let triggerVal = b["Trigger"]?.value ?? ((b["Trigger"]?.isPressed ?? false) ? 1.0 : 0.0)
-                        let triggerBool = b["Trigger"]?.isPressed ?? false
-                        //let triggerBool = triggerVal > 0.2
-                        
-                        alvr_send_button(WorldTracker.rightSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
-                        //alvr_send_button(WorldTracker.rightMenuClick, boolVal((b["Button Menu"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.rightTriggerClick, boolVal(triggerBool))
-                        alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(triggerVal))
-                    }
-                    
-                    alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(b["Grip"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(b["Grip"]?.value ?? ((b["Grip"]?.isPressed ?? false) ? 1.0 : 0.0)))
-                    alvr_send_button(WorldTracker.rightSqueezeTouched, boolVal(b["Grip"]?.isTouched ?? false))
-                    //alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal(b["Grip"]?.value ?? ((b["Grip"]?.isPressed ?? false) ? 1.0 : 0.0)))
-                    
-                    alvr_send_button(WorldTracker.rightButtonATouched, boolVal(b["Button A"]?.isTouched ?? false))
-                    alvr_send_button(WorldTracker.rightButtonBTouched, boolVal(b["Button B"]?.isTouched ?? false))
-                    alvr_send_button(WorldTracker.rightThumbstickTouched, boolVal(b["Thumbstick"]?.isTouched ?? false))
-                    alvr_send_button(WorldTracker.rightTriggerTouched, boolVal(b["Trigger"]?.isTouched ?? false))
-                    //alvr_send_button(WorldTracker.rightMenuTouched, boolVal(b["Button Menu"]?.isTouched ?? false))
-                    alvr_send_button(WorldTracker.rightSystemTouched, boolVal(b["Button Menu"]?.isTouched ?? false))
-                }
-            }
-            else if let gp = controller.extendedGamepad {
-                isBoth = true
-                
-                leftAssociatedButtons = ["Left Thumbstick Button", "Button Share", "Button Options", "Left Trigger", "Left Shoulder"]
-                rightAssociatedButtons = ["Button A", "Button B", "Button X", "Button Y", "Right Thumbstick Button", "Button Menu", "Button Home", "Right Trigger", "Right Shoulder"]
-                leftAssociatedAxis = ["Left Thumbstick X Axis", "Left Thumbstick Y Axis", "Direction Pad X Axis", "Direction Pad Y Axis", "Left Trigger"]
-                rightAssociatedAxis = ["Right Thumbstick X Axis", "Right Thumbstick Y Axis", "Right Trigger"]
-                
-                alvr_send_button(WorldTracker.rightButtonA, boolVal(gp.buttonA.isPressed))
-                alvr_send_button(WorldTracker.rightButtonB, boolVal(gp.buttonB.isPressed))
-                alvr_send_button(WorldTracker.rightButtonY, boolVal(gp.buttonY.isPressed))
-                
-                // Kinda weird here, we're emulating Quest controllers bc we don't have a real input profile.
-                alvr_send_button(WorldTracker.leftButtonY, boolVal(gp.dpad.right.isPressed))
-                alvr_send_button(WorldTracker.leftButtonX, boolVal(gp.dpad.down.isPressed || gp.dpad.left.isPressed))
-                
-                // ZL/ZR -> Trigger
-                if self.leftPinchTrigger <= 0.0 {
-                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(gp.leftTrigger.isPressed))
-                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(gp.leftTrigger.value))
-                }
-                if self.rightPinchTrigger <= 0.0 {
-                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(gp.rightTrigger.isPressed))
-                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(gp.rightTrigger.value))
-                }
-                
-                // L/R -> Squeeze
-                alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(gp.leftShoulder.isPressed || gp.dpad.up.isPressed))
-                alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(max(gp.leftShoulder.value, gp.dpad.up.isPressed ? 1.0 : 0.0)))
-                alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal(max(gp.leftShoulder.value, gp.dpad.up.isPressed ? 1.0 : 0.0)))
-                
-                alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(gp.rightShoulder.isPressed || gp.buttonX.isPressed))
-                alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(max(gp.rightShoulder.value, gp.buttonX.isPressed ? 1.0 : 0.0)))
-                alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal(max(gp.rightShoulder.value, gp.buttonX.isPressed ? 1.0 : 0.0)))
-                
-                // Thumbsticks
-                alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(gp.leftThumbstick.xAxis.value))
-                alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(gp.leftThumbstick.yAxis.value))
-                alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(gp.rightThumbstick.xAxis.value))
-                alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(gp.rightThumbstick.yAxis.value))
-                alvr_send_button(WorldTracker.leftThumbstickClick, boolVal(gp.leftThumbstickButton?.isPressed ?? false))
-                alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(gp.rightThumbstickButton?.isPressed ?? false))
-                
-                // System buttons of various varieties (whichever one actually hits)
-                let leftSystem = (b["Button Share"]?.isPressed ?? false) || (b["Button Options"]?.isPressed ?? false)
-                let rightSystem = (b["Button Home"]?.isPressed ?? false) || (b["Button Menu"]?.isPressed ?? false)
-                alvr_send_button(WorldTracker.leftSystemClick, boolVal(leftSystem))
-                alvr_send_button(WorldTracker.rightSystemClick, boolVal(rightSystem))
-                alvr_send_button(WorldTracker.leftMenuClick, boolVal(leftSystem))
-                alvr_send_button(WorldTracker.rightMenuClick, boolVal(rightSystem))
-            }
-            else {
-                // At some point we might want to use this (for separate motion), but at the moment we cannot, because it is incomplete
+            // Need to check visionOS 26 here because forceInputs e.g. for triggers, are a 26-only feature.
+            if #available(visionOS 26.0, *) {
+                if isPsvr {
+                    leftAssociatedButtons = ["Thumbstick Left", "Thumbstick Right", "Grip", "Trigger", "Thumbstick Button", "Button B", "Button A", "Button Menu", "Thumbstick Down", "Thumbstick Up"]
+                    leftAssociatedDpads = ["Thumbstick"]
+                    rightAssociatedButtons = leftAssociatedButtons
+                    rightAssociatedDpads = leftAssociatedDpads
 
-                //print(controller.vendorName, controller.physicalInputProfile.allButtons)
-                let allButtons = controller.physicalInputProfile.allButtons
-                if isBoth {
+                    if isLeft {
+                        alvr_send_button(WorldTracker.leftButtonX, boolVal(buttons["Button A"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftButtonY, boolVal(buttons["Button B"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftThumbstickClick, boolVal(buttons["Thumbstick Button"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(dpads["Thumbstick"]?.xAxis.value ?? 0.0))
+                        alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(dpads["Thumbstick"]?.yAxis.value ?? 0.0))
+                        if leftPinchTrigger <= 0.0 {
+                            alvr_send_button(WorldTracker.leftTriggerClick, boolVal(buttons["Trigger"]?.pressedInput.isPressed ?? false))
+                            alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(buttons["Trigger"]?.forceInput?.value ?? ((buttons["Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                        }
+
+                        alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(buttons["Grip"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(((buttons["Grip"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                        alvr_send_button(WorldTracker.leftSqueezeTouched, boolVal(buttons["Grip"]?.touchedInput?.isTouched ?? false))
+
+                        alvr_send_button(WorldTracker.leftButtonXTouched, boolVal(buttons["Button A"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.leftButtonYTouched, boolVal(buttons["Button B"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.leftThumbstickTouched, boolVal(buttons["Thumbstick Button"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.leftTriggerTouched, boolVal(buttons["Trigger"]?.touchedInput?.isTouched ?? false))
+
+                        alvr_send_button(WorldTracker.leftMenuTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.leftSystemTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.leftMenuClick, boolVal(buttons["Button Menu"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftSystemClick, boolVal(buttons["Button Menu"]?.pressedInput.isPressed ?? false))
+
+                    }
+                    else {
+                        alvr_send_button(WorldTracker.rightButtonA, boolVal(buttons["Button A"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightButtonB, boolVal(buttons["Button B"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(buttons["Thumbstick Button"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(dpads["Thumbstick"]?.xAxis.value ?? 0.0))
+                        alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(dpads["Thumbstick"]?.yAxis.value ?? 0.0))
+
+                        if rightPinchTrigger <= 0.0 {
+                            alvr_send_button(WorldTracker.rightTriggerClick, boolVal(buttons["Trigger"]?.pressedInput.isPressed ?? false))
+                            alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(buttons["Trigger"]?.forceInput?.value ?? ((buttons["Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                        }
+
+                        alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(buttons["Grip"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal((buttons["Grip"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                        alvr_send_button(WorldTracker.rightSqueezeTouched, boolVal(buttons["Grip"]?.touchedInput?.isTouched ?? false))
+                        
+                        alvr_send_button(WorldTracker.rightButtonATouched, boolVal(buttons["Button A"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.rightButtonBTouched, boolVal(buttons["Button B"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.rightThumbstickTouched, boolVal(buttons["Thumbstick Button"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.rightTriggerTouched, boolVal(buttons["Trigger"]?.touchedInput?.isTouched ?? false))
+
+                        alvr_send_button(WorldTracker.rightMenuTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.rightSystemTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
+                        alvr_send_button(WorldTracker.rightMenuClick, boolVal(buttons["Button Menu"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightSystemClick, boolVal(buttons["Button Menu"]?.pressedInput.isPressed ?? false))
+                    }
+                }
+            }
+            if !isPsvr {
+                if let gp = controller.extendedGamepad {
+                    isBoth = true
+
                     leftAssociatedButtons = ["Left Thumbstick Button", "Button Share", "Button Options", "Left Trigger", "Left Shoulder"]
                     rightAssociatedButtons = ["Button A", "Button B", "Button X", "Button Y", "Right Thumbstick Button", "Button Menu", "Button Home", "Right Trigger", "Right Shoulder"]
-                    leftAssociatedAxis = ["Left Thumbstick X Axis", "Left Thumbstick Y Axis", "Left Trigger", "Direction Pad X Axis", "Direction Pad Y Axis"]
+                    leftAssociatedAxis = ["Left Thumbstick X Axis", "Left Thumbstick Y Axis", "Direction Pad X Axis", "Direction Pad Y Axis", "Left Trigger"]
                     rightAssociatedAxis = ["Right Thumbstick X Axis", "Right Thumbstick Y Axis", "Right Trigger"]
-                    
-                    alvr_send_button(WorldTracker.rightButtonA, boolVal(b["Button A"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonB, boolVal(b["Button B"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonX, boolVal(b["Button X"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(b["Right Thumbstick Button"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(a["Right Thumbstick X Axis"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(a["Right Thumbstick Y Axis"]?.value ?? 0.0))
-                    
-                    if rightPinchTrigger <= 0.0 {
-                        alvr_send_button(WorldTracker.rightSystemClick, boolVal((b["Button Menu"]?.isPressed ?? false) || b["Button Home"]?.isPressed ?? false))
-                        alvr_send_button(WorldTracker.rightMenuClick, boolVal((b["Button Menu"]?.isPressed ?? false) || b["Button Home"]?.isPressed ?? false))
-                        alvr_send_button(WorldTracker.rightTriggerClick, boolVal(b["Right Trigger"]?.isPressed ?? false))
-                        alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(b["Right Trigger"]?.value ?? 0.0))
+
+                    alvr_send_button(WorldTracker.rightButtonA, boolVal(gp.buttonA.isPressed))
+                    alvr_send_button(WorldTracker.rightButtonB, boolVal(gp.buttonB.isPressed))
+                    alvr_send_button(WorldTracker.rightButtonY, boolVal(gp.buttonY.isPressed))
+
+                    // Kinda weird here, we're emulating Quest controllers bc we don't have a real input profile.
+                    alvr_send_button(WorldTracker.leftButtonY, boolVal(gp.dpad.right.isPressed))
+                    alvr_send_button(WorldTracker.leftButtonX, boolVal(gp.dpad.down.isPressed || gp.dpad.left.isPressed))
+
+                    // ZL/ZR -> Trigger
+                    if self.leftPinchTrigger <= 0.0 {
+                        alvr_send_button(WorldTracker.leftTriggerClick, boolVal(gp.leftTrigger.isPressed))
+                        alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(gp.leftTrigger.value))
                     }
-                    
-                    alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(b["Right Shoulder"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(b["Right Shoulder"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal(b["Right Shoulder"]?.value ?? 0.0))
-                    
-                    
-                    alvr_send_button(WorldTracker.leftButtonA, boolVal(b["Direction Pad Left"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftButtonB, boolVal(b["Direction Pad Down"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftButtonX, boolVal(b["Direction Pad Up"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftButtonY, boolVal(b["Direction Pad Right"]?.isPressed ?? false))
-                    
-                    alvr_send_button(WorldTracker.leftThumbstickClick, boolVal(b["Left Thumbstick Button"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(a["Left Thumbstick X Axis"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(a["Left Thumbstick Y Axis"]?.value ?? 0.0))
-                    
-                    if leftPinchTrigger <= 0.0 {
-                        alvr_send_button(WorldTracker.leftSystemClick, boolVal((b["Button Share"]?.isPressed ?? false) || (b["Button Options"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.leftMenuClick, boolVal((b["Button Share"]?.isPressed ?? false) || (b["Button Options"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.leftTriggerClick, boolVal(b["Left Trigger"]?.isPressed ?? false))
-                        alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(b["Left Trigger"]?.value ?? 0.0))
+                    if self.rightPinchTrigger <= 0.0 {
+                        alvr_send_button(WorldTracker.rightTriggerClick, boolVal(gp.rightTrigger.isPressed))
+                        alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(gp.rightTrigger.value))
                     }
-                    
-                    alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(b["Left Shoulder"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(b["Left Shoulder"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal(b["Left Shoulder"]?.value ?? 0.0))
-                }
-                else if !isLeft {
-                    rightAssociatedButtons = ["Button A", "Button B", "Button X", "Button Y", "Right Thumbstick Button", "Button Options", "Button Home", "Button Menu", "Button Home", "Right Trigger", "Right Shoulder"]
-                    rightAssociatedAxis = ["Right Thumbstick X Axis", "Right Thumbstick Y Axis", "Right Trigger"]
-                    
-                    alvr_send_button(WorldTracker.rightButtonA, boolVal(b["Button A"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonB, boolVal(b["Button B"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonX, boolVal(b["Button X"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(b["Right Thumbstick Button"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(a["Right Thumbstick X Axis"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(a["Right Thumbstick Y Axis"]?.value ?? 0.0))
-                    
-                    if rightPinchTrigger <= 0.0 {
-                        alvr_send_button(WorldTracker.rightSystemClick, boolVal((b["Button Options"]?.isPressed ?? false) || (b["Button Menu"]?.isPressed ?? false) || (b["Button Home"]?.isPressed ?? false) || (b["Button Menu"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.rightMenuClick, boolVal((b["Button Options"]?.isPressed ?? false) || (b["Button Menu"]?.isPressed ?? false) || (b["Button Home"]?.isPressed ?? false) || (b["Button Menu"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.rightTriggerClick, boolVal(b["Right Trigger"]?.isPressed ?? false))
-                        alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(b["Right Trigger"]?.value ?? 0.0))
-                    }
-                    
-                    alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(b["Right Shoulder"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(b["Right Shoulder"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal(b["Right Shoulder"]?.value ?? 0.0))
+
+                    // L/R -> Squeeze
+                    alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(gp.leftShoulder.isPressed || gp.dpad.up.isPressed))
+                    alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(max(gp.leftShoulder.value, gp.dpad.up.isPressed ? 1.0 : 0.0)))
+                    alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal(max(gp.leftShoulder.value, gp.dpad.up.isPressed ? 1.0 : 0.0)))
+
+                    alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(gp.rightShoulder.isPressed || gp.buttonX.isPressed))
+                    alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(max(gp.rightShoulder.value, gp.buttonX.isPressed ? 1.0 : 0.0)))
+                    alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal(max(gp.rightShoulder.value, gp.buttonX.isPressed ? 1.0 : 0.0)))
+
+                    // Thumbsticks
+                    alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(gp.leftThumbstick.xAxis.value))
+                    alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(gp.leftThumbstick.yAxis.value))
+                    alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(gp.rightThumbstick.xAxis.value))
+                    alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(gp.rightThumbstick.yAxis.value))
+                    alvr_send_button(WorldTracker.leftThumbstickClick, boolVal(gp.leftThumbstickButton?.isPressed ?? false))
+                    alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(gp.rightThumbstickButton?.isPressed ?? false))
+
+                    // System buttons of various varieties (whichever one actually hits)
+                    let leftSystem = (buttons["Button Home"]?.pressedInput.isPressed ?? false) || (buttons["Button Menu"]?.pressedInput.isPressed ?? false)
+                    let rightSystem = (buttons["Button Share"]?.pressedInput.isPressed ?? false) || (buttons["Button Options"]?.pressedInput.isPressed ?? false)
+                    alvr_send_button(WorldTracker.leftSystemClick, boolVal(leftSystem))
+                    alvr_send_button(WorldTracker.rightSystemClick, boolVal(rightSystem))
+                    alvr_send_button(WorldTracker.leftMenuClick, boolVal(leftSystem))
+                    alvr_send_button(WorldTracker.rightMenuClick, boolVal(rightSystem))
                 }
                 else {
-                    leftAssociatedButtons = ["Button A", "Button B", "Button X", "Button Y", "Left Thumbstick Button", "Button Options", "Button Home", "Button Menu", "Button Home", "Left Trigger", "Left Shoulder"]
-                    leftAssociatedAxis = ["Left Thumbstick X Axis", "Left Thumbstick Y Axis", "Left Trigger"]
-                    
-                    alvr_send_button(WorldTracker.leftButtonA, boolVal(b["Button A"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftButtonB, boolVal(b["Button B"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftButtonX, boolVal(b["Button X"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftButtonY, boolVal(b["Button Y"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftThumbstickClick, boolVal(b["Left Thumbstick Button"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(a["Left Thumbstick X Axis"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(a["Left Thumbstick Y Axis"]?.value ?? 0.0))
-                    
-                    if leftPinchTrigger <= 0.0 {
-                        alvr_send_button(WorldTracker.leftSystemClick, boolVal((b["Button Options"]?.isPressed ?? false) || (b["Button Menu"]?.isPressed ?? false) || (b["Button Home"]?.isPressed ?? false) || (b["Button Menu"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.leftMenuClick, boolVal((b["Button Options"]?.isPressed ?? false) || (b["Button Menu"]?.isPressed ?? false) || (b["Button Home"]?.isPressed ?? false) || (b["Button Menu"]?.isPressed ?? false)))
-                        alvr_send_button(WorldTracker.leftTriggerClick, boolVal(b["Left Trigger"]?.isPressed ?? false))
-                        alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(b["Left Trigger"]?.value ?? 0.0))
+                    // At some point we might want to use this (for separate motion), but at the moment we cannot, because it is incomplete
+
+                    //print(controller.vendorName, controller.physicalInputProfile.allButtons)
+                    if isBoth {
+                        leftAssociatedButtons = ["Left Thumbstick Button", "Button Share", "Button Options", "Left Trigger", "Left Shoulder"]
+                        rightAssociatedButtons = ["Button A", "Button B", "Button X", "Button Y", "Right Thumbstick Button", "Button Menu", "Button Home", "Right Trigger", "Right Shoulder"]
+                        leftAssociatedAxis = ["Left Thumbstick X Axis", "Left Thumbstick Y Axis", "Left Trigger", "Direction Pad X Axis", "Direction Pad Y Axis"]
+                        rightAssociatedAxis = ["Right Thumbstick X Axis", "Right Thumbstick Y Axis", "Right Trigger"]
+
+                        alvr_send_button(WorldTracker.rightButtonA, boolVal(buttons["Button A"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightButtonB, boolVal(buttons["Button B"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightButtonX, boolVal(buttons["Button X"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightButtonY, boolVal(buttons["Button Y"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(buttons["Right Thumbstick Button"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(axes["Right Thumbstick X Axis"]?.absoluteInput?.value ?? 0.0))
+                        alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(axes["Right Thumbstick Y Axis"]?.absoluteInput?.value ?? 0.0))
+                        
+                        alvr_send_button(WorldTracker.rightSystemClick,
+                                         boolVal((buttons["Button Menu"]?.pressedInput.isPressed ?? false) || buttons["Button Home"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightMenuClick,
+                                         boolVal((buttons["Button Menu"]?.pressedInput.isPressed ?? false) || buttons["Button Home"]?.pressedInput.isPressed ?? false))
+
+                        if rightPinchTrigger <= 0.0 {
+                            if #available(visionOS 26.0, *) {
+                                alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(buttons["Right Trigger"]?.forceInput?.value ??  ((buttons["Right Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                            }
+                            else {
+                                alvr_send_button(WorldTracker.rightTriggerValue, scalarVal((buttons["Right Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                            }
+                            alvr_send_button(WorldTracker.rightTriggerClick, boolVal(buttons["Right Trigger"]?.pressedInput.isPressed ?? false))
+                        }
+
+                        alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(buttons["Right Shoulder"]?.pressedInput.isPressed ?? false))
+                        if #available(visionOS 26.0, *) {
+                            alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal((buttons["Right Shoulder"]?.forceInput?.value ?? ((buttons["Right Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))))
+                            alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal((buttons["Right Shoulder"]?.forceInput?.value ?? ((buttons["Right Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))))
+                        }
+                        else {
+                            alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal((buttons["Right Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                            alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal((buttons["Right Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                        }
+                        
+                        alvr_send_button(WorldTracker.leftButtonA, boolVal(buttons["Direction Pad Left"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftButtonB, boolVal(buttons["Direction Pad Down"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftButtonX, boolVal(buttons["Direction Pad Up"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftButtonY, boolVal(buttons["Direction Pad Right"]?.pressedInput.isPressed ?? false))
+
+                        alvr_send_button(WorldTracker.leftThumbstickClick, boolVal(buttons["Left Thumbstick Button"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(axes["Left Thumbstick X Axis"]?.absoluteInput?.value ?? 0.0))
+                        alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(axes["Left Thumbstick Y Axis"]?.absoluteInput?.value ?? 0.0))
+                        
+                        alvr_send_button(WorldTracker.leftSystemClick,
+                                         boolVal((buttons["Button Share"]?.pressedInput.isPressed ?? false) || (buttons["Button Options"]?.pressedInput.isPressed ?? false)))
+                        alvr_send_button(WorldTracker.leftMenuClick,
+                                         boolVal((buttons["Button Share"]?.pressedInput.isPressed ?? false) || (buttons["Button Options"]?.pressedInput.isPressed ?? false)))
+
+                        if leftPinchTrigger <= 0.0 {
+                            if #available(visionOS 26.0, *) {
+                                alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(buttons["Left Trigger"]?.forceInput?.value ??  ((buttons["Left Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                            }
+                            else {
+                                alvr_send_button(WorldTracker.leftTriggerValue, scalarVal((buttons["Left Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                            }
+                            alvr_send_button(WorldTracker.leftTriggerClick, boolVal(buttons["Left Trigger"]?.pressedInput.isPressed ?? false))
+                        }
+
+                        alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(buttons["Left Shoulder"]?.pressedInput.isPressed ?? false))
+                        if #available(visionOS 26.0, *) {
+                            alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal((buttons["Left Shoulder"]?.forceInput?.value ?? ((buttons["Left Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))))
+                            alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal((buttons["Left Shoulder"]?.forceInput?.value ?? ((buttons["Left Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))))
+                        }
+                        else {
+                            alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal((buttons["Left Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                            alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal((buttons["Left Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                        }
                     }
-                    
-                    alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(b["Left Shoulder"]?.isPressed ?? false))
-                    alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(b["Left Shoulder"]?.value ?? 0.0))
-                    alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal(b["Left Shoulder"]?.value ?? 0.0))
+                    else if !isLeft {
+                        rightAssociatedButtons = ["Button A", "Button B", "Button X", "Button Y", "Right Thumbstick Button", "Button Options", "Button Share",  "Right Trigger", "Right Shoulder"]
+                        rightAssociatedAxis = ["Right Thumbstick X Axis", "Right Thumbstick Y Axis", "Right Trigger"]
+
+                        alvr_send_button(WorldTracker.rightButtonA, boolVal(buttons["Button A"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightButtonB, boolVal(buttons["Button B"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightButtonX, boolVal(buttons["Button X"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightButtonY, boolVal(buttons["Button Y"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(buttons["Right Thumbstick Button"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(axes["Right Thumbstick X Axis"]?.absoluteInput?.value ?? 0.0))
+                        alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(axes["Right Thumbstick Y Axis"]?.absoluteInput?.value ?? 0.0))
+                        alvr_send_button(WorldTracker.rightSystemClick, boolVal((buttons["Button Options"]?.pressedInput.isPressed ?? false) ||
+                                                                                (buttons["Button Share"]?.pressedInput.isPressed ?? false) ))
+                        alvr_send_button(WorldTracker.rightMenuClick, boolVal((buttons["Button Options"]?.pressedInput.isPressed ?? false) ||
+                                                                              (buttons["Button Share"]?.pressedInput.isPressed ?? false) ))
+
+                        if rightPinchTrigger <= 0.0 {
+                            if #available(visionOS 26.0, *) {
+                                alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(buttons["Right Trigger"]?.forceInput?.value ??  ((buttons["Right Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                            }
+                            else {
+                                alvr_send_button(WorldTracker.rightTriggerValue, scalarVal((buttons["Right Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                            }
+                            alvr_send_button(WorldTracker.rightTriggerClick, boolVal(buttons["Right Trigger"]?.pressedInput.isPressed ?? false))
+                        }
+                        
+                        alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(buttons["Right Shoulder"]?.pressedInput.isPressed ?? false))
+                        if #available(visionOS 26.0, *) {
+                            alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal((buttons["Right Shoulder"]?.forceInput?.value ?? ((buttons["Right Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))))
+                            alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal((buttons["Right Shoulder"]?.forceInput?.value ?? ((buttons["Right Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))))
+                        }
+                        else {
+                            alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal((buttons["Right Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                            alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal((buttons["Right Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                        }
+                        
+                    }
+                    else {
+                        leftAssociatedButtons = ["Button A", "Button B", "Button X", "Button Y", "Left Thumbstick Button", "Button Home", "Button Menu", "Button Home", "Left Trigger", "Left Shoulder"]
+                        leftAssociatedAxis = ["Left Thumbstick X Axis", "Left Thumbstick Y Axis", "Left Trigger"]
+                        
+                        alvr_send_button(WorldTracker.leftButtonA, boolVal(buttons["Button A"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftButtonB, boolVal(buttons["Button B"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftButtonX, boolVal(buttons["Button X"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftButtonY, boolVal(buttons["Button Y"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftThumbstickClick, boolVal(buttons["Left Thumbstick Button"]?.pressedInput.isPressed ?? false))
+                        alvr_send_button(WorldTracker.leftThumbstickX, scalarVal(axes["Left Thumbstick X Axis"]?.absoluteInput?.value ?? 0.0))
+                        alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(axes["Left Thumbstick Y Axis"]?.absoluteInput?.value ?? 0.0))
+                        alvr_send_button(WorldTracker.leftSystemClick, boolVal((buttons["Button Menu"]?.pressedInput.isPressed ?? false) ||
+                                                                               (buttons["Button Home"]?.pressedInput.isPressed ?? false) ))
+                        alvr_send_button(WorldTracker.leftMenuClick, boolVal((buttons["Button Menu"]?.pressedInput.isPressed ?? false) ||
+                                                                             (buttons["Button Home"]?.pressedInput.isPressed ?? false)))
+
+                        if leftPinchTrigger <= 0.0 {
+                            if #available(visionOS 26.0, *) {
+                                alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(buttons["Left Trigger"]?.forceInput?.value ??  ((buttons["Left Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                            }
+                            else {
+                                alvr_send_button(WorldTracker.leftTriggerValue, scalarVal((buttons["Left Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                            }
+                            alvr_send_button(WorldTracker.leftTriggerClick, boolVal(buttons["Left Trigger"]?.pressedInput.isPressed ?? false))
+                        }
+                        alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(buttons["Left Shoulder"]?.pressedInput.isPressed ?? false))
+                        if #available(visionOS 26.0, *) {
+                            alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal((buttons["Left Shoulder"]?.forceInput?.value ?? ((buttons["Left Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))))
+                            alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal((buttons["Left Shoulder"]?.forceInput?.value ?? ((buttons["Left Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))))
+                        }
+                        else {
+                            alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal((buttons["Left Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                            alvr_send_button(WorldTracker.leftSqueezeForce, scalarVal((buttons["Left Shoulder"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
+                        }
+                    }
                 }
             }
             
             for val in leftAssociatedButtons {
-                if b[val]?.isPressed ?? false {
+                if buttons[val]?.pressedInput.isPressed ?? false {
                     leftSkeletonDisableHysteresis = defaultSkeletonDisableHysteresis
                 }
             }
             for val in rightAssociatedButtons {
-                if b[val]?.isPressed ?? false {
+                if buttons[val]?.pressedInput.isPressed ?? false {
                     rightSkeletonDisableHysteresis = defaultSkeletonDisableHysteresis
                 }
             }
             for val in leftAssociatedAxis {
-                if abs(a[val]?.value ?? 0.0) > 0.1 {
+                if abs(axes[val]?.absoluteInput?.value ?? 0.0) > 0.1 {
                     leftSkeletonDisableHysteresis = defaultSkeletonDisableHysteresis
                 }
             }
             for val in rightAssociatedAxis {
-                if abs(a[val]?.value ?? 0.0) > 0.1 {
+                if abs(axes[val]?.absoluteInput?.value ?? 0.0) > 0.1 {
+                    rightSkeletonDisableHysteresis = defaultSkeletonDisableHysteresis
+                }
+            }
+            for val in leftAssociatedDpads {
+                if (abs(dpads[val]?.xAxis.value ?? 0.0) > 0.1) || (abs(dpads[val]?.yAxis.value ?? 0.0) > 0.1) {
+                    leftSkeletonDisableHysteresis = defaultSkeletonDisableHysteresis
+                }
+            }
+            for val in rightAssociatedDpads {
+                if (abs(dpads[val]?.xAxis.value ?? 0.0) > 0.1) || (abs(dpads[val]?.yAxis.value ?? 0.0) > 0.1) {
                     rightSkeletonDisableHysteresis = defaultSkeletonDisableHysteresis
                 }
             }
