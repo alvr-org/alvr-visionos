@@ -1172,9 +1172,13 @@ class WorldTracker {
             }
             //print(controller.vendorName, controller.physicalInputProfile.elements, controller.physicalInputProfile.allButtons)
 
-            let buttons = controller.input.buttons
-            let dpads = controller.input.dpads
-            let axes = controller.input.axes
+            controller.input.inputStateQueueDepth = 1
+            guard let capturedInput = controller.input.nextInputState() else {
+                continue
+            }
+            let buttons = capturedInput.buttons
+            let dpads = capturedInput.dpads
+            let axes = capturedInput.axes
 
             // PSVR buttons:
             // Thumbstick Left, Thumbstick Right, Grip, Trigger, Thumbstick Button, Button B, Button A, Button Menu, Thumbstick Down, Thumbstick Up
@@ -1191,6 +1195,28 @@ class WorldTracker {
             // Special-case PSVR controllers because we plan to support them specifically
             // Need to check visionOS 26 here because forceInputs e.g. for triggers, are a 26-only feature.
             if #available(visionOS 26.0, *) {
+            
+                /*
+                if let inputs = controller.input.unmapped {
+                    print("BEGIN")
+                    print("----------")
+                    for element in inputs.buttons {
+                        print("Button:", element.aliases, "element.touchedInput?.isTouched=", element.touchedInput?.isTouched, "element.forceInput?.value=",element.forceInput?.value, element.pressedInput)
+                    }
+                    for element in inputs.axes {
+                        print("Axis:", element.aliases, element, "absolute=", element.absoluteInput, "relative=", element.relativeInput)
+                    }
+                    for element in inputs.dpads {
+                        print("Dpad:", element.aliases, element)
+                    }
+                    for element in inputs.switches {
+                        print("Switch:", element.aliases, element, element.positionInput)
+                    }
+                    print("----------")
+                    print("END")
+                }
+                */
+                
                 if isPsvr {
                     leftAssociatedButtons = ["Thumbstick Left", "Thumbstick Right", "Grip", "Trigger", "Thumbstick Button", "Button B", "Button A", "Button Menu", "Thumbstick Down", "Thumbstick Up"]
                     leftAssociatedDpads = ["Thumbstick"]
@@ -1205,7 +1231,7 @@ class WorldTracker {
                         alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(dpads["Thumbstick"]?.yAxis.value ?? 0.0))
                         if leftPinchTrigger <= 0.0 {
                             alvr_send_button(WorldTracker.leftTriggerClick, boolVal(buttons["Trigger"]?.pressedInput.isPressed ?? false))
-                            alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(buttons["Trigger"]?.forceInput?.value ?? ((buttons["Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                            alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(buttons["Trigger"]?.pressedInput.value ?? ((buttons["Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
                         }
 
                         alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(buttons["Grip"]?.pressedInput.isPressed ?? false))
@@ -1232,7 +1258,7 @@ class WorldTracker {
 
                         if rightPinchTrigger <= 0.0 {
                             alvr_send_button(WorldTracker.rightTriggerClick, boolVal(buttons["Trigger"]?.pressedInput.isPressed ?? false))
-                            alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(buttons["Trigger"]?.forceInput?.value ?? ((buttons["Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                            alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(buttons["Trigger"]?.pressedInput.value ?? ((buttons["Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
                         }
 
                         alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(buttons["Grip"]?.pressedInput.isPressed ?? false))
