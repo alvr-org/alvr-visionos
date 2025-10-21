@@ -110,25 +110,21 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Updated client runtime to v20.14.1. Please make sure to update your streamer to the same version!\n\
-    • Added support for PSVR2 controllers on visionOS 26.\n  Controllers and hand tracking can be swapped by clacking the PSVR2 controller tracking rings together twice.\n\
-    • Added support for high-resolution rendering in Metal (default) backend on visionOS 26.\n\
+    • Added support for button touch state for PSVR2 controllers (may require updating to visionOS 26.1).\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
-    • Added a hackfix fallback if HEVC fails to initialize, fixes HEVC support on Release builds.\n\
-    • Added additional sanitization to headset/controller tracking to ensure SteamVR doesn't get stuck in weird states due to NaNs/infs.\n\
+    • Fixed a bug with the view tangents which caused FoVs to be wider than they should have been, and possibly some parallax on head rotation.\n\
     \n\
     ________________________________\n\
     \n\
     Known issues:\n\
     \n\
     • Hands may still show despite the hand visibility being set to off. This is a longstanding visionOS bug. Open and close the Control Center to fix.\n\
-    • Controllers may be unstable on streamer versions older than v20.11.0. Please update your streamer to resolve this issue.\n\
     • The client may fail to connect to the streamer is microphone streaming is enabled. Add the client IP address manually to the streamer to resolve the issue.\n\
-    • PSVR2 controllers are currently missing support for button touches, please file feedback with Apple if this feature is important to you.\n\
+    • PSVR2 controllers are currently missing full support for button touches and grip/trigger proximity, please file feedback with Apple if this feature is important to you.\n\
     
     """
     

@@ -76,9 +76,9 @@ struct MagicRealityKitClientSystemComponent : Component {}
 public extension LayerRenderer.Drawable {
     func _extractFrustumTangents(_ P: simd_float4x4) -> simd_float4 {
         let m00 = P[0,0]
-        let m02 = P[0,2]
         let m11 = P[1,1]
-        let m12 = P[1,2]
+        let m02 = P[2,0]
+        let m12 = P[2,1]
         
         // Near plane distance is not directly recoverable from the projection matrix, so we assume n = 1 for computing normalized tangents
         let n: Float = 1.0
@@ -95,12 +95,12 @@ public extension LayerRenderer.Drawable {
     func gimmeTangents(viewIndex: Int) -> simd_float4 {
         if #available(visionOS 2.0, *) {
             let mat = self.computeProjection(viewIndex: viewIndex)
-            
+
             // TODO: make this work
             //let renderTangents: [simd_float4] = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
             //return renderTangents[viewIndex]
             let res = self._extractFrustumTangents(mat)
-            print(res)
+            print("tangents", res)
             return res
         }
         else {

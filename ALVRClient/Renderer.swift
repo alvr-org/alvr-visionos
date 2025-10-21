@@ -820,6 +820,11 @@ class Renderer {
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
             if EventHandler.shared.alvrInitialized && queuedFrame != nil && EventHandler.shared.lastSubmittedTimestamp != queuedFrame?.timestamp {
                 let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
+                
+                //let currentTimeNs = UInt64(commandBuffer.gpuEndTime * Double(NSEC_PER_SEC))
+                //let actualRenderTimeNs = UInt64((commandBuffer.gpuEndTime - commandBuffer.gpuStartTime) * Double(NSEC_PER_SEC))
+                //print((commandBuffer.gpuEndTime - commandBuffer.gpuStartTime) * 1000.0)
+                
                 //print("Finished:", queuedFrame!.timestamp)
                 alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
                 EventHandler.shared.lastSubmittedTimestamp = queuedFrame!.timestamp
