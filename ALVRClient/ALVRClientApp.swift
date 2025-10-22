@@ -111,12 +111,15 @@ struct ALVRClientApp: App {
     What's changed?\n\
     \n\
     • Added support for button touch state for PSVR2 controllers (may require updating to visionOS 26.1).\n\
+    • Added support for 120Hz on Vision Pro 2025.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
     • Fixed a bug with the view tangents which caused FoVs to be wider than they should have been, and possibly some parallax on head rotation.\n\
+    • Fixed PSVR2 controller alignment to match passthrough better.\n\
+    • Fixed scaling issues with View Comfort enabled.\n\
     \n\
     ________________________________\n\
     \n\

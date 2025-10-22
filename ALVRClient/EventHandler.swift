@@ -97,7 +97,13 @@ class EventHandler: ObservableObject {
         if !alvrInitialized {
             print("Initialize ALVR")
             alvrInitialized = true
-            let refreshRates:[Float] = [100, 96, 90]
+            var refreshRates:[Float] = [100, 96, 90]
+            
+            // HACK: Detect hardware type
+            if VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) {
+                refreshRates = [120, 100, 96, 90]
+            }
+
             let capabilities = AlvrClientCapabilities(default_view_width: UInt32(renderWidth*2), default_view_height: UInt32(renderHeight*2), refresh_rates: refreshRates, refresh_rates_count: UInt64(refreshRates.count), foveated_encoding: true, encoder_high_profile: true, encoder_10_bits: true, encoder_av1: VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1), prefer_10bit: true, prefer_full_range: true, preferred_encoding_gamma: 1.5, prefer_hdr: false)
             alvr_initialize(/*capabilities=*/capabilities)
             alvr_initialize_logging()

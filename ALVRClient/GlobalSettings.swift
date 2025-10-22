@@ -11,7 +11,7 @@ struct GlobalSettings: Codable {
     var keepSteamVRCenter: Bool = true
     var showHandsOverlaid: Bool = false
     var disablePersistentSystemOverlays: Bool = true
-    var streamFPS: String = "90"
+    var streamFPS: String = "Default"
     var experimental40ppd: Bool = false
     var chromaKeyEnabled: Bool = false
     var chromaKeyDistRangeMin: Float = 0.35

@@ -14,8 +14,8 @@ struct Entry: View {
     @Environment(\.self) var environment
     let saveAction: ()->Void
     
-    let refreshRatesPost20 = ["90", "96", "100"]
-    let refreshRatesPre20 = ["90", "96"]
+    let refreshRatesPost20 = ["Default", "90", "96", "100", "120"]
+    let refreshRatesPre20 = ["Default", "90", "96"]
     
     let chromaFormatter: NumberFormatter = {
         let formatter = NumberFormatter()

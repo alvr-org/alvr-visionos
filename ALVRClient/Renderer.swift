@@ -583,7 +583,7 @@ class Renderer {
         //var out = matrix_identity_float4x4
         //out.columns.3 = transform.columns.3
         //out.columns.3.w = 1.0
-        return transform
+        return transform.translationOnly() // TODO: undo this when we fix canted views in 20.15
     }
     
     // Adjusts view tangents for debugging various issues.
@@ -729,6 +729,8 @@ class Renderer {
                     rebuildThread.name = "Rebuild Render Pipelines Thread"
                     rebuildThread.start()
                 }
+                
+                // TODO: Fix tangents to fill entire FoV if canting ever becomes more intense like PFD was
                 let leftAngles = atan(mainDrawable.gimmeTangents(viewIndex: 0) * settings.fovRenderScale)
                 let rightAngles = mainDrawable.views.count > 1 ? atan(mainDrawable.gimmeTangents(viewIndex: 1) * settings.fovRenderScale) : leftAngles
                 let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)

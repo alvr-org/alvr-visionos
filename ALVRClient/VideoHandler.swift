@@ -475,9 +475,14 @@ struct VideoHandler {
     }
     
     static func applyRefreshRate(videoFormat: CMFormatDescription?) {
-        if videoFormat == nil {
+        let streamFPS = ALVRClientApp.gStore.settings.streamFPS
+        if videoFormat == nil || streamFPS == "Default" {
             return
         }
+        if streamFPS == "120" && !VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) {
+            return
+        }
+        
         DispatchQueue.main.async {
             if let window = currentKeyWindow() {
                 let avDisplayManager = window.avDisplayManager

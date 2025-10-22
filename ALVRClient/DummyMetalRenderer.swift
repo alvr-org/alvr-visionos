@@ -77,6 +77,7 @@ class DummyMetalRenderer {
         DummyMetalRenderer.renderViewTransforms.removeAll()
         var averageViewTransform = simd_float4()
         for (idx, view) in drawable.views.enumerated() {
+            // TODO: Fix tangents to fill entire FoV if canting ever becomes more intense like PFD was
             let tangents = drawable.gimmeTangents(viewIndex: idx)
             DummyMetalRenderer.renderTangents.append(tangents)
             averageViewTransform += view.transform.columns.3
