@@ -277,6 +277,8 @@ class EventHandler: ObservableObject {
         let isCharging = UIDevice.current.batteryState == .charging
         if streamingActive {
             alvr_send_battery(WorldTracker.deviceIdHead, batteryLevel, isCharging)
+            alvr_send_battery(WorldTracker.deviceIdLeftHand, WorldTracker.shared.leftControllerBatteryPercent, WorldTracker.shared.leftControllerBatteryIsCharging)
+            alvr_send_battery(WorldTracker.deviceIdRightHand, WorldTracker.shared.rightControllerBatteryPercent, WorldTracker.shared.rightControllerBatteryIsCharging)
         }
         
         timeLastSentPeriodicUpdatedValues = CACurrentMediaTime()

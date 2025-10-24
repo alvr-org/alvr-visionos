@@ -288,6 +288,8 @@ class WorldTracker {
     var leftControllerLinVel: simd_float3 = simd_float3()
     var leftControllerAngVel: simd_float3 = simd_float3()
     var leftControllerTimestamp: TimeInterval = TimeInterval()
+    var leftControllerBatteryPercent: Float = 100.0
+    var leftControllerBatteryIsCharging: Bool = true
     
     var rightControllerAnchor: Any? = nil
     var rightControllerPose: simd_float4x4? = nil
@@ -295,10 +297,14 @@ class WorldTracker {
     var rightControllerLinVel: simd_float3 = simd_float3()
     var rightControllerAngVel: simd_float3 = simd_float3()
     var rightControllerTimestamp: TimeInterval = TimeInterval()
+    var rightControllerBatteryPercent: Float = 100.0
+    var rightControllerBatteryIsCharging: Bool = true
+    
     var controllerLock = NSObject()
     
     var arkitLock = NSObject()
     var trackedAccessories: [GCController] = []
+    var trackedStylii: [Any] = []
     var arRunning = false
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
@@ -366,6 +372,14 @@ class WorldTracker {
                 for spatialController in GCController.spatialControllers() {
                     do {
                         let accessory = try await Accessory(device: spatialController)
+                        accessories.append(accessory)
+                    } catch {
+                        print("Error during accessory initialization: \(error)")
+                    }
+                }
+                for stylus in GCStylus.styli {
+                    do {
+                        let accessory = try await Accessory(device: stylus)
                         accessories.append(accessory)
                     } catch {
                         print("Error during accessory initialization: \(error)")
@@ -615,6 +629,17 @@ class WorldTracker {
                             //print("right diff", timestampDiff)
                             objc_sync_exit(controllerLock)
                         }
+                        else if update.anchor.accessory.inherentChirality == .unspecified {
+                            objc_sync_enter(controllerLock)
+                            rightControllerAnchor = update.anchor
+                            rightControllerPose = update.anchor.originFromAnchorTransform.asSanitized()
+                            rightControllerLinVel = update.anchor.velocity.asSanitized()
+                            rightControllerAngVel = update.anchor.angularVelocity.asSanitized()
+                            //let timestampDiff = update.anchor.timestamp - rightControllerTimestamp
+                            rightControllerTimestamp = update.anchor.timestamp
+                            //print("right diff", timestampDiff)
+                            objc_sync_exit(controllerLock)
+                        }
                         //print("AAAAAA", update.timestamp, update.anchor)
                         //lastHandsUpdatedTs = update.timestamp
                         break
@@ -623,6 +648,9 @@ class WorldTracker {
                             leftControllerPose = nil
                         }
                         else if update.anchor.accessory.inherentChirality == .right {
+                            rightControllerPose = nil
+                        }
+                        else if update.anchor.accessory.inherentChirality == .unspecified {
                             rightControllerPose = nil
                         }
                         break
@@ -858,9 +886,31 @@ class WorldTracker {
             }
             
             var rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 0.0), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
-            if predictedAnchor?.accessory.name.contains("PlayStation VR") ?? false {
+            var positionCorrection = simd_float3()
+            var isPsvr = predictedAnchor?.accessory.name.contains("PlayStation VR") ?? false
+            var isStylusProbably = !(predictedAnchor?.accessory.locations.contains(.grip) ?? false)
+            if isPsvr {
                 // The 5.037 originates from the SteamVR PSVR2 controller model JSON
                 rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 5.037), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
+            }
+            else if isStylusProbably {
+                //rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 20.0), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 0.0), order: .xyz)))
+                
+                let pinchOffset = isLeft ? (leftPinchCurrentPosition - leftPinchStartPosition) : (rightPinchCurrentPosition - rightPinchStartPosition)
+                let adjustments = getTipAdjustments(.right) // TODO: left handedness
+                let adjUpDown = adjustments.0
+                let adjLeftRight = adjustments.1
+                let adjPosition = adjustments.2
+                
+                rotationCorrection = simd_quatf(.Rotation(eulerAngles: .init(x: Angle2D(degrees: 0.0), y: Angle2D(degrees: 0.0), z: Angle2D(degrees: 90.0), order: .xyz))) * adjLeftRight * adjUpDown
+                //let testval = sin(CACurrentMediaTime() * 0.125) * 0.005
+                //print(testval)
+                positionCorrection = pinchOffset + adjPosition + simd_float3(0.028, 0.07624374087383871 - 0.014043688994612107, 0.089) // 0.06, 0.095
+                //pinchOffset = simd_float3()
+                
+                //pinchOffset *= 3.5
+                
+                //let pose: AlvrPose = AlvrPose(q, convertApplePositionToSteamVR(appleOrigin + (appleDirection * -0.5) + pinchOffset + adjPosition))
             }
             
 #if DEBUG_ALVR_TRACKING
@@ -888,7 +938,7 @@ class WorldTracker {
             WorldTracker.shared.unlockDebuggables()
 #endif
             
-            var controllerPose = predictedAnchor!.coordinateSpace(for: .grip, correction: .rendered).ancestorFromSpaceTransformFloat().matrix.asSanitized()
+            var controllerPose = predictedAnchor!.coordinateSpace(for: isStylusProbably ? .aim : .grip, correction: .rendered).ancestorFromSpaceTransformFloat().matrix.asSanitized()
             let correctPsvr2Origin = simd_float3(0.002, 0.000, -0.01).asFloat4x4()
             //let basePos = simd_float3(-0.0034, -0.0034, 0.1491).asFloat4x4()
             //let otherBasePos = simd_float3(0.0012800097, 0.004458243, -0.16465126)
@@ -896,7 +946,11 @@ class WorldTracker {
             //let oxrGripPos = simd_float3(0.007, -0.00182941, 0.1019482).asFloat4x4()
             //let handgripPos = simd_float3(0.0, 0.003, 0.097).asFloat4x4()
             //print("base", oxrAimPos-oxrGripPos) // SIMD3<Float>(0.0, -0.03711825, -0.09245126)
-            controllerPose = controllerPose * correctPsvr2Origin //* handgripPos.inverse * basePos
+            if isPsvr {
+                controllerPose = controllerPose * correctPsvr2Origin //* handgripPos.inverse * basePos
+            }
+            
+            controllerPose = controllerPose * positionCorrection.asFloat4x4()
             
             // Convert from controller space to world space
             let controllerLinVel = (controllerPose.orientationOnly() * predictedAnchor!.velocity).asSanitized()
@@ -957,26 +1011,8 @@ class WorldTracker {
         return simd_slerp_longest(simd_quatf(), delta, 0.001)
     }
     
-    func pinchToAlvrDeviceMotion(_ chirality: HandAnchor.Chirality) -> AlvrDeviceMotion {
+    func getTipAdjustments(_ chirality: HandAnchor.Chirality) -> (simd_quatf, simd_quatf, simd_float3) {
         let isLeft = chirality == .left
-        let device_id = isLeft ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
-        
-        let appleOrigin = isLeft ? leftSelectionRayOrigin : rightSelectionRayOrigin
-        let appleDirection = isLeft ? leftSelectionRayDirection : rightSelectionRayDirection
-        
-        let origin = convertApplePositionToSteamVR(appleOrigin)
-        let direction = simd_normalize(convertApplePositionToSteamVR(appleOrigin + appleDirection) - origin)
-        let orient = simd_look(at: -direction)
-        
-        //let val = sin(Float(CACurrentMediaTime() * 0.25)) + 1.0
-        //let val2 = sin(Float(CACurrentMediaTime()))
-        //let val3 = (((sin(Float(CACurrentMediaTime() * 0.025)) + 1.0) * 0.5) * 0.015)
-        //let val4 = ((sin(Float(CACurrentMediaTime() * 0.125)) + 1.0) * 0.5) + 1.0
-        //let val5 = ((sin(Float(CACurrentMediaTime() * 0.125)) + 1.0) * 0.5)
-        
-        var pinchOffset = isLeft ? (leftPinchCurrentPosition - leftPinchStartPosition) : (rightPinchCurrentPosition - rightPinchStartPosition)
-        
-        //print(altitude)
         
         // Gathered these by oscillating the controller along the gaze ray, and then adjusting the
         // angles slightly with pinchOffset.y until the pointer stopped moving left/right and up/down.
@@ -1007,6 +1043,35 @@ class WorldTracker {
         }
         
         adjPosition.y += tipOffset
+        
+        return (adjUpDown, adjLeftRight, adjPosition)
+    }
+    
+    func pinchToAlvrDeviceMotion(_ chirality: HandAnchor.Chirality) -> AlvrDeviceMotion {
+        let isLeft = chirality == .left
+        let device_id = isLeft ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
+        
+        let appleOrigin = isLeft ? leftSelectionRayOrigin : rightSelectionRayOrigin
+        let appleDirection = isLeft ? leftSelectionRayDirection : rightSelectionRayDirection
+        
+        let origin = convertApplePositionToSteamVR(appleOrigin)
+        let direction = simd_normalize(convertApplePositionToSteamVR(appleOrigin + appleDirection) - origin)
+        let orient = simd_look(at: -direction)
+        
+        //let val = sin(Float(CACurrentMediaTime() * 0.25)) + 1.0
+        //let val2 = sin(Float(CACurrentMediaTime()))
+        //let val3 = (((sin(Float(CACurrentMediaTime() * 0.025)) + 1.0) * 0.5) * 0.015)
+        //let val4 = ((sin(Float(CACurrentMediaTime() * 0.125)) + 1.0) * 0.5) + 1.0
+        //let val5 = ((sin(Float(CACurrentMediaTime() * 0.125)) + 1.0) * 0.5)
+        
+        var pinchOffset = isLeft ? (leftPinchCurrentPosition - leftPinchStartPosition) : (rightPinchCurrentPosition - rightPinchStartPosition)
+        
+        //print(altitude)
+        
+        let adjustments = getTipAdjustments(chirality)
+        let adjUpDown = adjustments.0
+        let adjLeftRight = adjustments.1
+        let adjPosition = adjustments.2
         
         let q = simd_quatf(orient) * adjLeftRight * adjUpDown
         //pinchOffset = simd_float3()
@@ -1133,6 +1198,134 @@ class WorldTracker {
         return ret
     }
     
+    func sendGamepadHaptics(isLeft: Bool, isBoth: Bool, isPsvr: Bool, haptics: GCDeviceHaptics) {
+        if (isLeft || isBoth) {
+            if leftEngine == nil {
+                leftEngine = haptics.createEngine(withLocality: GCHapticsLocality.leftHandle)
+                
+                if leftEngine == nil {
+                    for locality in haptics.supportedLocalities {
+                        if (locality.rawValue as String).contains("(L)") {
+                            leftEngine = haptics.createEngine(withLocality: locality)
+                        }
+                    }
+                }
+                
+                if leftEngine == nil {
+                    leftEngine = haptics.createEngine(withLocality: GCHapticsLocality.all)
+                }
+                
+                if leftEngine != nil {
+                    do {
+                        try leftEngine?.start()
+                    } catch {
+                        print("Error starting left engine: \(error)")
+                    }
+                }
+            }
+
+            if let engine = leftEngine {
+                //print("haptic!")
+                var duration = (leftHapticsEnd - leftHapticsStart) * (isPsvr ? 1.0 : 1.0)
+                var amplitude = leftHapticsAmplitude * (isPsvr ? 0.25 : 0.7)
+                if duration < 0 {
+                    print("Skip haptic, negative duration?", duration)
+                    amplitude = 0.0
+                    duration = 0.032
+                }
+                if leftHapticsEnd < CACurrentMediaTime() {
+                    amplitude = 0.0
+                    duration = 0.032
+                    //print("Skip haptic, already over")
+                }
+                if duration > 0.5 {
+                    duration = 0.5
+                }
+                if duration < 0.032 && !isPsvr {
+                    duration = 0.032
+                }
+                do {
+                    let hapticPattern = try CHHapticPattern(events: [
+                        CHHapticEvent(eventType: .hapticContinuous, parameters: [
+                            CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0),
+                            CHHapticEventParameter(parameterID: .hapticIntensity, value: amplitude)
+                        ], relativeTime: 0, duration: duration)
+                    ], parameters: [])
+                
+                    try engine.makePlayer(with: hapticPattern).start(atTime: engine.currentTime)
+                } catch {
+                    print("Error playing pattern: \(error)")
+                    
+                    leftEngine?.stop()
+                    leftEngine = nil
+                }
+            }
+        }
+        
+        if (!isLeft || isBoth) {
+            if rightEngine == nil {
+                rightEngine = haptics.createEngine(withLocality: GCHapticsLocality.rightHandle)
+                
+                if rightEngine == nil {
+                    for locality in haptics.supportedLocalities {
+                        if (locality.rawValue as String).contains("(r)") {
+                            rightEngine = haptics.createEngine(withLocality: locality)
+                        }
+                    }
+                }
+                
+                if rightEngine == nil {
+                    rightEngine = haptics.createEngine(withLocality: GCHapticsLocality.all)
+                }
+                
+                if rightEngine != nil {
+                    do {
+                        try rightEngine?.start()
+                    } catch {
+                        print("Error starting right engine: \(error)")
+                    }
+                }
+            }
+
+            if let engine = rightEngine {
+                //print("haptic!")
+                var duration = (rightHapticsEnd - rightHapticsStart) * (isPsvr ? 1.0 : 1.0)
+                var amplitude = rightHapticsAmplitude * (isPsvr ? 0.25 : 0.7)
+                if duration < 0 {
+                    print("Skip haptic, negative duration?", duration)
+                    amplitude = 0.0
+                    duration = 0.032
+                }
+                if rightHapticsEnd < CACurrentMediaTime() {
+                    amplitude = 0.0
+                    duration = 0.032
+                    //print("Skip haptic, already over")
+                }
+                if duration > 0.5 {
+                    duration = 0.5
+                }
+                if duration < 0.032 && !isPsvr {
+                    duration = 0.032
+                }
+                do {
+                    let hapticPattern = try CHHapticPattern(events: [
+                        CHHapticEvent(eventType: .hapticContinuous, parameters: [
+                            CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0),
+                            CHHapticEventParameter(parameterID: .hapticIntensity, value: amplitude)
+                        ], relativeTime: 0, duration: duration)
+                    ], parameters: [])
+                
+                    try engine.makePlayer(with: hapticPattern).start(atTime: engine.currentTime)
+                } catch {
+                    print("Error playing pattern: \(error)")
+                    
+                    rightEngine?.stop()
+                    rightEngine = nil
+                }
+            }
+        }
+    }
+    
     func sendGamepadInputs() {
         func boolVal(_ val: Bool) -> AlvrButtonValue {
             return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_BINARY, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field0(binary: val)))
@@ -1162,6 +1355,83 @@ class WorldTracker {
             }
         }
         
+        var skipRightController = false
+        if #available(visionOS 26.0, *) {
+            if GCStylus.styli != self.trackedStylii as! [GCStylus] {
+                self.trackedStylii = GCStylus.styli
+                Task {
+                    //self.arSession.stop()
+                    await self.initializeAr()
+                }
+            }
+            for stylus in GCStylus.styli {
+                let isLeft = false // TODO left handedness
+                stylus.input?.inputStateQueueDepth = 1
+                guard let capturedInput = stylus.input?.nextInputState() else {
+                    continue
+                }
+                let buttons = capturedInput.buttons
+                let dpads = capturedInput.dpads
+                let axes = capturedInput.axes
+                
+                let rightAssociatedButtons = ["Tip", "Primary Button", "Secondary Button"]
+                
+                /*if let inputs = stylus.input {
+                    print("BEGIN")
+                    print("----------")
+                    for element in inputs.buttons {
+                        print("Button:", element.aliases, "element.touchedInput?.isTouched=", element.touchedInput?.isTouched, "element.forceInput?.value=",element.forceInput?.value, element.pressedInput)
+                    }
+                    for element in inputs.axes {
+                        print("Axis:", element.aliases, element, "absolute=", element.absoluteInput, "relative=", element.relativeInput)
+                    }
+                    for element in inputs.dpads {
+                        print("Dpad:", element.aliases, element)
+                    }
+                    for element in inputs.switches {
+                        print("Switch:", element.aliases, element, element.positionInput)
+                    }
+                    print("----------")
+                    print("END")
+                }*/
+                
+                alvr_send_button(WorldTracker.rightButtonA, boolVal(buttons["Primary Button"]?.pressedInput.isPressed ?? false))
+                //alvr_send_button(WorldTracker.rightButtonB, boolVal(buttons["Button B"]?.pressedInput.isPressed ?? false))
+                //alvr_send_button(WorldTracker.rightButtonX, boolVal(buttons["Button X"]?.pressedInput.isPressed ?? false))
+                //alvr_send_button(WorldTracker.rightButtonY, boolVal(buttons["Button Y"]?.pressedInput.isPressed ?? false))
+                //alvr_send_button(WorldTracker.rightThumbstickClick, boolVal(buttons["Right Thumbstick Button"]?.pressedInput.isPressed ?? false))
+                //alvr_send_button(WorldTracker.rightThumbstickX, scalarVal(axes["Right Thumbstick X Axis"]?.absoluteInput?.value ?? 0.0))
+                //alvr_send_button(WorldTracker.rightThumbstickY, scalarVal(axes["Right Thumbstick Y Axis"]?.absoluteInput?.value ?? 0.0))
+                //alvr_send_button(WorldTracker.rightSystemClick, boolVal((buttons["Button Options"]?.pressedInput.isPressed ?? false) ||
+                //                                                        (buttons["Button Share"]?.pressedInput.isPressed ?? false) ))
+                //alvr_send_button(WorldTracker.rightMenuClick, boolVal((buttons["Button Options"]?.pressedInput.isPressed ?? false) ||
+                //                                                      (buttons["Button Share"]?.pressedInput.isPressed ?? false) ))
+
+                if rightPinchTrigger <= 0.0 {
+                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(buttons["Secondary Button"]?.pressedInput.value ?? 0.0))
+                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(buttons["Secondary Button"]?.pressedInput.isPressed ?? false))
+                    alvr_send_button(WorldTracker.rightTriggerTouched, boolVal(buttons["Secondary Button"]?.touchedInput?.isTouched ?? false))
+                }
+                
+                alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(buttons["Tip"]?.pressedInput.isPressed ?? false))
+                alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal(buttons["Tip"]?.pressedInput.value ?? 0.0))
+                alvr_send_button(WorldTracker.rightSqueezeForce, scalarVal((buttons["Tip"]?.forceInput?.value ?? ((buttons["Tip"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))))
+                alvr_send_button(WorldTracker.rightSqueezeTouched, boolVal((buttons["Tip"]?.forceInput?.value ?? 0.0) > 0.0))
+                
+                for val in rightAssociatedButtons {
+                    if buttons[val]?.pressedInput.isPressed ?? false {
+                        rightSkeletonDisableHysteresis = defaultSkeletonDisableHysteresis
+                    }
+                }
+                
+                if let haptics = stylus.haptics {
+                    sendGamepadHaptics(isLeft: false, isBoth: false, isPsvr: false, haptics: haptics)
+                }
+                
+                skipRightController = true
+            }
+        }
+        
         for controller in GCController.controllers() {
             let isLeft = (controller.vendorName == "Joy-Con (L)") || (controller.vendorName == "PlayStation VR2 Sense Controller (L)")
             var isBoth = (controller.vendorName == "Joy-Con (L/R)") || !(controller.vendorName?.contains("Joy-Con") ?? true)
@@ -1169,6 +1439,9 @@ class WorldTracker {
             if controller.vendorName?.contains("PlayStation VR") ?? false {
                 isBoth = false
                 isPsvr = true
+            }
+            if (!isLeft || isBoth) && skipRightController {
+                continue
             }
             //print(controller.vendorName, controller.physicalInputProfile.elements, controller.physicalInputProfile.allButtons)
 
@@ -1191,6 +1464,15 @@ class WorldTracker {
             var rightAssociatedAxis: [String] = []
             var leftAssociatedDpads: [String] = []
             var rightAssociatedDpads: [String] = []
+            
+            if isLeft {
+                WorldTracker.shared.leftControllerBatteryPercent = controller.battery?.batteryLevel ?? 100.0
+                WorldTracker.shared.leftControllerBatteryIsCharging = (controller.battery?.batteryState ?? .full) == .charging
+            }
+            else {
+                WorldTracker.shared.rightControllerBatteryPercent = controller.battery?.batteryLevel ?? 100.0
+                WorldTracker.shared.rightControllerBatteryIsCharging = (controller.battery?.batteryState ?? .full) == .charging
+            }
             
             // Special-case PSVR controllers because we plan to support them specifically
             // Need to check visionOS 26 here because forceInputs e.g. for triggers, are a 26-only feature.
@@ -1514,132 +1796,7 @@ class WorldTracker {
             
             // TODO: Frequency
             if let haptics = controller.haptics {
-            
-                if (isLeft || isBoth) {
-                    if leftEngine == nil {
-                        leftEngine = haptics.createEngine(withLocality: GCHapticsLocality.leftHandle)
-                        
-                        if leftEngine == nil {
-                            for locality in haptics.supportedLocalities {
-                                if (locality.rawValue as String).contains("(L)") {
-                                    leftEngine = haptics.createEngine(withLocality: locality)
-                                }
-                            }
-                        }
-                        
-                        if leftEngine == nil {
-                            leftEngine = haptics.createEngine(withLocality: GCHapticsLocality.all)
-                        }
-                        
-                        if leftEngine != nil {
-                            do {
-                                try leftEngine?.start()
-                            } catch {
-                                print("Error starting left engine: \(error)")
-                            }
-                        }
-                    }
-    
-                    if let engine = leftEngine {
-                        //print("haptic!")
-                        var duration = (leftHapticsEnd - leftHapticsStart) * (isPsvr ? 1.0 : 1.0)
-                        var amplitude = leftHapticsAmplitude * (isPsvr ? 0.25 : 0.7)
-                        if duration < 0 {
-                            print("Skip haptic, negative duration?", duration)
-                            amplitude = 0.0
-                            duration = 0.032
-                        }
-                        if leftHapticsEnd < CACurrentMediaTime() {
-                            amplitude = 0.0
-                            duration = 0.032
-                            //print("Skip haptic, already over")
-                        }
-                        if duration > 0.5 {
-                            duration = 0.5
-                        }
-                        if duration < 0.032 && !isPsvr {
-                            duration = 0.032
-                        }
-                        do {
-                            let hapticPattern = try CHHapticPattern(events: [
-                                CHHapticEvent(eventType: .hapticContinuous, parameters: [
-                                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0),
-                                    CHHapticEventParameter(parameterID: .hapticIntensity, value: amplitude)
-                                ], relativeTime: 0, duration: duration)
-                            ], parameters: [])
-                        
-                            try engine.makePlayer(with: hapticPattern).start(atTime: engine.currentTime)
-                        } catch {
-                            print("Error playing pattern: \(error)")
-                            
-                            leftEngine?.stop()
-                            leftEngine = nil
-                        }
-                    }
-                }
-                
-                if (!isLeft || isBoth) {
-                    if rightEngine == nil {
-                        rightEngine = haptics.createEngine(withLocality: GCHapticsLocality.rightHandle)
-                        
-                        if rightEngine == nil {
-                            for locality in haptics.supportedLocalities {
-                                if (locality.rawValue as String).contains("(r)") {
-                                    rightEngine = haptics.createEngine(withLocality: locality)
-                                }
-                            }
-                        }
-                        
-                        if rightEngine == nil {
-                            rightEngine = haptics.createEngine(withLocality: GCHapticsLocality.all)
-                        }
-                        
-                        if rightEngine != nil {
-                            do {
-                                try rightEngine?.start()
-                            } catch {
-                                print("Error starting right engine: \(error)")
-                            }
-                        }
-                    }
-    
-                    if let engine = rightEngine {
-                        //print("haptic!")
-                        var duration = (rightHapticsEnd - rightHapticsStart) * (isPsvr ? 1.0 : 1.0)
-                        var amplitude = rightHapticsAmplitude * (isPsvr ? 0.25 : 0.7)
-                        if duration < 0 {
-                            print("Skip haptic, negative duration?", duration)
-                            amplitude = 0.0
-                            duration = 0.032
-                        }
-                        if rightHapticsEnd < CACurrentMediaTime() {
-                            amplitude = 0.0
-                            duration = 0.032
-                            //print("Skip haptic, already over")
-                        }
-                        if duration > 0.5 {
-                            duration = 0.5
-                        }
-                        if duration < 0.032 && !isPsvr {
-                            duration = 0.032
-                        }
-                        do {
-                            let hapticPattern = try CHHapticPattern(events: [
-                                CHHapticEvent(eventType: .hapticContinuous, parameters: [
-                                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0),
-                                    CHHapticEventParameter(parameterID: .hapticIntensity, value: amplitude)
-                                ], relativeTime: 0, duration: duration)
-                            ], parameters: [])
-                        
-                            try engine.makePlayer(with: hapticPattern).start(atTime: engine.currentTime)
-                        } catch {
-                            print("Error playing pattern: \(error)")
-                            
-                            rightEngine?.stop()
-                            rightEngine = nil
-                        }
-                    }
-                }
+                sendGamepadHaptics(isLeft: isLeft, isBoth: isBoth, isPsvr: isPsvr, haptics: haptics)
             }
             
             // TODO motion fusion

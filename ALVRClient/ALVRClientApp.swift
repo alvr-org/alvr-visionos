@@ -112,6 +112,8 @@ struct ALVRClientApp: App {
     \n\
     • Added support for button touch state for PSVR2 controllers (may require updating to visionOS 26.1).\n\
     • Added support for 120Hz on Vision Pro 2025.\n\
+    • Added support for viewing controller battery percentages and charging status in SteamVR.\n\
+    • Added support for Logitech Muse stylii.\n\
     \n\
     ________________________________\n\
     \n\
