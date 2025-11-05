@@ -47,6 +47,8 @@ class EventHandler: ObservableObject {
     var inputRunning = false
     var vtDecompressionSession:VTDecompressionSession? = nil
     var videoFormat:CMFormatDescription? = nil
+    var currentCodec: Int = -1
+    var av1InstantiatedForReal = false
     var frameQueueLock = NSObject()
 
     var frameQueue = [QueuedFrame]()
@@ -407,9 +409,19 @@ class EventHandler: ObservableObject {
         self.framesSinceLastDecode = 0
         
         let startedDecodeTime = CACurrentMediaTime()
+        
+        if currentCodec == ALVR_CODEC_AV1.rawValue && !av1InstantiatedForReal {
+            print("Creating AV1 codec for real now.")
+            let (attemptVtDecompressionSession, attemptVideoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: currentCodec)
+            if attemptVtDecompressionSession != nil && attemptVideoFormat != nil {
+                vtDecompressionSession = attemptVtDecompressionSession
+                videoFormat = attemptVideoFormat
+                av1InstantiatedForReal = true
+            }
+        }
 
         if let vtDecompressionSession = self.vtDecompressionSession {
-            VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: self.videoFormat!) { [self] imageBuffer in
+            VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: self.videoFormat!, codec: currentCodec) { [self] imageBuffer in
                 guard let imageBuffer = imageBuffer else {
                     //print("Frame not decoded")
                     return
@@ -595,7 +607,8 @@ class EventHandler: ObservableObject {
     func handleAlvrEvents() {
         print("Start event thread...")
         Thread.setThreadPriority(0.9)
-        var currentCodec = -1
+        currentCodec = -1
+        av1InstantiatedForReal = false
         while inputRunning {
             eventHeartbeat += 1
             // Send periodic updated values, such as battery percentage, once every five seconds
@@ -752,6 +765,7 @@ class EventHandler: ObservableObject {
                     defer { nalBuffer?.deallocate() }
                     alvr_get_decoder_config(nalBuffer?.baseAddress)
 
+                    av1InstantiatedForReal = false
                     (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nalBuffer!, codec: currentCodec)
                 }
 
