@@ -114,6 +114,8 @@ struct ALVRClientApp: App {
     • Added support for 120Hz on Vision Pro 2025.\n\
     • Added support for viewing controller battery percentages and charging status in SteamVR.\n\
     • Added support for Logitech Muse stylii.\n\
+    • Added support for AV1 hardware decoding on M5 chipsets.\n\
+    • Added an option to enable double-clack controller-hand changeover behavior.\n\
     \n\
     ________________________________\n\
     \n\
