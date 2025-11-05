@@ -95,8 +95,13 @@ struct Entry: View {
                     }
                     .toggleStyle(.switch)
                     
+                    Toggle(isOn: $gStore.settings.enableDoubleTapForHands) {
+                        Text("Clack controllers together twice while looking at them to switch to hand tracking")
+                    }
+                    .toggleStyle(.switch)
+                    
                     Toggle(isOn: $gStore.settings.emulatedPinchInteractions) {
-                        Text("Emulate pinch interactions as controller inputs")
+                        Text("Send gaze-pinch interactions as controller inputs")
                     }
                     .toggleStyle(.switch)
                     

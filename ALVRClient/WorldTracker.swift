@@ -2167,7 +2167,9 @@ class WorldTracker {
         else if validClickTogether && (CACurrentMediaTime() - firstControllerClickTime) > 0.2 && (CACurrentMediaTime() - secondControllerClickTime) > 1.0 {
             secondControllerClickTime = CACurrentMediaTime()
             print("second clack", leftMag, rightMag, leftVelMag, rightVelMag, crossMag, dotLeftRight, leftRightDist, leftDistToHeadset, rightDistToHeadset)
-            controllersAreDisabledByClickTogether = !controllersAreDisabledByClickTogether
+            if ALVRClientApp.gStore.settings.enableDoubleTapForHands {
+                controllersAreDisabledByClickTogether = !controllersAreDisabledByClickTogether
+            }
         }
         else if validClickTogether {
             print("other clack", leftMag, rightMag, crossMag, dotLeftRight, leftRightDist, CACurrentMediaTime() - firstControllerClickTime)
