@@ -110,7 +110,7 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • No features added yet.\n\
+    • Removed the AWDL warning dialog for now, since it seems to be too bugged to dismiss.\n\
     \n\
     ________________________________\n\
     \n\

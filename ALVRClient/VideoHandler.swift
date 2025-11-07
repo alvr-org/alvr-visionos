@@ -972,6 +972,14 @@ struct VideoHandler {
             .first
     }
     
+    static func getAllWindows() -> [UIWindow]? {
+        UIApplication.shared.connectedScenes
+            .filter({ $0.activationState == .foregroundActive })
+            .map({ $0 as? UIWindowScene })
+            .compactMap({ $0 })
+            .first?.windows
+    }
+    
     static func applyRefreshRate(videoFormat: CMFormatDescription?) {
         let streamFPS = ALVRClientApp.gStore.settings.streamFPS
         if videoFormat == nil || streamFPS == "Default" {
@@ -986,6 +994,16 @@ struct VideoHandler {
                 let avDisplayManager = window.avDisplayManager
                 avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: Float(ALVRClientApp.gStore.settings.streamFPS) ?? 90, formatDescription: videoFormat!)
             }
+            
+            /*
+            let windows = getAllWindows()
+            if windows != nil {
+                for window in windows! {
+                    let avDisplayManager = window.avDisplayManager
+                    avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: Float(ALVRClientApp.gStore.settings.streamFPS) ?? 90, formatDescription: videoFormat!)
+                }
+            }
+             */
         }
     }
 }
