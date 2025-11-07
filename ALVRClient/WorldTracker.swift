@@ -402,7 +402,7 @@ class WorldTracker {
             trackingList.append(handTracking)
         }
         if authStatus[.worldSensing] == .allowed {
-            trackingList.append(sceneReconstruction)
+            //trackingList.append(sceneReconstruction)
             trackingList.append(planeDetection)
         }
 #if XCODE_BETA_26
@@ -1896,7 +1896,7 @@ class WorldTracker {
         //
         // That aside, if we add an anchor at (0,0,0), we will get reports in processWorldTrackingUpdates()
         // every time the user recenters.
-        if (!self.worldTrackingAddedOriginAnchor && sentPoses > 300) || !ALVRClientApp.gStore.settings.keepSteamVRCenter {
+        if (!self.worldTrackingAddedOriginAnchor && sentPoses > 300) || (!self.worldTrackingAddedOriginAnchor && !ALVRClientApp.gStore.settings.keepSteamVRCenter) {
             if self.worldOriginAnchor == nil && ALVRClientApp.gStore.settings.keepSteamVRCenter {
                 self.worldOriginAnchor = WorldAnchor(originFromAnchorTransform: matrix_identity_float4x4)
                 self.worldTrackingSteamVRTransform = matrix_identity_float4x4
@@ -2443,17 +2443,17 @@ class WorldTracker {
         WorldTracker.shared.unlockDebuggables()
 #endif
 
-        Thread {
+        EventHandler.shared.outgoingWorker.enqueue {
             //Thread.sleep(forTimeInterval: delay)
             //alvr_send_view_params(UnsafePointer(viewFovsPtr))
             alvr_send_tracking(reportedTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)])
-            
+
             viewFovsPtr.deallocate()
             eyeGazeLeftPtr?.deallocate()
             eyeGazeRightPtr?.deallocate()
             skeletonLeftPtr?.deallocate()
             skeletonRightPtr?.deallocate()
-        }.start()
+        }
         
         return appleOriginFromAnchor
     }

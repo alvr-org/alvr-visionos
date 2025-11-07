@@ -502,7 +502,7 @@ struct VideoHandler {
     
     private static func annexBBufferToCMSampleBufferWithCopy(buffer: UnsafeMutableBufferPointer<UInt8>, videoFormat: CMFormatDescription, naluIndices: [NaluIndex]) -> CMSampleBuffer? {
         var err: OSStatus = 0
-        defer { buffer.deallocate() }
+        //defer { buffer.deallocate() }
 
         // we're replacing the 3/4 nalu headers with a 4 byte length, so add an extra byte on top of the original length for each 3-byte nalu header
         let blockBufferLength = buffer.count + naluIndices.filter(\.threeByteHeader).count

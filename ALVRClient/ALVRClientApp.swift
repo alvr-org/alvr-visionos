@@ -110,20 +110,15 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Added support for button touch state for PSVR2 controllers (may require updating to visionOS 26.1).\n\
-    • Added support for 120Hz on Vision Pro 2025.\n\
-    • Added support for viewing controller battery percentages and charging status in SteamVR.\n\
-    • Added support for Logitech Muse stylii.\n\
-    • Added support for AV1 hardware decoding on M5 chipsets.\n\
-    • Added an option to enable double-clack controller-hand changeover behavior.\n\
+    • No features added yet.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
-    • Fixed a bug with the view tangents which caused FoVs to be wider than they should have been, and possibly some parallax on head rotation.\n\
-    • Fixed PSVR2 controller alignment to match passthrough better.\n\
-    • Fixed scaling issues with View Comfort enabled.\n\
+    • Fixed a bug where FoV values sent to SteamVR didn't compensate for display canting and were slightly smaller than they needed to be.\n\
+    • Improved performance of outgoing pose packets somewhat.\n\
+    • Fixed a bug where some encoders would immediately cause the app to crash on entry.\n\
     \n\
     ________________________________\n\
     \n\

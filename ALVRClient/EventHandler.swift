@@ -21,9 +21,90 @@ import Foundation
 import Network
 import UIKit
 
+final class OutgoingWorker {
+    private var currentIdxLock = NSCondition()
+    private var condition = [NSCondition(), NSCondition(), NSCondition()]
+    private var pendingWork: [(() -> Void)?] = [nil, nil, nil]
+    private var shouldStop = false
+    private var outgoingThreads: [Thread?] = [nil, nil, nil]
+    private var currentIdx: Int = 0
+
+    init() {
+        restartWorkers()
+    }
+
+    func enqueue(_ work: @escaping () -> Void) {
+        currentIdxLock.lock()
+        
+        if shouldStop {
+            restartWorkers()
+        }
+        
+        condition[currentIdx].lock()
+        pendingWork[currentIdx] = work
+        condition[currentIdx].signal()
+        condition[currentIdx].unlock()
+        
+        currentIdx = (currentIdx + 1) % 3
+        currentIdxLock.unlock()
+    }
+
+    private func threadMain(_ idx: Int) {
+        print((Thread.current.name ?? "OutgoingWorker Unknown") + " starting.")
+        condition[idx].lock()
+        while !shouldStop {
+            while pendingWork[idx] == nil {
+                condition[idx].wait()
+                if shouldStop {
+                    break
+                }
+            }
+            let work = pendingWork[idx]!
+            pendingWork[idx] = nil
+            condition[idx].unlock()
+
+            work()
+
+            condition[idx].lock()
+        }
+        print((Thread.current.name ?? "OutgoingWorker Unknown") + " stopped.")
+        condition[idx].unlock()
+    }
+    
+    func stopWorkers() {
+        print("Stopping all OutgoingWorkers.")
+        currentIdxLock.lock()
+        shouldStop = true
+        for i in 0..<3 {
+            outgoingThreads[i]?.cancel()
+        }
+        currentIdxLock.unlock()
+    }
+    
+    func restartWorkers() {
+        print("Starting all OutgoingWorkers.")
+        currentIdxLock.lock()
+        for i in 0..<3 {
+            outgoingThreads[i] = Thread {
+                self.threadMain(i)
+            }
+            outgoingThreads[i]?.qualityOfService = .userInteractive
+            outgoingThreads[i]?.name = "Outgoing Data " + String(i)
+            outgoingThreads[i]?.start()
+            
+            pendingWork[i] = nil
+            condition[i] = NSCondition()
+        }
+        
+        shouldStop = false
+        currentIdxLock.unlock()
+    }
+}
+
 class EventHandler: ObservableObject {
     static let shared = EventHandler()
 
+    var outgoingWorker : OutgoingWorker = OutgoingWorker()
     var eventsThread : Thread?
     var eventsWatchThread : Thread?
         
@@ -62,6 +143,7 @@ class EventHandler: ObservableObject {
     var viewTransforms: [simd_float4x4] = [matrix_identity_float4x4, matrix_identity_float4x4]
     var viewFovs: [AlvrFov] = [AlvrFov(left: -1.0471973, right: 0.7853982, up: 0.7853982, down: -0.8726632), AlvrFov(left: -0.7853982, right: 1.0471973, up: 0.7853982, down: -0.8726632)]
     var sentViewTangents: [simd_float4] = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
+    var realViewTangents: [simd_float4] = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
 
     var framesSinceLastIDR:Int = 0
     var framesSinceLastDecode:Int = 0
@@ -135,6 +217,8 @@ class EventHandler: ObservableObject {
             eventsThread?.qualityOfService = .background
             eventsWatchThread?.name = "Events Watchdog Thread"
             eventsWatchThread?.start()
+            
+            outgoingWorker.restartWorkers()
         }
     }
     
@@ -151,6 +235,8 @@ class EventHandler: ObservableObject {
         framesSinceLastDecode = 0
         lastIpd = -1
         lastQueuedFrame = nil
+        
+        outgoingWorker.stopWorkers()
         
         updateConnectionState(.disconnected)
     }
@@ -368,7 +454,7 @@ class EventHandler: ObservableObject {
                     print("User doesn't want to see the alert.")
                 }
                 else {
-                    DispatchQueue.main.async {
+                    /*DispatchQueue.main.async {
                         if self.awdlAlertPresented {
                             return
                         }
@@ -376,7 +462,7 @@ class EventHandler: ObservableObject {
                         
                         // Not super kosher but I don't see another way.
                         ALVRClientApp.shared.openWindow(id: "AWDLAlert")
-                    }
+                    }*/
                 }
             }
             
@@ -469,7 +555,8 @@ class EventHandler: ObservableObject {
                     else {
                         frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, viewParamsValid: false, viewParams: viewParamsDummy))
                     }
-                    if frameQueue.count > 3 {
+                    // TODO: make this configurable
+                    if frameQueue.count > 2 {
                         frameQueue.removeFirst()
                     }
 

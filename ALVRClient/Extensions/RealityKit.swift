@@ -92,6 +92,74 @@ public extension LayerRenderer.Drawable {
         return simd_float4(abs(left), abs(right), abs(bottom), abs(top))
     }
     
+    // Calculates a view transform which is orthogonal (with no rotational component),
+    // with the same aspect ratio, and can inscribe the rotated view transform inside itself.
+    // Useful for converting canted transforms to ones compatible with SteamVR and legacy runtimes.
+    func _cantedViewToProportionalCircumscribedOrthogonal(
+        fov: AlvrFov,
+        viewTransform: simd_float4x4,
+        fovPostScale: Float
+    ) -> (AlvrFov, simd_float4, simd_float4x4) {
+        /*let viewpose_orth = Pose {
+            orientation: Quat::IDENTITY,
+            position: view_canted.pose.position,
+        };*/
+
+        // Calculate unit vectors for the corner of the view space
+        let v0 = simd_float3(fov.left,  fov.down, -1.0);
+        let v1 = simd_float3(fov.right, fov.down, -1.0);
+        let v2 = simd_float3(fov.right, fov.up, -1.0);
+        let v3 = simd_float3(fov.left,  fov.up, -1.0);
+
+        // Our four corners in world space
+        let orientationOnly = viewTransform.orientationOnly()
+        let w0 = orientationOnly * v0;
+        let w1 = orientationOnly * v1;
+        let w2 = orientationOnly * v2;
+        let w3 = orientationOnly * v3;
+
+        // Project into 2D space
+        let pt0 = simd_float2(w0.x * (-1.0 / w0.z), w0.y * (-1.0 / w0.z));
+        let pt1 = simd_float2(w1.x * (-1.0 / w1.z), w1.y * (-1.0 / w1.z));
+        let pt2 = simd_float2(w2.x * (-1.0 / w2.z), w2.y * (-1.0 / w2.z));
+        let pt3 = simd_float2(w3.x * (-1.0 / w3.z), w3.y * (-1.0 / w3.z));
+
+        // Find the minimum/maximum point values for our new frustum
+        let ptsX = [pt0.x, pt1.x, pt2.x, pt3.x];
+        let ptsY = [pt0.y, pt1.y, pt2.y, pt3.y];
+        let inscribed_left = ptsX.reduce(Float.infinity) { min($0, $1) }
+        let inscribed_right = ptsX.reduce(-Float.infinity) { max($0, $1) }
+        let inscribed_up = ptsY.reduce(-Float.infinity) { max($0, $1) }
+        let inscribed_down = ptsY.reduce(Float.infinity) { min($0, $1) }
+
+        let fov_orth = AlvrFov(
+            left: inscribed_left,
+            right: inscribed_right,
+            up: inscribed_up,
+            down: inscribed_down,
+        );
+
+        // Last step: Preserve the aspect ratio, so that we don't have to deal with non-square pixel issues.
+        let fov_orth_width = abs(fov_orth.right) + abs(fov_orth.left);
+        let fov_orth_height = abs(fov_orth.up) + abs(fov_orth.down);
+        let fov_orig_width = abs(fov.right) + abs(fov.left);
+        let fov_orig_height = abs(fov.up) + abs(fov.down);
+        let scales = [
+            fov_orth_width / fov_orig_width,
+            fov_orth_height / fov_orig_height,
+        ];
+
+        let fov_inscribe_scale = max((scales.reduce(-Float.infinity) { max($0, $1) }), 1.0)
+        let fov_orth_corrected = AlvrFov(
+            left: fov.left * fov_inscribe_scale * fovPostScale,
+            right: fov.right * fov_inscribe_scale * fovPostScale,
+            up: fov.up * fov_inscribe_scale * fovPostScale,
+            down: fov.down * fov_inscribe_scale * fovPostScale,
+        );
+
+        return (fov_orth_corrected, simd_float4(tan(-fov_orth_corrected.left), tan(fov_orth_corrected.right), tan(fov_orth_corrected.up), tan(-fov_orth_corrected.down)), viewTransform.translationOnly())
+    }
+    
     func gimmeTangents(viewIndex: Int) -> simd_float4 {
         if #available(visionOS 2.0, *) {
             let mat = self.computeProjection(viewIndex: viewIndex)
