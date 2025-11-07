@@ -218,7 +218,7 @@ class EventHandler: ObservableObject {
             eventsWatchThread?.name = "Events Watchdog Thread"
             eventsWatchThread?.start()
             
-            outgoingWorker.restartWorkers()
+            //outgoingWorker.restartWorkers()
         }
     }
     
@@ -236,7 +236,7 @@ class EventHandler: ObservableObject {
         lastIpd = -1
         lastQueuedFrame = nil
         
-        outgoingWorker.stopWorkers()
+        //outgoingWorker.stopWorkers()
         
         updateConnectionState(.disconnected)
     }
