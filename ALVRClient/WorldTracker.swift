@@ -576,6 +576,9 @@ class WorldTracker {
                             crownPressCount = 0
                         }
                     }
+                    
+                    // TODO raycast to the nearest wall/TV
+                    alvr_send_playspace(2.0, 2.0)
                 }
                 
             case .removed:
