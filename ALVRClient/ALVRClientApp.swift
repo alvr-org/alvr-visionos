@@ -116,6 +116,7 @@ struct ALVRClientApp: App {
     \n\
     Bug fixes:\n\
     \n\
+    • Fixed AWDL streaming spikes.\n\
     • Fixed a bug where FoV values sent to SteamVR didn't compensate for display canting and were slightly smaller than they needed to be.\n\
     • Improved performance of outgoing pose packets somewhat.\n\
     • Fixed a bug where some encoders would immediately cause the app to crash on entry.\n\
