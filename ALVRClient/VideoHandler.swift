@@ -989,10 +989,13 @@ struct VideoHandler {
             return
         }
         
+        let refreshRate = Float(ALVRClientApp.gStore.settings.streamFPS) ?? 90
+        print("Setting refresh rate preference to:", refreshRate)
+        
         DispatchQueue.main.async {
             if let window = currentKeyWindow() {
                 let avDisplayManager = window.avDisplayManager
-                avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: Float(ALVRClientApp.gStore.settings.streamFPS) ?? 90, formatDescription: videoFormat!)
+                avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: refreshRate, formatDescription: videoFormat!)
             }
             
             /*
