@@ -306,6 +306,7 @@ class WorldTracker {
     var trackedAccessories: [GCController] = []
     var trackedStylii: [Any] = []
     var arRunning = false
+    var needsRecenterTrigger = false
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -577,8 +578,7 @@ class WorldTracker {
                         }
                     }
                     
-                    // TODO raycast to the nearest wall/TV
-                    alvr_send_playspace(2.0, 2.0)
+                    needsRecenterTrigger = true
                 }
                 
             case .removed:
@@ -2450,6 +2450,11 @@ class WorldTracker {
             //Thread.sleep(forTimeInterval: delay)
             //alvr_send_view_params(UnsafePointer(viewFovsPtr))
             alvr_send_tracking(reportedTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)])
+            if self.needsRecenterTrigger {
+                // TODO raycast to the nearest wall/TV
+                alvr_send_playspace(2.0, 2.0)
+                self.needsRecenterTrigger = false
+            }
 
             viewFovsPtr.deallocate()
             eyeGazeLeftPtr?.deallocate()
