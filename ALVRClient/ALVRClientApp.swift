@@ -110,13 +110,14 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Removed the AWDL warning dialog for now, since it seems to be too bugged to dismiss.\n\
+    • Removed the AWDL warning dialog for now, AWDL is fixed on visionOS 26 onwards.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
     • Fixed AWDL streaming spikes.\n\
+    • Maybe fixed ALVR custom recentering?\n\
     • Fixed a bug where FoV values sent to SteamVR didn't compensate for display canting and were slightly smaller than they needed to be.\n\
     • Improved performance of outgoing pose packets somewhat.\n\
     • Fixed a bug where some encoders would immediately cause the app to crash on entry.\n\
