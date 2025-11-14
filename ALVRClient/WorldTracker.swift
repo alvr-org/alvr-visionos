@@ -725,14 +725,16 @@ class WorldTracker {
                             }
                             
                             crownPressCount = 0
+                            
+                            needsRecenterTrigger = true
                         }
                         else if !keepSteamVRCenter {
                             print("No recentering for SteamVR")
                             crownPressCount = 0
+                            
+                            needsRecenterTrigger = true
                         }
                     }
-                    
-                    needsRecenterTrigger = true
                 }
                 
             case .removed:
