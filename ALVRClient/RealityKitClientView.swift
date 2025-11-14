@@ -7,6 +7,7 @@ import RealityKit
 import AVFoundation
 import CoreImage
 import GameController
+import AVKit
 
 struct RealityKitClientView: View {
     var texture: MaterialParameters.Texture?
@@ -175,17 +176,31 @@ struct RealityKitClientView: View {
     }
     
     var body: some View {
-        RealityView { content in
-            await RealityKitClientSystem.setup(content)
+        RealityView { content, attachments in
+            await RealityKitClientSystem.setup(content, attachments)
             await RealityKitEyeTrackingSystem.setup(content)
             
             MagicRealityKitClientSystemComponent.registerComponent()
             MagicRealityKitEyeTrackingSystemComponent.registerComponent()
             RealityKitClientSystem.registerSystem()
             RealityKitEyeTrackingSystem.registerSystem()
+            
+            /*if let cam = attachments.entity(for: "camera") {
+                cam.setParent(nil)
+                content.add(cam)
+            }*/
         }
-        update: { content in
+        update: { content, attachments in
 
+        }
+        attachments: {
+            Attachment(id: "persona_camera") {
+                Text("")
+                .cameraAnchor(isActive: true)
+            }
+            Attachment(id: "camera_view") {
+                CameraView(enableDebug: ALVRClientApp.gStore.settings.showFaceTrackingDebug)
+            }
         }
         .newGameControllerSupportForVisionOS2()
         .gesture(

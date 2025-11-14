@@ -146,8 +146,8 @@ struct Entry: View {
                         .font(.system(size: 20, weight: .bold))
                     
                     Toggle(isOn: $gStore.settings.experimental40ppd) {
-                        Text("Experimental 40PPD renderer*")
-                        Text("*Experimental! May cause juddering and/or nausea!")
+                        Text("RealityKit renderer*")
+                        Text("*Deprecated! May cause juddering and/or nausea!")
                         .font(.system(size: 10))
                     }
                     .toggleStyle(.switch)
@@ -225,7 +225,21 @@ struct Entry: View {
                     }
                     .toggleStyle(.switch)
 #endif
-                   Toggle(isOn: $gStore.settings.dismissWindowOnEnter) {
+                    Toggle(isOn: $gStore.settings.enablePersonaFaceTracking) {
+                        Text("Use Spatial Persona for Face Tracking (Beta)")
+                        Text("*Currently requires RealityKit renderer")
+                            .font(.system(size: 10))
+                    }
+                    .toggleStyle(.switch)
+                    
+                    Toggle(isOn: $gStore.settings.showFaceTrackingDebug) {
+                        Text("Show Face Tracking Debug View (Beta)")
+                        Text("*Currently requires RealityKit renderer")
+                            .font(.system(size: 10))
+                    }
+                    .toggleStyle(.switch)
+                    
+                    Toggle(isOn: $gStore.settings.dismissWindowOnEnter) {
                         Text("Dismiss this window on entry")
                     }
                     .toggleStyle(.switch)

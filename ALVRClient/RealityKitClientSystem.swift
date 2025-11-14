@@ -142,7 +142,7 @@ class RealityKitClientSystem : System {
         }
     }
     
-    static func setup(_ content: RealityViewContent) async {
+    static func setup(_ content: RealityViewContent, _ attachments: RealityViewAttachments? = nil) async {
         
         await MainActor.run {
             let materialBackdrop = UnlitMaterial(color: .black)
@@ -234,6 +234,23 @@ class RealityKitClientSystem : System {
             content.add(videoPlaneC_R)
             content.add(checkFloorLevelingPlane)
             content.add(anchor)
+            
+            if let cam = attachments?.entity(for: "persona_camera") {
+                //cam.setParent(nil)
+                cam.isEnabled = true
+                cam.name = "persona_camera_ent"
+                content.add(cam)
+            }
+            
+            if ALVRClientApp.gStore.settings.enablePersonaFaceTracking {
+                if let cam = attachments?.entity(for: "camera_view") {
+                    //cam.setParent(nil)
+                    cam.isEnabled = true
+                    cam.name = "camera_view_ent"
+                    cam.position = simd_float3(0.0, 1.0, -2.0)
+                    content.add(cam)
+                }
+            }
         }
     }
     
@@ -1085,7 +1102,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         return true
     }
-
+    
+    var cameraFlipper = false
+    var cameraFlipperIdx = 0
     func update(context: SceneUpdateContext) {
         let startUpdateTime = CACurrentMediaTime()
         
@@ -1123,6 +1142,9 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             return
         }
         guard let input_catcher = context.scene.findEntity(named: "input_catcher") as? ModelEntity else {
+            return
+        }
+        guard let persona_camera_ent = context.scene.findEntity(named: "persona_camera_ent") else {
             return
         }
         
@@ -1217,6 +1239,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             return
         }
         
+        var deviceTransform = matrix_identity_float4x4
         objc_sync_enter(self.rkFramePoolLock)
         if !self.rkFramePool.isEmpty {
             let (texture, depthTexture, vrrBuffer) = self.rkFramePool.removeFirst()
@@ -1227,6 +1250,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 self.rkFramePool.append((texture, depthTexture, vrrBuffer))
                 //print("no frame")
             }
+            deviceTransform = pair?.2 ?? matrix_identity_float4x4
         }
         objc_sync_exit(self.rkFramePoolLock)
         
@@ -1410,10 +1434,26 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         //print("presented")
         objc_sync_exit(rkFramePoolLock)
         //print("totals", context.deltaTime, CACurrentMediaTime() - startUpdateTime)
+        
+        var personaPos = deviceTransform.columns.3.asFloat3()
+        personaPos -= deviceTransform.columns.2.asFloat3()
+        //pos -= pos2
+        persona_camera_ent.position = personaPos
+        persona_camera_ent.orientation = simd_quatf(deviceTransform)
+        
+        // This forces the persona camera to snap to the newest view,
+        // since there's no other camera it causes the persona camera to
+        // lock to persona_camera_ent instead of lagging.
+        persona_camera_ent.isEnabled = self.cameraFlipper
+        
+        self.cameraFlipperIdx += 1
+        if self.cameraFlipperIdx % 2 == 0 {
+            self.cameraFlipper = !self.cameraFlipper
+        }
     }
     
     // TODO: Share this with Renderer somehow
-    @MainActor func renderFrame(drawableTexture: MTLTexture, offscreenTexture: MTLTexture, depthTexture: MTLTexture, vrrBuffer: MTLBuffer, commandBuffer: MTLCommandBuffer) -> (MTLCommandBuffer, RKQueuedFrame)? {
+    @MainActor func renderFrame(drawableTexture: MTLTexture, offscreenTexture: MTLTexture, depthTexture: MTLTexture, vrrBuffer: MTLBuffer, commandBuffer: MTLCommandBuffer) -> (MTLCommandBuffer, RKQueuedFrame, matrix_float4x4)? {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
         var streamingActiveForFrame = EventHandler.shared.streamingActive
@@ -1720,6 +1760,6 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         let timestamp = queuedFrame?.timestamp ?? 0
         let rkQueuedFrame = RKQueuedFrame(texture: offscreenTexture, depthTexture: depthTexture, timestamp: timestamp, transform: planeTransform, vsyncTime: self.visionProVsyncPrediction.nextFrameTime, vrrMap: vrrMap, vrrBuffer: vrrBuffer)
         
-        return (commandBuffer, rkQueuedFrame)
+        return (commandBuffer, rkQueuedFrame, planeTransform)
     }
 }

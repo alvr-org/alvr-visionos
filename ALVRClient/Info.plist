@@ -25,6 +25,8 @@
 	<string>ALVR would like to scan your surroundings for obstacles and playspace boundaries.</string>
 	<key>NSAccessoryTrackingUsageDescription</key>
 	<string>ALVR would like to send spatial accessory positions to SteamVR.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>ALVR would like to track and send face tracking data to SteamVR, using your Spatial Persona camera.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>

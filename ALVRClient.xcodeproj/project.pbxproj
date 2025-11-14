@@ -34,6 +34,7 @@
 		E7285AAE2B9C44CB0032514C /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7285AAD2B9C44CB0032514C /* AVKit.framework */; };
 		E769ABF22C1CE6D900E016CE /* ALVRClientCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; };
 		E769ABF32C1CE6D900E016CE /* ALVRClientCore.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E77FDE582EC5D98200B0ED4F /* CameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77FDE572EC5D97F00B0ED4F /* CameraView.swift */; };
 		E78D482D2EBA7508000F77D7 /* AV1Parser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E78D482C2EBA7504000F77D7 /* AV1Parser.swift */; };
 		E78D482F2EBA76BB000F77D7 /* NALParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E78D482E2EBA76B8000F77D7 /* NALParser.swift */; };
 		E7A98A9E2BE2EEAB003DF333 /* DummyMetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */; };
@@ -115,6 +116,7 @@
 		E71DEFB22C19263D008A2074 /* ALVRClient.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ALVRClient.entitlements; sourceTree = "<group>"; };
 		E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalClientSystem.swift; sourceTree = "<group>"; };
 		E7285AAD2B9C44CB0032514C /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
+		E77FDE572EC5D97F00B0ED4F /* CameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraView.swift; sourceTree = "<group>"; };
 		E78D482C2EBA7504000F77D7 /* AV1Parser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AV1Parser.swift; sourceTree = "<group>"; };
 		E78D482E2EBA76B8000F77D7 /* NALParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NALParser.swift; sourceTree = "<group>"; };
 		E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DummyMetalRenderer.swift; sourceTree = "<group>"; };
@@ -204,6 +206,7 @@
 				C5E590312B6379ED00328ED6 /* ALVRClientApp.swift */,
 				E7A98A9D2BE2EEA5003DF333 /* DummyMetalRenderer.swift */,
 				8E458AB22B7E05FB0019FC73 /* EventHandler.swift */,
+				E77FDE572EC5D97F00B0ED4F /* CameraView.swift */,
 				D68FA8082B742F6F0052B7FF /* FFR.swift */,
 				E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */,
 				E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */,
@@ -385,6 +388,7 @@
 				E702FBDC2B899B8700EE75D0 /* GlobalSettings.swift in Sources */,
 				E72683DB2BE73DD10065B78B /* MetalClientSystem.swift in Sources */,
 				8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */,
+				E77FDE582EC5D98200B0ED4F /* CameraView.swift in Sources */,
 				D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */,
 				9ED257172B8062A2008DC22F /* Settings.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
@@ -579,7 +583,7 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "$(TARGET_NAME)/ALVRClient-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 7;
-				XROS_DEPLOYMENT_TARGET = 1.1;
+				XROS_DEPLOYMENT_TARGET = 2.1;
 			};
 			name = Debug;
 		};
@@ -622,7 +626,7 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "$(TARGET_NAME)/ALVRClient-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 7;
-				XROS_DEPLOYMENT_TARGET = 1.1;
+				XROS_DEPLOYMENT_TARGET = 2.1;
 			};
 			name = Release;
 		};

@@ -12,6 +12,156 @@ import CoreHaptics
 import Spatial
 import RealityKit
 
+enum XrFaceExpression2FB: Int {
+    case browLowererL = 0
+    case browLowererR = 1
+    case cheekPuffL = 2
+    case cheekPuffR = 3
+    case cheekRaiserL = 4
+    case cheekRaiserR = 5
+    case cheekSuckL = 6
+    case cheekSuckR = 7
+    case chinRaiserB = 8
+    case chinRaiserT = 9
+    case dimplerL = 10
+    case dimplerR = 11
+    case eyesClosedL = 12
+    case eyesClosedR = 13
+    case eyesLookDownL = 14
+    case eyesLookDownR = 15
+    case eyesLookLeftL = 16
+    case eyesLookLeftR = 17
+    case eyesLookRightL = 18
+    case eyesLookRightR = 19
+    case eyesLookUpL = 20
+    case eyesLookUpR = 21
+    case innerBrowRaiserL = 22
+    case innerBrowRaiserR = 23
+    case jawDrop = 24
+    case jawSidewaysLeft = 25
+    case jawSidewaysRight = 26
+    case jawThrust = 27
+    case lidTightenerL = 28
+    case lidTightenerR = 29
+    case lipCornerDepressorL = 30
+    case lipCornerDepressorR = 31
+    case lipCornerPullerL = 32
+    case lipCornerPullerR = 33
+    case lipFunnelerLB = 34
+    case lipFunnelerLT = 35
+    case lipFunnelerRB = 36
+    case lipFunnelerRT = 37
+    case lipPressorL = 38
+    case lipPressorR = 39
+    case lipPuckerL = 40
+    case lipPuckerR = 41
+    case lipStretcherL = 42
+    case lipStretcherR = 43
+    case lipSuckLB = 44
+    case lipSuckLT = 45
+    case lipSuckRB = 46
+    case lipSuckRT = 47
+    case lipTightenerL = 48
+    case lipTightenerR = 49
+    case lipsToward = 50
+    case lowerLipDepressorL = 51
+    case lowerLipDepressorR = 52
+    case mouthLeft = 53
+    case mouthRight = 54
+    case noseWrinklerL = 55
+    case noseWrinklerR = 56
+    case outerBrowRaiserL = 57
+    case outerBrowRaiserR = 58
+    case upperLidRaiserL = 59
+    case upperLidRaiserR = 60
+    case upperLipRaiserL = 61
+    case upperLipRaiserR = 62
+    case tongueTipInterdental = 63
+    case tongueTipAlveolar = 64
+    case tongueFrontDorsalPalate = 65
+    case tongueMidDorsalPalate = 66
+    case tongueBackDorsalVelar = 67
+    case tongueOut = 68
+    case tongueRetreat = 69
+    case count = 70
+}
+
+extension XrFaceExpression2FB {
+    static let fromString: [String: XrFaceExpression2FB] = [
+        "browLowererL": .browLowererL,
+        "browLowererR": .browLowererR,
+        "cheekPuffL": .cheekPuffL,
+        "cheekPuffR": .cheekPuffR,
+        "cheekRaiserL": .cheekRaiserL,
+        "cheekRaiserR": .cheekRaiserR,
+        "cheekSuckL": .cheekSuckL,
+        "cheekSuckR": .cheekSuckR,
+        "chinRaiserB": .chinRaiserB,
+        "chinRaiserT": .chinRaiserT,
+        "dimplerL": .dimplerL,
+        "dimplerR": .dimplerR,
+        "eyesClosedL": .eyesClosedL,
+        "eyesClosedR": .eyesClosedR,
+        "eyesLookDownL": .eyesLookDownL,
+        "eyesLookDownR": .eyesLookDownR,
+        "eyesLookLeftL": .eyesLookLeftL,
+        "eyesLookLeftR": .eyesLookLeftR,
+        "eyesLookRightL": .eyesLookRightL,
+        "eyesLookRightR": .eyesLookRightR,
+        "eyesLookUpL": .eyesLookUpL,
+        "eyesLookUpR": .eyesLookUpR,
+        "innerBrowRaiserL": .innerBrowRaiserL,
+        "innerBrowRaiserR": .innerBrowRaiserR,
+        "jawDrop": .jawDrop,
+        "jawSidewaysLeft": .jawSidewaysLeft,
+        "jawSidewaysRight": .jawSidewaysRight,
+        "jawThrust": .jawThrust,
+        "lidTightenerL": .lidTightenerL,
+        "lidTightenerR": .lidTightenerR,
+        "lipCornerDepressorL": .lipCornerDepressorL,
+        "lipCornerDepressorR": .lipCornerDepressorR,
+        "lipCornerPullerL": .lipCornerPullerL,
+        "lipCornerPullerR": .lipCornerPullerR,
+        "lipFunnelerLB": .lipFunnelerLB,
+        "lipFunnelerLT": .lipFunnelerLT,
+        "lipFunnelerRB": .lipFunnelerRB,
+        "lipFunnelerRT": .lipFunnelerRT,
+        "lipPressorL": .lipPressorL,
+        "lipPressorR": .lipPressorR,
+        "lipPuckerL": .lipPuckerL,
+        "lipPuckerR": .lipPuckerR,
+        "lipStretcherL": .lipStretcherL,
+        "lipStretcherR": .lipStretcherR,
+        "lipSuckLB": .lipSuckLB,
+        "lipSuckLT": .lipSuckLT,
+        "lipSuckRB": .lipSuckRB,
+        "lipSuckRT": .lipSuckRT,
+        "lipTightenerL": .lipTightenerL,
+        "lipTightenerR": .lipTightenerR,
+        "lipsToward": .lipsToward,
+        "lowerLipDepressorL": .lowerLipDepressorL,
+        "lowerLipDepressorR": .lowerLipDepressorR,
+        "mouthLeft": .mouthLeft,
+        "mouthRight": .mouthRight,
+        "noseWrinklerL": .noseWrinklerL,
+        "noseWrinklerR": .noseWrinklerR,
+        "outerBrowRaiserL": .outerBrowRaiserL,
+        "outerBrowRaiserR": .outerBrowRaiserR,
+        "upperLidRaiserL": .upperLidRaiserL,
+        "upperLidRaiserR": .upperLidRaiserR,
+        "upperLipRaiserL": .upperLipRaiserL,
+        "upperLipRaiserR": .upperLipRaiserR,
+        "tongueTipInterdental": .tongueTipInterdental,
+        "tongueTipAlveolar": .tongueTipAlveolar,
+        "tongueFrontDorsalPalate": .tongueFrontDorsalPalate,
+        "tongueMidDorsalPalate": .tongueMidDorsalPalate,
+        "tongueBackDorsalVelar": .tongueBackDorsalVelar,
+        "tongueOut": .tongueOut,
+        "tongueRetreat": .tongueRetreat,
+        "count": .count
+    ]
+}
+
 enum SteamVRJoints : Int {
     case root = 0                                  //eBone_Root
     case wrist = 1                                 //eBone_Wrist
@@ -131,6 +281,10 @@ class WorldTracker {
     var firstControllerClickTime = 0.0
     var secondControllerClickTime = 0.0
     var controllersAreDisabledByClickTogether = false
+    
+    // Face tracking
+    var fbFaceTracking = Array(repeating: Float(0.0), count: 70)
+    var fbFaceTrackingValid = false
     
     static let maxPrediction = 30 * NSEC_PER_MSEC
     static let maxPredictionRK = 70 * NSEC_PER_MSEC
@@ -1996,6 +2150,12 @@ class WorldTracker {
         var eyeGazeLeftPtr:UnsafeMutablePointer<AlvrPose>? = nil
         var eyeGazeRightPtr:UnsafeMutablePointer<AlvrPose>? = nil
         
+        var fbFaceExpressions:UnsafeMutablePointer<Float32>? = nil
+        
+        if self.fbFaceTrackingValid {
+            fbFaceExpressions = UnsafeMutablePointer<Float32>.allocate(capacity: 70)
+        }
+        
         eyeGazeLeftPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
         eyeGazeRightPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
 
@@ -2011,7 +2171,40 @@ class WorldTracker {
         let appleLeft = appleOriginFromAnchor * viewTransforms[0]
         //let appleRight = appleOriginFromAnchor * viewTransforms[1]
 
-        if eyeIsMipmapMethod {
+        if self.fbFaceTrackingValid {
+            var directionTargetL = simd_float3()
+            var directionTargetR = simd_float3()
+            
+            let leftBasisL = viewTransforms[0].columns.0.asFloat3()
+            let leftBasisR = viewTransforms[1].columns.0.asFloat3()
+            let upBasisL = viewTransforms[0].columns.1.asFloat3()
+            let upBasisR = viewTransforms[1].columns.1.asFloat3()
+            let outBasisL = viewTransforms[0].columns.2.asFloat3()
+            let outBasisR = viewTransforms[1].columns.2.asFloat3()
+            
+            let leftRightL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightL.rawValue]))
+            let leftRightR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightR.rawValue]))
+            
+            let upDownL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownL.rawValue]))
+            let upDownR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownR.rawValue]))
+            
+            directionTargetL += leftBasisL * (leftRightL * 50.0)
+            directionTargetR += leftBasisR * (leftRightR * 50.0)
+            
+            directionTargetL += upBasisL * (upDownL * 50.0)
+            directionTargetR += upBasisR * (upDownR * 50.0)
+            
+            directionTargetL += outBasisL * Float(50.0)
+            directionTargetR += outBasisR * Float(50.0)
+            
+            let directionL = viewTransforms[0].columns.3.asFloat3() - directionTargetL
+            let directionR = viewTransforms[1].columns.3.asFloat3() - directionTargetR
+            let orientL = simd_look(at: -directionL)
+            let orientR = simd_look(at: -directionR)
+            qL = leftOrientation * simd_quaternion(orientL)
+            qR = rightOrientation * simd_quaternion(orientR)
+        }
+        else if eyeIsMipmapMethod {
             var directionTarget = simd_float3()
             if eyeX < 0.0 {
                 directionTarget.x = -eyeX * 0.5 * (DummyMetalRenderer.renderTangents[0].x) * 50.0 // left
@@ -2446,10 +2639,18 @@ class WorldTracker {
         WorldTracker.shared.unlockDebuggables()
 #endif
 
+        if self.fbFaceTrackingValid {
+            for i in 0..<70 {
+                fbFaceExpressions?[i] = self.fbFaceTracking[i]
+            }
+        }
+
         EventHandler.shared.outgoingWorker.enqueue {
             //Thread.sleep(forTimeInterval: delay)
             //alvr_send_view_params(UnsafePointer(viewFovsPtr))
-            alvr_send_tracking(reportedTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)])
+            //alvr_send_tracking(reportedTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)])
+            
+            alvr_send_tracking_and_face_data(reportedTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)], UnsafePointer(fbFaceExpressions))
             if self.needsRecenterTrigger {
                 // TODO raycast to the nearest wall/TV
                 alvr_send_playspace(2.0, 2.0)
@@ -2461,6 +2662,7 @@ class WorldTracker {
             eyeGazeRightPtr?.deallocate()
             skeletonLeftPtr?.deallocate()
             skeletonRightPtr?.deallocate()
+            fbFaceExpressions?.deallocate()
         }
         
         return appleOriginFromAnchor

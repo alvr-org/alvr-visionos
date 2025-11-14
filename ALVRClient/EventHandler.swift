@@ -28,8 +28,10 @@ final class OutgoingWorker {
     private var shouldStop = false
     private var outgoingThreads: [Thread?] = [nil, nil, nil]
     private var currentIdx: Int = 0
+    private var name: String = ""
 
-    init() {
+    init(_ name: String = "") {
+        self.name = name
         restartWorkers()
     }
 
@@ -89,7 +91,7 @@ final class OutgoingWorker {
                 self.threadMain(i)
             }
             outgoingThreads[i]?.qualityOfService = .userInteractive
-            outgoingThreads[i]?.name = "Outgoing Data " + String(i)
+            outgoingThreads[i]?.name = self.name + " " + String(i)
             outgoingThreads[i]?.start()
             
             pendingWork[i] = nil
@@ -104,7 +106,8 @@ final class OutgoingWorker {
 class EventHandler: ObservableObject {
     static let shared = EventHandler()
 
-    var outgoingWorker : OutgoingWorker = OutgoingWorker()
+    var outgoingWorker : OutgoingWorker = OutgoingWorker("Outgoing Data")
+    var trackingWorker : OutgoingWorker = OutgoingWorker("Tracking Worker")
     var eventsThread : Thread?
     var eventsWatchThread : Thread?
         

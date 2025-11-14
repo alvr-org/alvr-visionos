@@ -26,6 +26,8 @@ struct GlobalSettings: Codable {
     var fovRenderScale: Float = 1.0
     var forceMipmapEyeTracking = false
     var targetHandsAtRoundtripLatency = false
+    var enablePersonaFaceTracking = false
+    var showFaceTrackingDebug = false
     var lastUsedAppVersion = "never launched"
     
     init() {}
@@ -51,6 +53,8 @@ struct GlobalSettings: Codable {
         self.fovRenderScale = try container.decodeIfPresent(Float.self, forKey: .fovRenderScale) ?? self.fovRenderScale
         self.forceMipmapEyeTracking = try container.decodeIfPresent(Bool.self, forKey: .forceMipmapEyeTracking) ?? self.forceMipmapEyeTracking
         self.targetHandsAtRoundtripLatency = try container.decodeIfPresent(Bool.self, forKey: .targetHandsAtRoundtripLatency) ?? self.targetHandsAtRoundtripLatency
+        self.enablePersonaFaceTracking = try container.decodeIfPresent(Bool.self, forKey: .enablePersonaFaceTracking) ?? self.enablePersonaFaceTracking
+        self.showFaceTrackingDebug = try container.decodeIfPresent(Bool.self, forKey: .showFaceTrackingDebug) ?? self.showFaceTrackingDebug
         self.lastUsedAppVersion = try container.decodeIfPresent(String.self, forKey: .lastUsedAppVersion) ?? self.lastUsedAppVersion
     }
 }
