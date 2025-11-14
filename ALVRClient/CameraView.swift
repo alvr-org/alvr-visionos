@@ -814,7 +814,7 @@ final class CameraModel: NSObject, ObservableObject {
                         width: floor(max(cropRectBase.width + (cropRectBase.width * 0.25), 0.0)),
                         height: floor(max(cropRectBase.height + (cropRectBase.height * 0.4), 0.0))
                     )
-                    let cropped: CVImageBuffer? = self.cropAndScaleWithVImage(pixelBuffer, cropRect: cropRect, scale: 0.5)
+                    let cropped: CVImageBuffer? = self.cropAndScaleWithVImage(pixelBuffer, cropRect: cropRect, scale: 0.25)
                     
                     if let cropped = cropped {
                         let ciImage = CIImage(cvPixelBuffer: cropped)
