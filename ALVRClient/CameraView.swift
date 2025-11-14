@@ -196,7 +196,7 @@ struct FaceOverlayView: View {
 final class CameraModel: NSObject, ObservableObject {
     
     @Published var authorizationStatus: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
-    @Published var currentFrameImage: CGImage?
+    //@Published var currentFrameImage: CGImage?
     @Published var currentCroppedImage: CGImage?
     @Published var detectedFaceRect: DetectedFaceRect? = nil
     @Published var detectedFaces: [DetectedFace] = []
@@ -219,6 +219,12 @@ final class CameraModel: NSObject, ObservableObject {
     private let ciContext = CIContext()
     private var currentFramePixelbuffer: CVImageBuffer? = nil
     private var currentCroppedPixelbuffer: CVImageBuffer? = nil
+    private var currentFrameExtent: CGRect = CGRect()
+    private var currentCroppedExtent: CGRect = CGRect()
+    private var frameIdx = 0
+    
+    private var firstSampleMouthWidth = 0.35
+    private var sampledInitialFace = false
 
     override init() {
         super.init()
@@ -336,12 +342,12 @@ final class CameraModel: NSObject, ObservableObject {
         // Convert Vision normalized coordinates to image pixel coordinates
         // We assume the pixel buffer orientation used above (.leftMirrored) and size from the latest frame.
         Task { @MainActor in
-            guard let image = self.currentCroppedImage else {
+            guard let pixelBuffer = self.currentCroppedPixelbuffer else {
                 self.detectedFaces = []
                 return
             }
-            let imgW = CGFloat(image.width)
-            let imgH = CGFloat(image.height)
+            let imgW = CGFloat(self.currentCroppedExtent.width)
+            let imgH = CGFloat(self.currentCroppedExtent.height)
 
             let mapped: [DetectedFace] = results.map { obs in
                 // VNFaceObservation.boundingBox is normalized with origin at bottom-left in Vision coordinate space.
@@ -396,10 +402,10 @@ final class CameraModel: NSObject, ObservableObject {
                     return CGPoint(x: s.x / CGFloat(pts.count), y: s.y / CGFloat(pts.count))
                 }
                 let bb = first.boundingBox
-                //let faceW = bb.width * imgW
-                //let faceH = bb.height * imgH
-                let faceW = imgW
-                let faceH = imgH
+                let faceW = bb.width * imgW
+                let faceH = bb.height * imgH
+                //let faceW = imgW
+                //let faceH = imgH
 
                 // Collect key groups in image space
                 let inner = lm.innerLips?.normalizedPoints ?? []
@@ -435,33 +441,41 @@ final class CameraModel: NSObject, ObservableObject {
                 let mouthHeight = (innerImg.isEmpty ? 0 : (innerImg.max(by: { $0.y < $1.y })!.y - innerImg.min(by: { $0.y < $1.y })!.y))
                 let mouthCenter = avg(outerImg)
                 
+                let faceCenterX = (bb.minX * imgW) + faceW * 0.5
+                
                 let noseHeight = (noseCrestImg.isEmpty ? 0 : (noseCrestImg.max(by: { $0.y < $1.y })!.y - noseCrestImg.min(by: { $0.y < $1.y })!.y))
 
+                if frameIdx > 30 && !self.sampledInitialFace {
+                    self.firstSampleMouthWidth = mouthWidth / faceW
+                    self.sampledInitialFace = true
+                }
+
                 // jawOpen
+                var jawDropCurrent: Float = 0.0
                 if !innerImg.isEmpty {
                     let v = clamp01((mouthHeight / faceH) * 4.0)
-                    newBlendShapes["jawDrop"] = norm(v)
+                    jawDropCurrent = norm(v)
+                    newBlendShapes["jawDrop"] = jawDropCurrent
                 }
                 // jawLeft / jawRight (horizontal offset of mouth center vs face center)
                 if !outerImg.isEmpty {
-                    let faceCenterX = (bb.minX * imgW) + faceW * 0.5
                     let dx = (mouthCenter.x - faceCenterX) / faceW
-                    newBlendShapes["jawSidewaysRight"] = norm(max(0, dx * 3.0))
-                    newBlendShapes["jawSidewaysLeft"] = norm(max(0, -dx * 3.0))
+                    newBlendShapes["jawSidewaysRight"] = 0.0//norm(max(0, dx * 3.0))
+                    newBlendShapes["jawSidewaysLeft"] = 0.0//norm(max(0, -dx * 3.0))
                 }
                 // jawForward (mouth protrusion approximated by increased inner lip height vs width)
                 if mouthWidth > 0 {
                     let ratio = (mouthHeight / mouthWidth)
-                    newBlendShapes["jawThrust"] = norm((ratio - 0.25) * 3.0)
+                    newBlendShapes["jawThrust"] = 0.0//norm((ratio - 0.25) * 3.0)
                 }
                 
-                let baseMouthWidth = 0.25
+                let baseMouthWidth = self.firstSampleMouthWidth
                 
                 // mouthSmile (width increase)
                 if mouthWidth > 0 {
                     let base = mouthWidth / faceW
-                    let smile = max(0, base - baseMouthWidth) / 0.05
-                    print(smile)
+                    let smile = max(0, base - baseMouthWidth) / (baseMouthWidth * 0.125)
+                    print(baseMouthWidth)
                     newBlendShapes["lipCornerPullerL"] = norm(CGFloat(smile))
                     newBlendShapes["lipCornerPullerR"] = norm(CGFloat(smile))
                 }
@@ -471,30 +485,36 @@ final class CameraModel: NSObject, ObservableObject {
                     let rightCorner = outerImg.max(by: { $0.x < $1.x })!
                     let centerY = avg(outerImg).y
                     let down = max(0, (leftCorner.y - centerY) / faceH) + max(0, (rightCorner.y - centerY) / faceH)
-                    let val = norm((down * 6.0 * 4.0) - 0.7)
+                    var val = norm((down * 6.0 * 4.0) - 0.7)
+                    
+                    if jawDropCurrent > 0.5 {
+                        val = 0.0
+                    }
                     newBlendShapes["lipCornerDepressorL"] = val
                     newBlendShapes["lipCornerDepressorR"] = val
                 }
-                // mouthPucker (width decreases while height increases)
-                if mouthWidth > 0 {
-                    let w = mouthWidth / faceW
-                    let h = mouthHeight / faceH
-                    let pucker = clamp01((baseMouthWidth - w) * 3.0 + h * 1.0)
-                    let val = norm(pucker * 3.0)
-                    newBlendShapes["lipPuckerL"] = val
-                    newBlendShapes["lipPuckerR"] = val
-                }
                 
-                let funnelBaseline = 0.2
+                let funnelBaseline = 0.3
                 // mouthFunnel (height increases strongly relative to width)
                 if mouthWidth > 0 {
                     let ratio = (mouthHeight / faceH) / max(0.001, (mouthWidth / faceW))
-                    let val = norm((ratio - funnelBaseline) * 1.5)
+                    let val = norm(ratio - funnelBaseline) * 0.5
                     newBlendShapes["lipFunnelerLB"] = val
                     newBlendShapes["lipFunnelerRB"] = val
                     newBlendShapes["lipFunnelerLT"] = val
                     newBlendShapes["lipFunnelerRT"] = val
                 }
+                
+                // mouthPucker (width decreases while height increases)
+                if mouthWidth > 0 {
+                    let w = mouthWidth / faceW
+                    let h = mouthHeight / faceH
+                    let pucker = clamp01((baseMouthWidth - w) * 3.0 + h * 1.0)
+                    var val = norm((pucker * 3.0) - CGFloat(jawDropCurrent))
+                    newBlendShapes["lipPuckerL"] = val
+                    newBlendShapes["lipPuckerR"] = val
+                }
+                
                 // mouthDimpleL/R (corners pull inward horizontally)
                 if !outerImg.isEmpty {
                     let leftCorner = outerImg.min(by: { $0.x < $1.x })!
@@ -502,8 +522,8 @@ final class CameraModel: NSObject, ObservableObject {
                     let centerX = avg(outerImg).x
                     let leftIn = max(0, (centerX - leftCorner.x) / faceW)
                     let rightIn = max(0, (rightCorner.x - centerX) / faceW)
-                    newBlendShapes["dimplerL"] = norm(leftIn * 6.0)
-                    newBlendShapes["dimplerR"] = norm(rightIn * 6.0)
+                    newBlendShapes["dimplerL"] = 0.0//norm(leftIn * 6.0)
+                    newBlendShapes["dimplerR"] = 0.0//norm(rightIn * 6.0)
                 }
                 // mouthStretch L/R (corners move outward)
                 if !outerImg.isEmpty {
@@ -654,8 +674,8 @@ final class CameraModel: NSObject, ObservableObject {
                     let maxX = noseImg.max(by: { $0.x < $1.x })!.x
                     let width = (maxX - minX) / faceW
                     let sneer = max(0, width - 0.12) * 6.0
-                    newBlendShapes["noseWrinklerL"] = norm(CGFloat(sneer))
-                    newBlendShapes["noseWrinklerR"] = norm(CGFloat(sneer))
+                    newBlendShapes["noseWrinklerL"] = 0.0//norm(CGFloat(sneer))
+                    newBlendShapes["noseWrinklerR"] = 0.0//norm(CGFloat(sneer))
                 }
                 // tongueOut (use inner mouth height beyond jawOpen as proxy)
                 if mouthHeight > 0 {
@@ -788,12 +808,12 @@ final class CameraModel: NSObject, ObservableObject {
         // Convert Vision normalized coordinates to image pixel coordinates
         // We assume the pixel buffer orientation used above (.leftMirrored) and size from the latest frame.
         Task { @MainActor in
-            guard let image = self.currentFrameImage else {
+            guard let pixelBuffer = self.currentFramePixelbuffer else {
                 self.detectedFaces = []
                 return
             }
-            let imgW = CGFloat(image.width)
-            let imgH = CGFloat(image.height)
+            let imgW = CGFloat(self.currentFrameExtent.width)
+            let imgH = CGFloat(self.currentFrameExtent.height)
 
             let mapped: [DetectedFaceRect] = results.map { obs in
                 // VNFaceObservation.boundingBox is normalized with origin at bottom-left in Vision coordinate space.
@@ -805,31 +825,33 @@ final class CameraModel: NSObject, ObservableObject {
             self.detectedFaceRect = mapped.first
             
             
-            if let pixelBuffer = self.currentFramePixelbuffer {
-                EventHandler.shared.trackingWorker.enqueue {
-                    let cropRectBase = self.detectedFaceRect?.boundingBox ?? CGRect()
-                    let cropRect = CGRect(
-                        x: floor(max(cropRectBase.minX - (cropRectBase.width * 0.25), 0.0)),
-                        y: floor(max(cropRectBase.minY - (cropRectBase.height * 0.25), 0.0)),
-                        width: floor(max(cropRectBase.width + (cropRectBase.width * 0.25), 0.0)),
-                        height: floor(max(cropRectBase.height + (cropRectBase.height * 0.4), 0.0))
-                    )
-                    let cropped: CVImageBuffer? = self.cropAndScaleWithVImage(pixelBuffer, cropRect: cropRect, scale: 0.25)
+            EventHandler.shared.trackingWorker.enqueue {
+                let cropRectBase = self.detectedFaceRect?.boundingBox ?? CGRect()
+                let cropRect = CGRect(
+                    x: floor(max(cropRectBase.minX - (cropRectBase.width * 0.25), 0.0)),
+                    y: floor(max(cropRectBase.minY - (cropRectBase.height * 0.25), 0.0)),
+                    width: floor(max(cropRectBase.width + (cropRectBase.width * 0.25), 0.0)),
+                    height: floor(max(cropRectBase.height + (cropRectBase.height * 0.4), 0.0))
+                )
+                let cropped: CVImageBuffer? = self.cropAndScaleWithVImage(pixelBuffer, cropRect: cropRect, scale: 0.125)
+                
+                if let cropped = cropped {
+                    let ciImage = CIImage(cvPixelBuffer: cropped)
+                    self.currentCroppedPixelbuffer = cropped
+                    self.currentCroppedExtent = ciImage.extent
                     
-                    if let cropped = cropped {
-                        let ciImage = CIImage(cvPixelBuffer: cropped)
+                    if ALVRClientApp.gStore.settings.showFaceTrackingDebug {
                         if let cgImage = self.ciContext.createCGImage(ciImage, from: ciImage.extent) {
                             Task { @MainActor in
-                                self.currentCroppedPixelbuffer = pixelBuffer
                                 self.currentCroppedImage = cgImage
                             }
                         }
-                        do {
-                            try self.sequenceRequestHandler.perform([self.faceLandmarksRequest], on: cropped, orientation: .up)
-                            //try self.sequenceRequestHandler.perform([self.faceLandmarksRequest], on: pixelBuffer, orientation: .up)
-                        } catch {
-                            // If Vision fails, we still continue to produce frames
-                        }
+                    }
+                    do {
+                        try self.sequenceRequestHandler.perform([self.faceLandmarksRequest], on: cropped, orientation: .up)
+                        //try self.sequenceRequestHandler.perform([self.faceLandmarksRequest], on: pixelBuffer, orientation: .up)
+                    } catch {
+                        // If Vision fails, we still continue to produce frames
                     }
                 }
             }
@@ -840,30 +862,37 @@ final class CameraModel: NSObject, ObservableObject {
 nonisolated extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        
+        self.frameIdx += 1
+        if (self.frameIdx & 1) != 1 {
+            return
+        }
 
         // Run Vision face landmarks request on the same output queue
-        let orientation: CGImagePropertyOrientation = .up // front camera in portrait
         EventHandler.shared.trackingWorker.enqueue {
             do {
-                try self.sequenceRequestHandler.perform([self.faceRectRequest], on: pixelBuffer, orientation: orientation)
+                let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+                self.currentFramePixelbuffer = pixelBuffer
+                self.currentFrameExtent = ciImage.extent
+        
+                // Extract the rect and scale down
+                //try self.sequenceRequestHandler.perform([self.faceRectRequest], on: pixelBuffer, orientation: .up)
+                
+                // Run it directly
+                self.currentCroppedPixelbuffer = pixelBuffer
+                self.currentCroppedExtent = ciImage.extent
+                Task { @MainActor in
+                    if ALVRClientApp.gStore.settings.showFaceTrackingDebug {
+                        if let cgImage = self.ciContext.createCGImage(ciImage, from: ciImage.extent) {
+                            self.currentCroppedImage = cgImage
+                        }
+                    }
+                }
+                
+                try self.sequenceRequestHandler.perform([self.faceLandmarksRequest], on: pixelBuffer, orientation: .up)
             } catch {
                 // If Vision fails, we still continue to produce frames
             }
         }
-
-        // Convert to CGImage for display
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        if let cgImage = self.ciContext.createCGImage(ciImage, from: ciImage.extent) {
-            Task { @MainActor in
-                self.currentFramePixelbuffer = pixelBuffer
-                self.currentFrameImage = cgImage
-            }
-        }
-        
-        /*Task { @MainActor in
-            self.currentFramePixelbuffer = pixelBuffer
-        }*/
-
-        // The completion handler will update detectedFaces on main actor
     }
 }
