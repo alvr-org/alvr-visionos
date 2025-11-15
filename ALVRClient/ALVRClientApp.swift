@@ -110,19 +110,13 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Removed the AWDL warning dialog for now, AWDL is fixed on visionOS 26 onwards.\n\
-    • Added a preliminary implementation of face tracking using the Spatial Persona camera (special thanks to sfarmer1!)\n\
+    • Improved face tracking quality, particularly for asymmetry and gaze tracking.\n\
     \n\
     ________________________________\n\
     \n\
     Bug fixes:\n\
     \n\
-    • Fixed AWDL streaming spikes.\n\
-    • Fixed ALVR custom recentering (for lying down mode via Streamer settings).\n\
-    • Fixed a bug where the room would randomly recenter. SteamVR recentering now requires 3 crown button holds.\n\
-    • Fixed a bug where FoV values sent to SteamVR didn't compensate for display canting and were slightly smaller than they needed to be.\n\
-    • Improved performance of outgoing pose packets somewhat.\n\
-    • Fixed a bug where some encoders would immediately cause the app to crash on entry.\n\
+    • Fixed a bug where the room would randomly recenter when encoding errors happened.\n\
     \n\
     ________________________________\n\
     \n\
