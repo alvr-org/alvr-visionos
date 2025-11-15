@@ -2171,24 +2171,66 @@ class WorldTracker {
         // TODO: Attach SteamVR controller to eyes for input anticipation/hovers.
         // Needs the gazes to be as accurate as the pinch events.
         let appleLeft = appleOriginFromAnchor * viewTransforms[0]
-        //let appleRight = appleOriginFromAnchor * viewTransforms[1]
+        let appleRight = appleOriginFromAnchor * viewTransforms[1]
 
         if self.fbFaceTrackingValid {
             var directionTargetL = simd_float3()
             var directionTargetR = simd_float3()
             
+            // TODO: not sure if this is required or not, but it does seem to avoid some weird skewing
             let leftBasisL = viewTransforms[0].columns.0.asFloat3()
             let leftBasisR = viewTransforms[1].columns.0.asFloat3()
             let upBasisL = viewTransforms[0].columns.1.asFloat3()
             let upBasisR = viewTransforms[1].columns.1.asFloat3()
             let outBasisL = viewTransforms[0].columns.2.asFloat3()
             let outBasisR = viewTransforms[1].columns.2.asFloat3()
+            /*let leftBasisL = simd_float3(1.0, 0.0, 0.0)
+            let leftBasisR = simd_float3(1.0, 0.0, 0.0)
+            let upBasisL = simd_float3(0.0, 1.0, 0.0)
+            let upBasisR = simd_float3(0.0, 1.0, 0.0)
+            let outBasisL = simd_float3(0.0, 0.0, 1.0)
+            let outBasisR = simd_float3(0.0, 0.0, 1.0)*/
             
-            let leftRightL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightL.rawValue]))
-            let leftRightR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightR.rawValue]))
+            var leftRightL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightR.rawValue]))
+            var leftRightR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightL.rawValue]))
             
-            let upDownL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownL.rawValue]))
-            let upDownR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownR.rawValue]))
+            // tbqh I don't think this math works
+            if leftRightL < 0.0 {
+                leftRightL = asin(leftRightL)
+            }
+            else {
+                leftRightL = asin(leftRightL)
+            }
+            
+            if leftRightR < 0.0 {
+                leftRightR = asin(leftRightR)
+            }
+            else {
+                leftRightR = asin(leftRightR)
+            }
+            
+            var upDownL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownR.rawValue]))
+            var upDownR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownL.rawValue]))
+            
+            //let test = Float(sin(CACurrentMediaTime() * 0.5)) + 1.0
+            //print(test)
+            
+            // TODO idk why it's like this
+            if upDownL < 0.0 {
+                upDownL = -asin(-upDownL) * 1.2
+            }
+            else {
+                //upDownL *= 1.0
+                upDownL = asin(upDownL) * 0.5
+            }
+            
+            if upDownR < 0.0 {
+                upDownR = -asin(-upDownR) * 1.2
+            }
+            else {
+                //upDownR *= 1.0
+                upDownR = asin(upDownR) * 0.5
+            }
             
             directionTargetL += leftBasisL * (leftRightL * 50.0)
             directionTargetR += leftBasisR * (leftRightR * 50.0)
@@ -2199,12 +2241,83 @@ class WorldTracker {
             directionTargetL += outBasisL * Float(50.0)
             directionTargetR += outBasisR * Float(50.0)
             
-            let directionL = viewTransforms[0].columns.3.asFloat3() - directionTargetL
+            /*let directionL = viewTransforms[0].columns.3.asFloat3() - directionTargetL
             let directionR = viewTransforms[1].columns.3.asFloat3() - directionTargetR
             let orientL = simd_look(at: -directionL)
-            let orientR = simd_look(at: -directionR)
+            let orientR = simd_look(at: -directionR)*/
+            
+            let directionL = directionTargetL
+            let directionR = directionTargetR
+            let orientL = simd_look(at: directionL)
+            let orientR = simd_look(at: directionR)
+            
             qL = leftOrientation * simd_quaternion(orientL)
             qR = rightOrientation * simd_quaternion(orientR)
+            
+            // Weird: The orientation I get from qL is consistent with the ray direction from the
+            // *combined* ray, not the left ray.
+            // Also the depth is off by 4x for some reason, but it does seem weirdly accurate
+            let depth = vergenceDepthTest(leftTransform * orientL, rightTransform * orientR) * 4.0
+            let averageLeftRight = (leftTransform.columns.3.asFloat3() + rightTransform.columns.3.asFloat3()) * 0.5
+            let fullCombinedTransform = averageLeftRight.asFloat4x4() * transform.orientationOnly().asFloat4x4() * orientL
+            //let fullCombinedTransform = transform * orientL
+            //print("depth1", depth)
+            let combinedForward = (-fullCombinedTransform.columns.2.asFloat3() * depth) + fullCombinedTransform.columns.3.asFloat3() //+ viewTransforms[0].columns.3.asFloat3()// + ((viewTransforms[0].columns.3.asFloat3() + viewTransforms[1].columns.3.asFloat3()) * 0.5)
+            let directionLFix = leftTransform.columns.3.asFloat3() - combinedForward
+            let directionRFix = rightTransform.columns.3.asFloat3() - combinedForward
+            
+            let orientLFix = simd_look(at: directionLFix)
+            let orientRFix = simd_look(at: directionRFix)
+            
+            qL = simd_quaternion(orientLFix)
+            qR = simd_quaternion(orientRFix)
+
+#if false
+            if rightIsPinching {
+                let verifyAppleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
+                let verifyAppleHeadPosition = verifyAppleOriginFromAnchor.columns.3.asFloat3()
+                let verifyLeftTransform = verifyAppleOriginFromAnchor * viewTransforms[0]
+                let verifyRightTransform = verifyAppleOriginFromAnchor * viewTransforms[1]
+                
+                let leftOrientationApple = simd_quaternion(verifyLeftTransform)
+                let leftOrientationApple2 = simd_quaternion(verifyAppleOriginFromAnchor)
+                let qCApple = leftOrientationApple * simd_quaternion(orientL)
+                let directionCNorm = qCApple.act(simd_float3(0.0, 0.0, -1.0))//orientL.columns.2.asFloat3()
+                
+                let qLApple = leftOrientationApple * simd_quaternion(orientLFix)
+                let directionLNorm = qLApple.act(simd_float3(0.0, 0.0, -1.0))//orientL.columns.2.asFloat3()
+                
+                let rightOrientationApple = simd_quaternion(verifyRightTransform)
+                let qRApple = rightOrientationApple * simd_quaternion(orientRFix)
+                let directionRNorm = qRApple.act(simd_float3(0.0, 0.0, -1.0))//orientL.columns.2.asFloat3()
+                
+                /*print(rightSelectionRayOrigin, rightSelectionRayDirection, directionLNorm, rightSelectionRayDirection-directionLNorm, simd_distance(rightSelectionRayDirection, directionLNorm))
+                print(rightSelectionRayOrigin, rightSelectionRayDirection, directionRNorm, rightSelectionRayDirection-directionRNorm, simd_distance(rightSelectionRayDirection, directionRNorm))*/
+                
+                
+                
+                let rayOrigin = rightSelectionRayOrigin
+                //let rayOrigin = leftTransform.columns.3.asFloat3()
+                
+                var testL = ((rayOrigin - verifyAppleHeadPosition).asFloat4() * verifyAppleOriginFromAnchor).asFloat3()
+                testL -= viewTransforms[0].columns.3.asFloat3()
+                var testR = ((rayOrigin - verifyAppleHeadPosition).asFloat4() * verifyAppleOriginFromAnchor).asFloat3()
+                testR -= viewTransforms[1].columns.3.asFloat3()
+                let test2 = rightSelectionRayOrigin - verifyLeftTransform.columns.3.asFloat3()
+                print("verifying vs left eye transform, difference:")
+                print("Test L:", testL, simd_distance(rightSelectionRayDirection, directionLNorm))
+                print("Test R:", testR, simd_distance(rightSelectionRayDirection, directionRNorm))
+                print("Test C:", simd_distance(rightSelectionRayDirection, directionCNorm))
+                print("Test 2:", test2)
+            }
+            
+            leftSelectionRayOrigin = (appleOriginFromAnchor).columns.3.asFloat3()
+            leftSelectionRayDirection = -(appleOriginFromAnchor * orientL).columns.2.asFloat3()//simd_normalize(leftSelectionRayOrigin - directionTargetApple.asFloat3())
+            leftPinchEyeDelta = simd_float3()
+            leftPinchStartPosition = simd_float3()
+            leftPinchCurrentPosition = simd_float3()
+            //leftIsPinching = true
+#endif
         }
         else if eyeIsMipmapMethod {
             var directionTarget = simd_float3()
@@ -2629,14 +2742,89 @@ class WorldTracker {
         
         if let skeletonLeft = skeletonLeft {
             for pose in skeletonLeft {
-                WorldTracker.shared.addDebuggablePose(convertSteamVRPoseToApple(pose.asFloat4x4()), 0.1)
+                WorldTracker.shared.addDebuggablePose(convertSteamVRPoseToApple(pose.asFloat4x4()), 0.01)
             }
         }
         
         if let skeletonRight = skeletonRight {
             for pose in skeletonRight {
-                WorldTracker.shared.addDebuggablePose(convertSteamVRPoseToApple(pose.asFloat4x4()), 0.1)
+                WorldTracker.shared.addDebuggablePose(convertSteamVRPoseToApple(pose.asFloat4x4()), 0.01)
             }
+        }
+        
+        var gazeDepth: Float = 1.0
+        
+        if let eyeGazeLeft = eyeGazeLeftPtr {
+            if let eyeGazeRight = eyeGazeRightPtr {
+                let matL = convertSteamVRPoseToApple(eyeGazeLeft[0].asFloat4x4())
+                let matR = convertSteamVRPoseToApple(eyeGazeRight[0].asFloat4x4())
+                gazeDepth = vergenceDepthTest(matL, matR)
+                
+                //let leftOrigin = matL.columns.3.asFloat3()
+                //let rightOrigin = matR.columns.3.asFloat3()
+                let verifyAppleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
+                let verifyAppleHeadPosition = verifyAppleOriginFromAnchor.columns.3.asFloat3()
+                let verifyLeftTransform = verifyAppleOriginFromAnchor * viewTransforms[0]
+                let verifyRightTransform = verifyAppleOriginFromAnchor * viewTransforms[1]
+                let leftOrigin = verifyLeftTransform.columns.3.asFloat3()
+                let rightOrigin = verifyRightTransform.columns.3.asFloat3()
+                let combinedOrigin = (leftOrigin+rightOrigin)*0.5
+                
+                var farL = (leftOrigin + (matL.columns.2.asFloat3() * -gazeDepth))
+                var farR = (rightOrigin + (matR.columns.2.asFloat3() * -gazeDepth))
+                var combined = ((farL + farR) * 0.5).asFloat4x4()
+                
+                //WorldTracker.shared.addDebuggablePose(combined, 0.01)
+                print("depth", gazeDepth)
+            }
+        }
+        
+        if let eyeGazeLeft = eyeGazeLeftPtr {
+            let matL = convertSteamVRPoseToApple(eyeGazeLeft[0].asFloat4x4())
+            var matLNear = matL
+            var matLFar = matL
+            
+            //let leftOrigin = matL.columns.3.asFloat3()
+            //let rightOrigin = matR.columns.3.asFloat3()
+            let verifyAppleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
+            let verifyAppleHeadPosition = verifyAppleOriginFromAnchor.columns.3.asFloat3()
+            let verifyLeftTransform = verifyAppleOriginFromAnchor * viewTransforms[0]
+            let verifyRightTransform = verifyAppleOriginFromAnchor * viewTransforms[1]
+            let leftOriginApple = verifyLeftTransform.columns.3.asFloat3()
+            let rightOriginApple = verifyRightTransform.columns.3.asFloat3()
+            let combinedOriginApple = (leftOriginApple+rightOriginApple)*0.5
+            //matLFar.columns.3 = combinedOriginApple.asFloat4_1()
+            //matLNear.columns.3 = combinedOriginApple.asFloat4_1()
+            
+            matLNear.columns.3 -= (matL.columns.2.asFloat3() * 1.2).asFloat4()
+            matLFar.columns.3 -= (matL.columns.2.asFloat3() * gazeDepth).asFloat4()
+            
+            WorldTracker.shared.addDebuggablePose(matLNear, 0.005)
+            WorldTracker.shared.addDebuggablePose(matLFar, 0.005)
+            
+        }
+        
+        if let eyeGazeRight = eyeGazeRightPtr {
+            let matR = convertSteamVRPoseToApple(eyeGazeRight[0].asFloat4x4())
+            var matRNear = matR
+            var matRFar = matR
+            
+            //let leftOrigin = matL.columns.3.asFloat3()
+            //let rightOrigin = matR.columns.3.asFloat3()
+            let verifyAppleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
+            let verifyAppleHeadPosition = verifyAppleOriginFromAnchor.columns.3.asFloat3()
+            let verifyLeftTransform = verifyAppleOriginFromAnchor * viewTransforms[0]
+            let verifyRightTransform = verifyAppleOriginFromAnchor * viewTransforms[1]
+            let leftOriginApple = verifyLeftTransform.columns.3.asFloat3()
+            let rightOriginApple = verifyRightTransform.columns.3.asFloat3()
+            let combinedOriginApple = (leftOriginApple+rightOriginApple)*0.5
+            //matRFar.columns.3 = combinedOriginApple.asFloat4_1()
+            //matRNear.columns.3 = combinedOriginApple.asFloat4_1()
+            
+            matRNear.columns.3 -= (matR.columns.2.asFloat3() * 1.2).asFloat4()
+            matRFar.columns.3 -= (matR.columns.2.asFloat3() * gazeDepth).asFloat4()
+            WorldTracker.shared.addDebuggablePose(matRNear, 0.005)
+            //WorldTracker.shared.addDebuggablePose(matRFar, 0.01)
         }
         WorldTracker.shared.unlockDebuggables()
 #endif
@@ -2754,5 +2942,47 @@ class WorldTracker {
         mat.columns.3 -= floorCorrectionTransform.asFloat4()
         mat = worldTrackingSteamVRTransform * mat
         return mat
+    }
+    
+    func vergenceDepthTest(_ leftMat: simd_float4x4, _ rightMat: simd_float4x4) -> Float {
+        let l_forward = -leftMat.columns.2.asFloat3()
+        let r_forward = -rightMat.columns.2.asFloat3()
+
+        let p1 = leftMat.columns.3.asFloat3() // position
+        let d1 = l_forward // forward
+        let p2 = rightMat.columns.3.asFloat3()
+        let d2 = r_forward
+        let p_avg = (p1 + p2) / 2.0
+
+        let p1_p2 = p2 - p1
+        let d1_dot_d1 = simd_dot(d1, d1)
+        let d2_dot_d2 = simd_dot(d2, d2)
+        let d1_dot_d2 = simd_dot(d1, d2)
+        let p1_p2_dot_d1 = simd_dot(p1_p2, d1)
+        let p1_p2_dot_d2 = simd_dot(p1_p2, d2)
+
+        let denom = d1_dot_d1 * d2_dot_d2 - d1_dot_d2 * d1_dot_d2;
+        if abs(denom) < 1e-6 {
+            //return None; // Rays are nearly parallel
+            //alvr_common::info!("Eyes are parallel l: {p1} {d1} r: {p2} {d2}");
+            
+            return 10.0
+        } else {
+            let s = (p1_p2_dot_d1 * d2_dot_d2 - p1_p2_dot_d2 * d1_dot_d2) / denom
+            let t = (p1_p2_dot_d1 * d1_dot_d2 - p1_p2_dot_d2 * d1_dot_d1) / denom
+
+            let closest_p1 = p1 + s * d1
+            let closest_p2 = p2 + t * d2
+
+            let closest_p1_dist_from_eyes = simd_distance(p_avg, closest_p1)
+            let closest_p2_dist_from_eyes = simd_distance(p_avg, closest_p2)
+
+            var depth = abs((closest_p1_dist_from_eyes + closest_p2_dist_from_eyes) / 2.0) // Approximate depth
+            if depth > 10.0 {
+                depth = 10.0
+            }
+            
+            return depth
+        }
     }
 }

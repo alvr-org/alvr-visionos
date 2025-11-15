@@ -860,7 +860,7 @@ class EventHandler: ObservableObject {
                 }
 
                 EventHandler.shared.updateConnectionState(.connected)
-                WorldTracker.shared.needsRecenterTrigger = true
+                //WorldTracker.shared.needsRecenterTrigger = true
              case ALVR_EVENT_REAL_TIME_CONFIG.rawValue:
                 print("TODO real-time config")
              default:
