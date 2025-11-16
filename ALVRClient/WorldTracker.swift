@@ -1975,6 +1975,7 @@ class WorldTracker {
     // realTargetTimestamp: The timestamp we tell ALVR, which always includes the full round-trip prediction.
     func sendTracking(viewTransforms: [simd_float4x4], viewFovs: [AlvrFov], targetTimestamp: Double, reportedTargetTimestamp: Double, anchorTimestamp: Double, delay: Double) -> simd_float4x4 {
         var targetTimestampWalkedBack = targetTimestamp
+        let controllerPredictionTimestamp = targetTimestamp
         var deviceAnchor:DeviceAnchor? = nil
         
         // HACK: In order to get the instantaneous velocity (e.g. with current accelerometer data factored in)
@@ -2095,35 +2096,8 @@ class WorldTracker {
         var appleOriginFromAnchorLastRefetched = deviceAnchorLastRefetched?.originFromAnchorTransform ?? deviceAnchor.originFromAnchorTransform
         appleOriginFromAnchorLastRefetched.columns.3 += floorCorrectionTransform.asFloat4()
         
-        // Pinch rising-edge blocks for debugging
-        if leftIsPinching && !lastLeftIsPinching && leftSelectionRayOrigin != simd_float3() && leftPinchStartPosition == leftPinchCurrentPosition {
-            leftPinchEyeDelta = simd_float3()
-
-            //print("left pinch eye delta", leftPinchEyeDelta)
-        }
-        if rightIsPinching && !lastRightIsPinching && rightSelectionRayOrigin != simd_float3() && rightPinchStartPosition == rightPinchCurrentPosition {
-            rightPinchEyeDelta = simd_float3()
-            
-            // Verifying gazes: This value should be near-zero when the right eye is closed.
-            // Verifies successfully on visionOS 2.0!
-            /*let verifyAppleOriginFromAnchor = deviceAnchor.originFromAnchorTransform
-            let verifyAppleHeadPosition = verifyAppleOriginFromAnchor.columns.3.asFloat3()
-            let verifyLeftTransform = verifyAppleOriginFromAnchor * viewTransforms[0]
-            
-            let rayOrigin = rightSelectionRayOrigin
-            //let rayOrigin = leftTransform.columns.3.asFloat3()
-            
-            var test = ((rayOrigin - verifyAppleHeadPosition).asFloat4() * verifyAppleOriginFromAnchor).asFloat3()
-            test -= viewTransforms[0].columns.3.asFloat3()
-            let test2 = rightSelectionRayOrigin - verifyLeftTransform.columns.3.asFloat3()
-            print("verifying vs left eye transform, difference:")
-            print("Test A:", test)
-            print("Test B:", test2)*/
-            
-            //print("right pinch eye delta", rightPinchEyeDelta)
-        }
-        
-        // Don't move SteamVR center/bounds when the headset recenters
+        // Apply the SteamVR transform so that SteamVR center/bounds don't move when the headset recenters, if the user
+        // selected that option
         let transform = self.worldTrackingSteamVRTransform.inverse * appleOriginFromAnchor
         let transformLastRefetched = self.worldTrackingSteamVRTransform.inverse * appleOriginFromAnchorLastRefetched
         let leftTransform = transform * viewTransforms[0]
@@ -2163,8 +2137,8 @@ class WorldTracker {
         eyeGazeLeftPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
         eyeGazeRightPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 1)
 
-        // TODO: Actually get this to be as accurate as the gaze ray, currently it is not.
-        
+        // MARK: - Gaze extraction stuff
+
         // To get the most accurate rotations, we have each eye look at the in-space coordinates
         // we know the HoverEffect is reporting
         var qL = simd_quatf()
@@ -2175,11 +2149,13 @@ class WorldTracker {
         let appleLeft = appleOriginFromAnchor * viewTransforms[0]
         let appleRight = appleOriginFromAnchor * viewTransforms[1]
 
+        // TODO: Actually get this to be as accurate as the gaze ray, currently it is not.
         if self.fbFaceTrackingValid {
             var directionTargetL = simd_float3()
             var directionTargetR = simd_float3()
             
-            // TODO: not sure if this is required or not, but it does seem to avoid some weird skewing
+            // TODO: I'm honestly not sure which one is correct because tilting my head seems to throw the
+            // gaze on the Persona avatar anyhow
             /*let leftBasisL = viewTransforms[0].columns.0.asFloat3()
             let leftBasisR = viewTransforms[1].columns.0.asFloat3()
             let upBasisL = viewTransforms[0].columns.1.asFloat3()
@@ -2211,6 +2187,9 @@ class WorldTracker {
             var leftRightL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightR.rawValue]))
             var leftRightR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightL.rawValue]))
             
+            var upDownL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownR.rawValue]))
+            var upDownR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownL.rawValue]))
+            
             // TODO: pull this from gaze pinches
             //let test = Float(sin(CACurrentMediaTime() * 0.1) * 0.05) - 0.10
             let leftRightCalib: Float = -0.10
@@ -2232,27 +2211,25 @@ class WorldTracker {
                 leftRightR = asin(leftRightR) * 0.9
             }
             
-            var upDownL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownR.rawValue]))
-            var upDownR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownL.rawValue]))
-            
             //let test = Float(sin(CACurrentMediaTime() * 0.5)) + 1.0
             //print(test)
             
             // TODO idk why it's like this
+            // TODO: autocalibrate on pinches
             if upDownL < 0.0 {
-                upDownL = -asin(-upDownL) * 1.5
+                upDownL = -asin(-upDownL) * 1.0
             }
             else {
                 //upDownL *= 1.0
-                upDownL = asin(upDownL) * 1.2
+                upDownL = asin(upDownL) * 0.5
             }
             
             if upDownR < 0.0 {
-                upDownR = -asin(-upDownR) * 1.5
+                upDownR = -asin(-upDownR) * 1.0
             }
             else {
                 //upDownR *= 1.0
-                upDownR = asin(upDownR) * 1.2
+                upDownR = asin(upDownR) * 0.5
             }
             
             directionTargetL += leftBasisL * (leftRightL * 50.0)
@@ -2437,6 +2414,7 @@ class WorldTracker {
         eyeGazeLeftPtr?[0] = AlvrPose(qL, leftTransform.columns.3.asFloat3())
         eyeGazeRightPtr?[0] = AlvrPose(qR, rightTransform.columns.3.asFloat3())
         
+        // MARK: - Hand poses and various interop for Q3 heuristics
         var handPoses: (leftHand: HandAnchor?, rightHand: HandAnchor?) = (nil, nil)
         if handTracking.state == .running {
 #if XCODE_BETA_16
@@ -2472,9 +2450,7 @@ class WorldTracker {
             rightSkeletonDisableHysteresis = 0.0
         }
         
-        let controllerPredictionTimestamp = targetTimestamp
-        
-        // Controller clack-together to enable hand tracking
+        // MARK: - Controller clack-together to enable hand tracking
         let leftPosApple = leftControllerPose?.columns.3.asFloat3() ?? simd_float3()
         let rightPosApple = rightControllerPose?.columns.3.asFloat3() ?? simd_float3()
         let headsetZForwardForClack = appleOriginFromAnchor.columns.3.asFloat3() + (appleOriginFromAnchor.columns.2.asFloat3() * -0.25) // We use the Z-basis to weight the distance towards actually looking at the controllers, to prevent misfires
@@ -2512,6 +2488,7 @@ class WorldTracker {
         leftControllerLastLinVel = leftControllerLinVel
         rightControllerLastLinVel = rightControllerLinVel
 
+        // MARK: Hand poses/controller poses to ALVR motions
         if let leftHand = handPoses.leftHand {
             let handMotion = handAnchorToAlvrDeviceMotion(leftHand, controllerPredictionTimestamp)
             
@@ -2599,7 +2576,7 @@ class WorldTracker {
             return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_SCALAR, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field1(scalar: val)))
         }
         
-        // Emulated pinch interactions overwrite emulated controller motions
+        // MARK: - Emulated pinch interactions overwrite emulated controller motions
         if ALVRClientApp.gStore.settings.emulatedPinchInteractions {
             // Menu press with two pinches
             // (have to override triggers to prevent screenshot send)
@@ -2702,7 +2679,7 @@ class WorldTracker {
         lastLeftIsPinching = leftIsPinching
         lastRightIsPinching = rightIsPinching
         
-        // Calculate the positional/angular velocities for the head
+        // MARK: - Calculate the positional/angular velocities for the head
         var headLinVel: (Float, Float, Float) = (0,0,0)
         var headAngVel: (Float, Float, Float) = (0,0,0)
         
@@ -2730,16 +2707,14 @@ class WorldTracker {
         trackingMotions.append(headMotion)
         
         // selection ray tests, replaces left forearm
-        /*var testPoseApple = matrix_identity_float4x4
+#if false
+        var testPoseApple = matrix_identity_float4x4
         testPoseApple.columns.3 = simd_float4(self.testPosition.x, self.testPosition.y, self.testPosition.z, 1.0)
         testPoseApple = self.worldTrackingSteamVRTransform.inverse * testPoseApple
         let testPosApple = testPoseApple.columns.3
         let testPose = AlvrPose(orientation: AlvrQuat(x: 0.0, y: 0.0, z: 0.0, w: 1.0), position: (testPosApple.x, testPosApple.y, testPosApple.z))
-        trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftForearm, pose: testPose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))*/
-        
-        //let targetTimestampReqestedNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
-        //let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
-        //print("asking for:", targetTimestampNS, "diff:", targetTimestampReqestedNS&-targetTimestampNS, "diff2:", targetTimestampNS&-EventHandler.shared.lastRequestedTimestamp, "diff3:", targetTimestampNS&-currentTimeNs)
+        trackingMotions.append(AlvrDeviceMotion(device_id: WorldTracker.deviceIdLeftForearm, pose: testPose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0)))
+#endif
         
         let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
         viewFovsPtr[0] = AlvrViewParams(pose: leftPoseHeadLocal, fov: viewFovs[0])
@@ -2754,6 +2729,7 @@ class WorldTracker {
             sendGamepadInputs()
         }
         
+        // MARK: - Pose debugging, renders XYZ basis gadgets for a bunch of stuff that's sent
 #if DEBUG_ALVR_TRACKING
         WorldTracker.shared.lockDebuggables()
         for motion in trackingMotions {
@@ -2855,6 +2831,7 @@ class WorldTracker {
         WorldTracker.shared.unlockDebuggables()
 #endif
 
+        // Send face tracking
         if self.fbFaceTrackingValid {
             for i in 0..<70 {
                 fbFaceExpressions?[i] = self.fbFaceTracking[i]
@@ -2862,11 +2839,12 @@ class WorldTracker {
         }
 
         EventHandler.shared.outgoingWorker.enqueue {
-            //Thread.sleep(forTimeInterval: delay)
-            //alvr_send_view_params(UnsafePointer(viewFovsPtr))
+            // Old API, currently in master/v20
             //alvr_send_tracking(reportedTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)])
             
+            // New API, not upstreamed
             alvr_send_tracking_and_face_data(reportedTargetTimestampNS, trackingMotions, UInt64(trackingMotions.count), [UnsafePointer(skeletonLeftPtr), UnsafePointer(skeletonRightPtr)], [UnsafePointer(eyeGazeLeftPtr), UnsafePointer(eyeGazeRightPtr)], UnsafePointer(fbFaceExpressions))
+
             if self.needsRecenterTrigger {
                 // TODO raycast to the nearest wall/TV
                 alvr_send_playspace(2.0, 2.0)
@@ -3051,7 +3029,8 @@ class WorldTracker {
     func vergenceDepthTest2(_ leftMat: simd_float4x4, _ rightMat: simd_float4x4) -> Float {
         let angle = vergenceAngle(leftMat, rightMat)
         let ipd = simd_distance(leftMat.columns.3.asFloat3(), rightMat.columns.3.asFloat3())
-        return pow(ipd / tan(angle * 0.5), 2) * 4.0
-        //return ((ipd * 0.5) / tan(angle * 0.5)) * 4.0
+        //let val = pow(ipd / tan(angle * 0.5), 2) * 4.0 // Correct
+        let val = ((ipd * 0.5) / tan(angle * 0.5)) * 4.0 // Not correct but works on PFD
+        return (val > 100.0) ? 0.25 : val
     }
 }

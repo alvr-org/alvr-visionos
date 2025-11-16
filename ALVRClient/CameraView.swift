@@ -14,7 +14,7 @@ import Accelerate
 import simd
 
 extension VNFaceLandmarkRegion2D {
-    func rotatedTranslated(by angle: Float, center: CGPoint, translate: CGPoint, scale: CGFloat) -> [CGPoint] {
+    func rotatedTranslated(by angle: Float, center: CGPoint, translate: CGPoint, scale: CGFloat = 1.0) -> [CGPoint] {
         let sinA = sin(angle)   // negative = undo roll
         let cosA = cos(angle)
 
@@ -446,17 +446,17 @@ final class CameraModel: NSObject, ObservableObject {
                     //let faceRoll = Float(sin(CACurrentMediaTime()))
                 
                     let collect: [[CGPoint]?] = [
-                        all.faceContour?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.leftEye?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.rightEye?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.nose?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.noseCrest?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.outerLips?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.innerLips?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.leftPupil?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.rightPupil?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.leftEyebrow?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale),
-                        all.rightEyebrow?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale)
+                        all.faceContour?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.leftEye?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.rightEye?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.nose?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.noseCrest?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.outerLips?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.innerLips?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.leftPupil?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.rightPupil?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.leftEyebrow?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter),
+                        all.rightEyebrow?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter)
                     ]
                     
                     for arr in collect {
@@ -482,9 +482,9 @@ final class CameraModel: NSObject, ObservableObject {
                 func norm(_ v: CGFloat) -> Float { return Float(clamp01(v)) }
                 func norm(_ v: Float) -> Float { return Float(clamp01(v)) }
                 // Helper to convert a landmark point from face-local to image space
-                func faceToImage(_ p: CGPoint, bb: CGRect) -> CGPoint {
-                    let x = (p.x * bb.width) * imgW
-                    let y = (1 - (p.y * bb.height)) * imgH
+                func faceToImage(_ p: CGPoint, bb: CGRect, scale: CGFloat = 1.0) -> CGPoint {
+                    let x = (p.x * bb.width) * scale
+                    let y = (1 - (p.y * bb.height)) * scale
                     return CGPoint(x: x, y: y)
                     //return p
                 }
@@ -498,8 +498,8 @@ final class CameraModel: NSObject, ObservableObject {
                 let faceRoll = computeRoll(leftEye: lm.leftEye, rightEye: lm.rightEye) ?? 0.0
                 let preLEyePts = lm.leftEye?.normalizedPoints ?? []
                 let preREyePts = lm.rightEye?.normalizedPoints ?? []
-                var eyeCenterL = avg(preLEyePts)
-                var eyeCenterR = avg(preREyePts)
+                let preEyeCenterL = avg(preLEyePts)
+                let preEyeCenterR = avg(preREyePts)
                 
                 let pre_eyeLEdgeYLeft = preLEyePts.min(by: { $0.x < $1.x })!.y
                 let pre_eyeLEdgeYRight = preLEyePts.max(by: { $0.x < $1.x })!.y
@@ -510,67 +510,58 @@ final class CameraModel: NSObject, ObservableObject {
                 //eyeCenterR.y = lm.rightEye?.normalizedPoints.max(by: { $0.y < $1.y })?.y ?? 0.0
                 
                 // Scale everything to mm
-                let ipdScale = CGFloat(EventHandler.shared.lastIpd) / dist(eyeCenterL, eyeCenterR)
-                var eyeCenter = avg([eyeCenterL, eyeCenterR])
+                //let ipdScale = CGFloat(EventHandler.shared.lastIpd) / dist(preEyeCenterL, preEyeCenterR)
+                var eyeCenter = avg([preEyeCenterL, preEyeCenterR])
                 eyeCenter.y = max(pre_eyeLEdgeYLeft, pre_eyeLEdgeYRight, pre_eyeREdgeYLeft, pre_eyeREdgeYRight)
                 let noseCenter = eyeCenter
                 eyeCenter.x *= -1.0
                 eyeCenter.y *= -1.0
-                //let noseCenter = eyeCenter
-                //let faceRoll = sin(CACurrentMediaTime())
                 
-                let faceW = max(0.00001, bb.width * imgW * ipdScale)
-                let faceH = max(0.00001, bb.height * imgH * ipdScale)
+                
 
                 // Collect key groups in image space
-                let inner = lm.innerLips?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let outer = lm.outerLips?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let leftEye = lm.leftEye?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let rightEye = lm.rightEye?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let leftPupil = lm.leftPupil?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let rightPupil = lm.rightPupil?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let leftBrow = lm.leftEyebrow?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let rightBrow = lm.rightEyebrow?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let nose = lm.nose?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let noseCrest = lm.noseCrest?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
-                let faceContour = lm.faceContour?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter, scale: ipdScale) ?? []
+                let inner = lm.innerLips?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let outer = lm.outerLips?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let leftEye = lm.leftEye?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let rightEye = lm.rightEye?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let leftPupil = lm.leftPupil?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let rightPupil = lm.rightPupil?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let leftBrow = lm.leftEyebrow?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let rightBrow = lm.rightEyebrow?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let nose = lm.nose?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let noseCrest = lm.noseCrest?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
+                let faceContour = lm.faceContour?.rotatedTranslated(by: faceRoll, center: noseCenter, translate: eyeCenter) ?? []
                 
+                // TODO maybe a better splitting heuristic, though it seems like VN's APIs allow index counting
+                // by design
                 let outerLipsL = lm.outerLips?.normalizedPoints.dropFirst(3).dropLast(3) ?? []
                 let outerLipsR = (lm.outerLips?.normalizedPoints[0..<4] ?? []) + (lm.outerLips?.normalizedPoints.suffix(4) ?? [])
-
-                let innerImg = inner.map { faceToImage($0, bb: bb) }
-                let outerImg = outer.map { faceToImage($0, bb: bb) }
-                let lEyeImg = leftEye.map { faceToImage($0, bb: bb) }
-                let rEyeImg = rightEye.map { faceToImage($0, bb: bb) }
-                let lPupilImg = leftPupil.map { faceToImage($0, bb: bb) }
-                let rPupilImg = rightPupil.map { faceToImage($0, bb: bb) }
-                let lBrowImg = leftBrow.map { faceToImage($0, bb: bb) }
-                let rBrowImg = rightBrow.map { faceToImage($0, bb: bb) }
-                let noseImg = nose.map { faceToImage($0, bb: bb) }
-                let noseCrestImg = noseCrest.map { faceToImage($0, bb: bb) }
-                let contourImg = faceContour.map { faceToImage($0, bb: bb) }
                 
-                let outerImgL = outerLipsL.map { faceToImage($0, bb: bb) }
-                let outerImgR = outerLipsR.map { faceToImage($0, bb: bb) }
+                let ipdScale = CGFloat(EventHandler.shared.lastIpd) / dist(avg(leftEye), avg(rightEye))
+                let faceW = max(0.00001, bb.width * ipdScale)
+                let faceH = max(0.00001, bb.height * ipdScale)
+
+                let innerImg = inner.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let outerImg = outer.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let lEyeImg = leftEye.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let rEyeImg = rightEye.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let lPupilImg = leftPupil.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let rPupilImg = rightPupil.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let lBrowImg = leftBrow.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let rBrowImg = rightBrow.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let noseImg = nose.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let noseCrestImg = noseCrest.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let contourImg = faceContour.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                
+                let outerImgL = outerLipsL.map { faceToImage($0, bb: bb, scale: ipdScale) }
+                let outerImgR = outerLipsR.map { faceToImage($0, bb: bb, scale: ipdScale) }
 
                 // Reference distances
                 let eyeCenterDist = dist(avg(lEyeImg), avg(rEyeImg))
                 let eyeEdgeLx = (lEyeImg.isEmpty ? 0 : (lEyeImg.min(by: { $0.x < $1.x })!.x))
                 let eyeEdgeRx = (lEyeImg.isEmpty ? 0 : (lEyeImg.max(by: { $0.x < $1.x })!.x))
                 let eyeEdgeDist = eyeEdgeRx - eyeEdgeLx
-                let mouthMinX = (outerImg.isEmpty ? 0 : outerImg.min(by: { $0.x < $1.x })!.x)
-                let mouthMaxX = (outerImg.isEmpty ? 0 : outerImg.max(by: { $0.x < $1.x })!.x)
-                let mouthWidth = (outerImg.isEmpty ? 0 : (outerImg.max(by: { $0.x < $1.x })!.x - outerImg.min(by: { $0.x < $1.x })!.x))
-                let mouthHeight = (innerImg.isEmpty ? 0 : (innerImg.max(by: { $0.y < $1.y })!.y - innerImg.min(by: { $0.y < $1.y })!.y))
-                let mouthCenter = avg(outerImg)
                 
-                let mouthWidthL = (outerImgL.isEmpty ? 0 : (outerImgL.max(by: { $0.x < $1.x })!.x - outerImgL.min(by: { $0.x < $1.x })!.x))
-                let mouthWidthR = (outerImgR.isEmpty ? 0 : (outerImgR.max(by: { $0.x < $1.x })!.x - outerImgR.min(by: { $0.x < $1.x })!.x))
-                
-                let faceCenterX = avg(outerImg).x
-                
-                let noseHeight = (noseCrestImg.isEmpty ? 0 : (noseCrestImg.max(by: { $0.y < $1.y })!.y - noseCrestImg.min(by: { $0.y < $1.y })!.y))
-
                 let eyeMinYL = lEyeImg.min(by: { $0.y < $1.y })!.y
                 let eyeMaxYL = lEyeImg.max(by: { $0.y < $1.y })!.y
                 let eyeWidthL = lEyeImg.max(by: { $0.x < $1.x })!.x - lEyeImg.min(by: { $0.x < $1.x })!.x
@@ -581,7 +572,18 @@ final class CameraModel: NSObject, ObservableObject {
                 let eyeWidthR = rEyeImg.max(by: { $0.x < $1.x })!.x - rEyeImg.min(by: { $0.x < $1.x })!.x
                 let eyeHeightR = eyeMaxYR - eyeMinYR
                 
-                //print(eyeWidthL, eyeCenterDist, eyeWidthL/faceW)
+                let mouthMinX = (outerImg.isEmpty ? 0 : outerImg.min(by: { $0.x < $1.x })!.x)
+                let mouthMaxX = (outerImg.isEmpty ? 0 : outerImg.max(by: { $0.x < $1.x })!.x)
+                let mouthWidth = (outerImg.isEmpty ? 0 : (outerImg.max(by: { $0.x < $1.x })!.x - outerImg.min(by: { $0.x < $1.x })!.x))
+                let mouthHeight = (innerImg.isEmpty ? 0 : (innerImg.max(by: { $0.y < $1.y })!.y - innerImg.min(by: { $0.y < $1.y })!.y))
+                let mouthCenter = avg(outerImg)
+                let mouthWidthL = (outerImgL.isEmpty ? 0 : (outerImgL.max(by: { $0.x < $1.x })!.x - outerImgL.min(by: { $0.x < $1.x })!.x))
+                let mouthWidthR = (outerImgR.isEmpty ? 0 : (outerImgR.max(by: { $0.x < $1.x })!.x - outerImgR.min(by: { $0.x < $1.x })!.x))
+                
+                let faceCenterX = avg(outerImg).x
+                let noseHeight = (noseCrestImg.isEmpty ? 0 : (noseCrestImg.max(by: { $0.y < $1.y })!.y - noseCrestImg.min(by: { $0.y < $1.y })!.y))
+                
+                print(eyeWidthL, eyeCenterDist, eyeWidthL/faceW)
 
                 // jawOpen
                 var jawDropCurrent: Float = 0.0
@@ -590,12 +592,15 @@ final class CameraModel: NSObject, ObservableObject {
                     jawDropCurrent = norm(v)
                     newBlendShapes["jawDrop"] = jawDropCurrent
                 }
+
                 // jawLeft / jawRight (horizontal offset of mouth center vs face center)
                 if !outerImg.isEmpty {
                     let dx = (mouthCenter.x - faceCenterX) / faceW
                     newBlendShapes["jawSidewaysRight"] = 0.0//norm(max(0, dx * 3.0))
                     newBlendShapes["jawSidewaysLeft"] = 0.0//norm(max(0, -dx * 3.0))
                 }
+                
+                // TODO: This needs ML probably
                 // jawForward (mouth protrusion approximated by increased inner lip height vs width)
                 if mouthWidth > 0 {
                     let ratio = (mouthHeight / mouthWidth)
@@ -609,6 +614,8 @@ final class CameraModel: NSObject, ObservableObject {
                 let cornerPullThreshold = 0.01
                 var depressorL: Float = 0.0
                 var depressorR: Float = 0.0
+                
+                // TODO: Maybe another min/max autonormalizer here
                 // mouthFrown (corners lower than center)
                 if !outerImg.isEmpty {
                     let leftCorner = outerImg.min(by: { $0.x < $1.x })!
@@ -630,10 +637,11 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["lipCornerDepressorR"] = valR
                 }
                 
+                // TODO: Maybe another min/max autonormalizer here
                 // mouthSmile (width increase)
                 if mouthWidth > 0 {
                     let base = mouthWidth / faceW
-                    let smile: Float = Float(max(0, base - baseMouthWidth) / (baseMouthWidth * 0.125))
+                    let smile: Float = Float(max(0, base - baseMouthWidth) / max(0.00001, baseMouthWidth * 0.125))
                     
                     //let smileL = (((mouthCenter.x - mouthMinX) / faceW) / (baseMouthWidth * 0.5)) - 1.0
                     //let smileR = (((mouthMaxX - mouthCenter.x) / faceW) / (baseMouthWidth * 0.5)) - 1.0
@@ -684,6 +692,7 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["dimplerL"] = 0.0//norm(leftIn * 6.0)
                     newBlendShapes["dimplerR"] = 0.0//norm(rightIn * 6.0)
                 }
+                
                 // mouthStretch L/R (corners move outward)
                 if !outerImg.isEmpty {
                     let leftCorner = outerImg.min(by: { $0.x < $1.x })!
@@ -693,6 +702,7 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["lipStretcherL"] = norm(leftOut * 6.0)
                     newBlendShapes["lipStretcherR"] = norm(rightOut * 6.0)
                 }
+                
                 // mouthShrug (upper and lower lips move toward center vertically)
                 if !innerImg.isEmpty {
                     let top = innerImg.max(by: { $0.y < $1.y })!.y
@@ -702,6 +712,7 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["chinRaiserT"] = norm(towardCenter * 3.0)
                     newBlendShapes["chinRaiserB"] = norm(towardCenter * 3.0)
                 }
+                
                 // cheekPuff (cheek outward vs face contour)
                 // This will definitely need some ML tbh
                 if !contourImg.isEmpty && !outerImg.isEmpty {
@@ -716,16 +727,9 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["cheekPuffL"] = 0.0//val
                     newBlendShapes["cheekPuffR"] = 0.0//val
                 }
-                // cheekSquint L/R (eye squint contribution + cheek raise)
-                func eyeOpenMetric(_ pts: [CGPoint]) -> CGFloat {
-                    guard pts.count >= 6 else { return 0 }
-                    let top = pts.max(by: { $0.y < $1.y })!.y
-                    let bottom = pts.min(by: { $0.y < $1.y })!.y
-                    return (top - bottom) / ((eyeEdgeDist + eyeCenterDist) * 0.5)
-                }
                 
                 // Derived this from my eye look bc it actually seemed accidentally good at eyelids
-                func eyeLidClosed(_ eye: [CGPoint], _ pupil: [CGPoint], _ eyesWideOpenEstimateX: CGFloat, _ eyesWideOpenEstimateY: CGFloat, _ eyeMaxY: CGFloat) -> Float {
+                func eyeLidClosed(_ eye: [CGPoint], _ pupil: [CGPoint]) -> Float {
                     guard !eye.isEmpty else { return 0.0 }
                     
                     var c = avg(pupil)
@@ -742,26 +746,20 @@ final class CameraModel: NSObject, ObservableObject {
 
                     let minX = eye.min(by: { $0.x < $1.x })!.x / faceW
                     let maxX = eye.max(by: { $0.x < $1.x })!.x / faceW
-                    let minY = eye.min(by: { $0.y < $1.y })!.y / faceH
-                    let maxY = eye.max(by: { $0.y < $1.y })!.y / faceH
                     let eyeWidth = (maxX - minX)
                     
-                    // TODO, eyelids don't really close evenly
                     let relY = (c.y - eyeEdgeY) // tbe bottom of the eye is more stable
                     let dy = ((relY / max(0.001, eyeWidth * 0.5)) + 0.125 + 0.06) * 4.0 // tbh idk why this works, something something approximating the radius with the eye width
                     let centeredDy = (dy)
                     
                     return norm((centeredDy) * 2.0)
                 }
-                let lEyeOpen = eyeOpenMetric(lEyeImg)
-                let rEyeOpen = eyeOpenMetric(rEyeImg)
-                newBlendShapes["cheekRaiserL"] = norm((0.06 - lEyeOpen) * 8.0 * 3.33)
-                newBlendShapes["cheekRaiserR"] = norm((0.06 - rEyeOpen) * 8.0 * 3.33)
+
                 // eyeBlink L/R
                 let lEyeOpenedRaw: Float = Float(computeEyeOpenness(landmark: lm.leftEye))
                 let rEyeOpenedRaw: Float = Float(computeEyeOpenness(landmark: lm.rightEye))
-                let lEyeOpened = norm((((lEyeOpenedRaw - self.firstSampleEyeClosednessL) / self.firstSampleEyeOpennessL) + 0.0) * 1.0) // the range stuff tends to settle around 0.6 for a light squint and 0.8 normal open
-                let rEyeOpened = norm((((rEyeOpenedRaw - self.firstSampleEyeClosednessR) / self.firstSampleEyeOpennessR) + 0.0) * 1.0)
+                let lEyeOpened = norm((lEyeOpenedRaw - self.firstSampleEyeClosednessL) / self.firstSampleEyeOpennessL)
+                let rEyeOpened = norm((rEyeOpenedRaw - self.firstSampleEyeClosednessR) / self.firstSampleEyeOpennessR)
                 
                 if lEyeOpenedRaw < self.firstSampleEyeClosednessL {
                     self.firstSampleEyeClosednessL = lEyeOpenedRaw
@@ -776,17 +774,17 @@ final class CameraModel: NSObject, ObservableObject {
                 if rEyeOpenedRaw - self.firstSampleEyeClosednessR > self.firstSampleEyeOpennessR {
                     self.firstSampleEyeOpennessR = max(rEyeOpenedRaw - self.firstSampleEyeClosednessR, 0.00001)
                 }
-                let lEyeClosedOrLookingDown = CGFloat(eyeLidClosed(lEyeImg, lPupilImg, self.firstSampleEyeWidthL, self.firstSampleEyeHeightL, self.firstSampleEyeMaxYL))
-                let rEyeClosedOrLookingDown = CGFloat(eyeLidClosed(rEyeImg, rPupilImg, self.firstSampleEyeWidthR, self.firstSampleEyeHeightR, self.firstSampleEyeMaxYR))
+                let lEyeClosedOrLookingDown = CGFloat(eyeLidClosed(lEyeImg, lPupilImg))
+                let rEyeClosedOrLookingDown = CGFloat(eyeLidClosed(rEyeImg, rPupilImg))
                 
-                // Heavily shrink numbers under OverUnder and grow numbers over OverUnder
-                let closedThreshold: Float = 0.05
-                let closedOverUnder: Float = 0.1
                 let lEyeUnopened: Float = 1.0 - lEyeOpened
                 let rEyeUnopened: Float = 1.0 - rEyeOpened
-                var lEyeClosedRaw = lEyeUnopened//((log(lEyeUnopened + 1.0 - closedOverUnder) / log(2)) - 0.0) * 6.0//(tanh(log(lEyeUnopened + 1.0 - closedOverUnder)) * 0.5) + 0.5
-                var rEyeClosedRaw = rEyeUnopened//((log(rEyeUnopened + 1.0 - closedOverUnder) / log(2)) - 0.0) * 6.0//(tanh(log(rEyeUnopened + 1.0 - closedOverUnder)) * 0.5) + 0.5
-                for i in 0..<3 {
+                
+                // Try and increase the relative difference between eye openness because the Vision models
+                // and the Persona tracking seem to be weirdly overfitted/coactivated there
+                var lEyeClosedRaw = lEyeUnopened
+                var rEyeClosedRaw = rEyeUnopened
+                for _ in 0..<3 {
                     let eyeDiff = max(abs(rEyeUnopened - lEyeUnopened), 0.00001)
                     if rEyeUnopened > lEyeUnopened /*&& eyeDiff > 0.05*/ {
                         lEyeClosedRaw *= (lEyeClosedRaw - eyeDiff)
@@ -801,118 +799,73 @@ final class CameraModel: NSObject, ObservableObject {
                         rEyeClosedRaw *= rEyeClosedRaw
                     }
                 }
-                lEyeClosedRaw *= 3
-                rEyeClosedRaw *= 3
-                //lEyeClosedRaw /= (lEyeClosedRaw + rEyeClosedRaw + 0.00001)
-                //rEyeClosedRaw /= (lEyeClosedRaw + rEyeClosedRaw + 0.00001)
-                
-                print(lEyeUnopened, rEyeUnopened, lEyeOpenedRaw, rEyeOpenedRaw)
-                //print(lEyeClosedRaw, rEyeClosedRaw, self.firstSampleEyeClosedness, self.firstSampleEyeOpenness)
-                //let lEyeClosedRaw = (pow(norm((1.0 - lEyeOpened) - closedThreshold) + (1.0-closedOverUnder), overUnderExp) - pow((1.0-closedOverUnder), overUnderExp)) * (1.0/closedOverUnder)
-                //let rEyeClosedRaw = (pow(norm((1.0 - rEyeOpened) - closedThreshold) + (1.0-closedOverUnder), overUnderExp) - pow((1.0-closedOverUnder), overUnderExp)) * (1.0/closedOverUnder)
-                let lEyeClosed = CGFloat(norm(CGFloat(lEyeClosedRaw)))//norm((CGFloat(1.0 - pow(lEyeOpened, 0.5)) - 0.50) * 8.0)
-                let rEyeClosed = CGFloat(norm(CGFloat(rEyeClosedRaw)))//norm((CGFloat(1.0 - pow(rEyeOpened, 0.5)) - 0.50) * 8.0)
+                lEyeClosedRaw *= 3.0
+                rEyeClosedRaw *= 3.0
+
+                let lEyeClosed = CGFloat(norm(CGFloat(lEyeClosedRaw)))
+                let rEyeClosed = CGFloat(norm(CGFloat(rEyeClosedRaw)))
                 newBlendShapes["eyesClosedL"] = Float(lEyeClosed)
                 newBlendShapes["eyesClosedR"] = Float(rEyeClosed)
-                //print(newBlendShapes["eyesClosedL"], newBlendShapes["eyesClosedR"], "lr", lEyeOpened, rEyeOpened)
+
                 // eyeSquint L/R (milder than blink)
-                let lidTightenerL = (lEyeClosedOrLookingDown * 0.2) + (lEyeClosed * 0.2)//CGFloat(norm(pow(lEyeClosed - 0.2, 4) * 40.0))//norm((lEyeClosed - 0.9) * 10.0)
-                let lidTightenerR = (rEyeClosedOrLookingDown * 0.2) + (rEyeClosed * 0.2)//CGFloat(norm(pow(rEyeClosed - 0.2, 4) * 40.0))//norm((rEyeClosed - 0.9) * 10.0)
+                let lidTightenerL = (lEyeClosedOrLookingDown * 0.2) + (lEyeClosed * 0.2)
+                let lidTightenerR = (rEyeClosedOrLookingDown * 0.2) + (rEyeClosed * 0.2)
                 
                 newBlendShapes["lidTightenerL"] = Float(norm(lidTightenerL))
                 newBlendShapes["lidTightenerR"] = Float(norm(lidTightenerR))
-                //newBlendShapes["eyesClosedL"] = norm((lidTightenerL-0.2) * 5.0)//norm((lEyeClosed - 0.50) * 8.0)//norm(lEyeClosed)
-                //newBlendShapes["eyesClosedR"] = norm((lidTightenerR-0.2) * 5.0)//norm((rEyeClosed - 0.50) * 8.0)//norm(rEyeClosed)
+                
+                newBlendShapes["cheekRaiserL"] = norm(lidTightenerL * 0.7)
+                newBlendShapes["cheekRaiserR"] = norm(lidTightenerR * 0.7)
+                
                 // eyeLook Up/Down/Left/Right (pupil/eye centroid relative to socket)
-                func eyeLook(_ which: Int, _ eyes: [[CGPoint]], _ pupil: [CGPoint], _ eyesWideOpenEstimateX: CGFloat, _ eyesWideOpenEstimateY: CGFloat, _ eyeMaxY: CGFloat) -> (up: Float, down: Float, left: Float, right: Float) {
+                func eyeLook(_ which: Int, _ eyes: [[CGPoint]], _ pupil: [CGPoint], _ eyesWideOpenEstimateX: CGFloat, _ eyesWideOpenEstimateY: CGFloat) -> (up: Float, down: Float, left: Float, right: Float) {
                     let eye = eyes[which]
                     guard !eye.isEmpty else { return (0,0,0,0) }
                     
                     var c = avg(pupil)
-                    c.x /= faceW
-                    c.y /= faceH
+                    //c.x /= faceW
+                    //c.y /= faceH
                     
                     var eyeCent = avg(eye)
-                    eyeCent.x /= faceW
-                    eyeCent.y /= faceH
+                    //eyeCent.x /= faceW
+                    //eyeCent.y /= faceH
 
-                    let eyeLEdgeYLeft = eyes[0].min(by: { $0.x < $1.x })!.y / faceH
-                    let eyeLEdgeYRight = eyes[0].max(by: { $0.x < $1.x })!.y / faceH
-                    let eyeREdgeYLeft = eyes[1].min(by: { $0.x < $1.x })!.y / faceH
-                    let eyeREdgeYRight = eyes[1].max(by: { $0.x < $1.x })!.y / faceH
+                    let eyeLEdgeYLeft = eyes[0].min(by: { $0.x < $1.x })!.y
+                    let eyeLEdgeYRight = eyes[0].max(by: { $0.x < $1.x })!.y
+                    let eyeREdgeYLeft = eyes[1].min(by: { $0.x < $1.x })!.y
+                    let eyeREdgeYRight = eyes[1].max(by: { $0.x < $1.x })!.y
                     //let eyeEdgeY = which == 0 ? eyeLEdgeYRight : eyeREdgeYLeft // Use the tear ducts as a grounding point
-                    let eyeEdgeY = max(eyeLEdgeYLeft, eyeLEdgeYRight, eyeREdgeYLeft, eyeREdgeYRight)
-                    if eyeEdgeY > self.firstSampleEyeCornerMaxY {
-                        self.firstSampleEyeCornerMaxY = eyeEdgeY
-                    }
-                    else {
-                        self.firstSampleEyeCornerMaxY -= 0.01
-                    }
-                    //print(which, eyeEdgeY, eyeLEdgeYLeft, eyeLEdgeYRight, eyeREdgeYLeft, eyeREdgeYRight)
-
-                    let minX = eye.min(by: { $0.x < $1.x })!.x / faceW
-                    let maxX = eye.max(by: { $0.x < $1.x })!.x / faceW
-                    let minY = eye.min(by: { $0.y < $1.y })!.y / faceH
-                    let maxY = eye.max(by: { $0.y < $1.y })!.y / faceH
+                    let eyeEdgeY = max(eyeLEdgeYLeft, eyeLEdgeYRight, eyeREdgeYLeft, eyeREdgeYRight) // This seems more stable when closing eyes slightly
+                    
+                    
+                    let minX = eye.min(by: { $0.x < $1.x })!.x
+                    let maxX = eye.max(by: { $0.x < $1.x })!.x
+                    let minY = eye.min(by: { $0.y < $1.y })!.y
+                    let maxY = eye.max(by: { $0.y < $1.y })!.y
                     let eyeWidth = (maxX - minX)
                     
                     let relX = (c.x - (minX))
                     let dx = (relX / max(0.001, eyeWidth)) // 0.0 to 1.0
                     let centeredDx = (dx - 0.5) * 2.0 // change to -0.5 to 0.5 and scale up
                     
-                    //let relY = (c.y - (minY))
-                    //let dy = (relY / max(0.001, (maxY - minY)))
-                    //let centeredDy = (dy - 0.5)
-                    
                     // TODO, eyelids don't really close evenly
-                    let eyesWideOpenEstimateYCurrent = (maxY - minY)
-                    let estimatedEyeCenterY = (maxY) - (eyesWideOpenEstimateY * 0.5)
-                    let estimatedEyeCenterY2 = (eyeMaxY) - (eyesWideOpenEstimateY * 0.5)
-                    let estimatedEyeCenterY3 = ((eyeEdgeY + estimatedEyeCenterY) / 2) - 0.005 //+ (eyesWideOpenEstimateYCurrent * 0.5) - (eyesWideOpenEstimateY * 0.5)
-                    let guessedEyeWidthStable = (eyesWideOpenEstimateX * 0.9) + (eyeWidth * 0.1)
-                    //print("eye miny", eyeMinY, minY, eyesWideOpenEstimate, eyesWideOpenEstimateCurrent)
-                    let relY = (c.y - eyeEdgeY) // tbe bottom of the eye is more stable
-                    var dy = ((relY / max(0.001, eyesWideOpenEstimateX * 0.5)) + 0.125 + 0.06) * 2.0 // tbh idk why this works, something something approximating the radius with the eye width
-                    if dy < 0.0 {
-                        //dy *= 2.0
-                    }
+                    //let eyesWideOpenEstimateYCurrent = (maxY - minY)
+                    //let estimatedEyeCenterY = (maxY) - (eyesWideOpenEstimateY * 0.5)
+                    
+                    let test: CGFloat = CGFloat((sin(CACurrentMediaTime() * 0.1) * 0.25) + 0.25)
+                    print(test)
+                    let relY = (c.y - eyeEdgeY)
+                    let dy = ((relY / max(0.001, eyesWideOpenEstimateX * 0.5)) + 0.333333333) * 2.0 // tbh idk why this works, something something approximating the radius with the eye width
                     let centeredDy = (dy)
                     
-                    //print(relX, relY, dx, dy, centeredDx, centeredDy)
-
-                    //print("relY", relY, "dy", dy, "centeredDy", centeredDy, "estimatedEyeCenterY", estimatedEyeCenterY, "estimatedEyeCenterY2", estimatedEyeCenterY2, "eyeEdgeY", eyeEdgeY)
-                    //print(maxX, minX, maxY, minY, /*"ref", eyeMaxY,*/ "open", eyesWideOpenEstimateYCurrent, eyesWideOpenEstimateY, "c", c.x, c.y, "rel", relX, relY, "dxdy", dx, dy, centeredDx, centeredDy)
-                    //print(centeredDx, centeredDy)
                     let up: Float = norm(-(centeredDy) * 2.0)
                     let down: Float = norm((centeredDy) * 2.0)
                     let left: Float = norm(-(centeredDx) * 2.0)
                     let right: Float = norm((centeredDx) * 2.0)
                     return (up, down, left, right)
                 }
-                let lLook = eyeLook(0, [lEyeImg, rEyeImg], lPupilImg, self.firstSampleEyeWidthL, self.firstSampleEyeHeightL, self.firstSampleEyeMaxYL)
-                let rLook = eyeLook(1, [lEyeImg, rEyeImg], rPupilImg, self.firstSampleEyeWidthR, self.firstSampleEyeHeightR, self.firstSampleEyeMaxYR)
-                //print(lLook)
-                
-                if self.firstSampleEyeHeightL < (eyeHeightL / faceH) {
-                    self.firstSampleEyeHeightL = (eyeHeightL / faceH)
-                }
-                if self.firstSampleEyeHeightR < (eyeHeightR / faceH) {
-                    self.firstSampleEyeHeightR = (eyeHeightR / faceH)
-                }
-                
-                if self.firstSampleEyeWidthL < (eyeWidthL / faceW) {
-                    self.firstSampleEyeWidthL = (eyeWidthL / faceW)
-                }
-                if self.firstSampleEyeWidthR < (eyeWidthR / faceW) {
-                    self.firstSampleEyeWidthR = (eyeWidthR / faceW)
-                }
-                
-                if self.firstSampleEyeMaxYL < (eyeMaxYL / faceH) {
-                    self.firstSampleEyeMaxYL = eyeMaxYL / faceH
-                }
-                if self.firstSampleEyeMaxYR < (eyeMaxYR / faceH) {
-                    self.firstSampleEyeMaxYR = eyeMaxYR / faceH
-                }
+                let lLook = eyeLook(0, [lEyeImg, rEyeImg], lPupilImg, self.firstSampleEyeWidthL, self.firstSampleEyeHeightL)
+                let rLook = eyeLook(1, [lEyeImg, rEyeImg], rPupilImg, self.firstSampleEyeWidthR, self.firstSampleEyeHeightR)
                 
                 newBlendShapes["eyesLookUpL"] = lLook.up
                 newBlendShapes["eyesLookDownL"] = lLook.down
@@ -922,6 +875,7 @@ final class CameraModel: NSObject, ObservableObject {
                 newBlendShapes["eyesLookDownR"] = rLook.down
                 newBlendShapes["eyesLookLeftR"] = rLook.right
                 newBlendShapes["eyesLookRightR"] = rLook.left
+                
                 // browUp / browDown L/R and browOuterUp
                 if !lBrowImg.isEmpty && !rBrowImg.isEmpty && !lEyeImg.isEmpty && !rEyeImg.isEmpty {
                     let lb = lBrowImg.max(by: { $0.y < $1.y })!.y
@@ -934,6 +888,7 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["innerBrowRaiserR"] = norm(rightLift * 8.0)
                     newBlendShapes["browLowererL"] = norm(CGFloat((1.0 - norm((0.08 - leftLift) * 8.0)) * 5.0)  + CGFloat(0.6*lEyeClosedOrLookingDown))
                     newBlendShapes["browLowererR"] = norm(CGFloat((1.0 - norm((0.08 - rightLift) * 8.0)) * 5.0) + CGFloat(0.6*rEyeClosedOrLookingDown))
+                    
                     // Outer up: compare outer-most brow points vs inner-most
                     let lOuter = lBrowImg.max(by: { $0.x < $1.x })!
                     let lInner = lBrowImg.min(by: { $0.x < $1.x })!
@@ -944,19 +899,37 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["outerBrowRaiserL"] = norm((lOuterUp * 4.0) - CGFloat(0.5*lEyeClosed))
                     newBlendShapes["outerBrowRaiserR"] = norm((rOuterUp * 4.0) - CGFloat(0.5*rEyeClosed))
                 }
-                // noseSneer L/R (nostril flare approximated by nose width)
-                if !noseImg.isEmpty {
-                    let minX = noseImg.min(by: { $0.x < $1.x })!.x
-                    let maxX = noseImg.max(by: { $0.x < $1.x })!.x
-                    let width = (maxX - minX) / faceW
-                    let sneer = max(0, width - 0.12) * 6.0
-                    newBlendShapes["noseWrinklerL"] = 0.0//norm(CGFloat(sneer))
-                    newBlendShapes["noseWrinklerR"] = 0.0//norm(CGFloat(sneer))
-                }
+
+                // Not possible with Persona avatars?
+                newBlendShapes["noseWrinklerL"] = 0.0
+                newBlendShapes["noseWrinklerR"] = 0.0
+
                 // tongueOut (use inner mouth height beyond jawOpen as proxy)
                 if mouthHeight > 0 {
                     let t = max(0, (mouthHeight / faceH) - 0.12) * 4.0
                     newBlendShapes["tongueOut"] = 0.0//norm(t)
+                }
+                
+                // Recurrent state
+                if self.firstSampleEyeHeightL < (eyeHeightL) {
+                    self.firstSampleEyeHeightL = (eyeHeightL)
+                }
+                if self.firstSampleEyeHeightR < (eyeHeightR) {
+                    self.firstSampleEyeHeightR = (eyeHeightR)
+                }
+                
+                if self.firstSampleEyeWidthL < (eyeWidthL) {
+                    self.firstSampleEyeWidthL = (eyeWidthL)
+                }
+                if self.firstSampleEyeWidthR < (eyeWidthR) {
+                    self.firstSampleEyeWidthR = (eyeWidthR)
+                }
+                
+                if self.firstSampleEyeMaxYL < (eyeMaxYL / faceH) {
+                    self.firstSampleEyeMaxYL = eyeMaxYL / faceH
+                }
+                if self.firstSampleEyeMaxYR < (eyeMaxYR / faceH) {
+                    self.firstSampleEyeMaxYR = eyeMaxYR / faceH
                 }
                 
                 if !self.sampledInitialFace {
@@ -967,12 +940,12 @@ final class CameraModel: NSObject, ObservableObject {
                     self.firstSampleMouthCenterX = mouthCenter.x / faceW
                     self.firstSampleMouthMinX = mouthMinX / faceW
                     self.firstSampleMouthMaxX = mouthMaxX / faceW
-                    self.firstSampleEyeWidthL = eyeWidthL / faceW
-                    self.firstSampleEyeHeightL = eyeHeightL / faceH
+                    self.firstSampleEyeWidthL = eyeWidthL
+                    self.firstSampleEyeHeightL = eyeHeightL
                     self.firstSampleEyeMinYL = eyeMinYL / faceH
                     self.firstSampleEyeMaxYL = eyeMaxYL / faceH
-                    self.firstSampleEyeWidthR = eyeWidthR / faceW
-                    self.firstSampleEyeHeightR = eyeHeightR / faceH
+                    self.firstSampleEyeWidthR = eyeWidthR
+                    self.firstSampleEyeHeightR = eyeHeightR
                     self.firstSampleEyeMinYR = eyeMinYR / faceH
                     self.firstSampleEyeMaxYR = eyeMaxYR / faceH
                     //self.firstSampleEyeOpenness = (lEyeOpenedRaw + rEyeOpenedRaw) * 0.5
@@ -981,7 +954,12 @@ final class CameraModel: NSObject, ObservableObject {
                         self.sampledInitialFace = true
                     }
                 }
+                WorldTracker.shared.fbFaceTrackingValid = true
             }
+            else {
+                WorldTracker.shared.fbFaceTrackingValid = false
+            }
+
             self.blendShapes = newBlendShapes
             
             for shape in self.blendShapes {
@@ -993,46 +971,8 @@ final class CameraModel: NSObject, ObservableObject {
                     print("Failed to map:", shape.key)
                 }
             }
-            WorldTracker.shared.fbFaceTrackingValid = true
         }
     }
-    
-    /*func cropAndScalePixelBuffer(
-        _ pixelBuffer: CVPixelBuffer,
-        cropRect: CGRect,
-        scale: CGFloat,
-        ciContext: CIContext = CIContext(options: nil)
-    ) -> CVPixelBuffer? {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        
-        // Crop and scale
-        let cropped = ciImage.cropped(to: cropRect)
-        let scaled = cropped.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        
-        // Create output buffer
-        var outputBuffer: CVPixelBuffer?
-        let outputWidth = Int(cropRect.width * scale)
-        let outputHeight = Int(cropRect.height * scale)
-        
-        let attrs = [
-            kCVPixelBufferCGImageCompatibilityKey: true,
-            kCVPixelBufferCGBitmapContextCompatibilityKey: true
-        ] as CFDictionary
-        
-        CVPixelBufferCreate(
-            nil,
-            outputWidth,
-            outputHeight,
-            CVPixelBufferGetPixelFormatType(pixelBuffer),
-            attrs,
-            &outputBuffer
-        )
-        
-        guard let outputBuffer else { return nil }
-
-        ciContext.render(scaled, to: outputBuffer)
-        return outputBuffer
-    }*/
     
     func cropAndScaleWithVImage(
         _ pixelBuffer: CVPixelBuffer,
