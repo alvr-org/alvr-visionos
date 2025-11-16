@@ -115,10 +115,14 @@ class DummyMetalRenderer {
             let horizontalPPDEstimate = Float(vrr.screenSize.width) / 1920.0 * 18.387
             let verticalPPDEstimate = Float(vrr.screenSize.height) / 1824.0 * 19.339
             
+            var vrrParamsThisEyeX: [Float] = []
+            var vrrParamsThisEyeY: [Float] = []
+            
             for j in 0..<xCells {
                 let screenX1 = vrr.screenCoordinates(physicalCoordinates: MTLCoordinate2D(x: Float(j*granularity.width), y: 0), layer: i).x
                 let screenX2 = vrr.screenCoordinates(physicalCoordinates: MTLCoordinate2D(x: Float((j+1)*granularity.width), y: 0), layer: i).x
                 let rate = Float(granularity.width)/(screenX2-screenX1)
+                vrrParamsThisEyeX.append(rate)
                 //print("x", j, rate, "est PPD:", rate*horizontalPPDEstimate)
             }
             
@@ -126,8 +130,12 @@ class DummyMetalRenderer {
                 let screenY1 = vrr.screenCoordinates(physicalCoordinates: MTLCoordinate2D(x: 0, y: Float(j*granularity.height)), layer: i).y
                 let screenY2 = vrr.screenCoordinates(physicalCoordinates: MTLCoordinate2D(x: 0, y: Float((j+1)*granularity.height)), layer: i).y
                 let rate = Float(granularity.height)/(screenY2-screenY1)
+                vrrParamsThisEyeY.append(rate)
                 //print("y", j, rate, "est PPD:", rate*verticalPPDEstimate)
             }
+            
+            DummyMetalRenderer.vrrParametersX[i] = vrrParamsThisEyeX
+            DummyMetalRenderer.vrrParametersY[i] = vrrParamsThisEyeY
         }
         
         drawable.encodePresent(commandBuffer: commandBuffer)

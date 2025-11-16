@@ -461,6 +461,8 @@ class WorldTracker {
     var trackedStylii: [Any] = []
     var arRunning = false
     var needsRecenterTrigger = false
+    var leftEyeFilter = OneEuroFilter3(minCutoff: 1.0, beta: 0.007, derivCutoff: 1.0)
+    var rightEyeFilter = OneEuroFilter3(minCutoff: 1.0, beta: 0.007, derivCutoff: 1.0)
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -2178,12 +2180,27 @@ class WorldTracker {
             var directionTargetR = simd_float3()
             
             // TODO: not sure if this is required or not, but it does seem to avoid some weird skewing
-            let leftBasisL = viewTransforms[0].columns.0.asFloat3()
+            /*let leftBasisL = viewTransforms[0].columns.0.asFloat3()
             let leftBasisR = viewTransforms[1].columns.0.asFloat3()
             let upBasisL = viewTransforms[0].columns.1.asFloat3()
             let upBasisR = viewTransforms[1].columns.1.asFloat3()
             let outBasisL = viewTransforms[0].columns.2.asFloat3()
-            let outBasisR = viewTransforms[1].columns.2.asFloat3()
+            let outBasisR = viewTransforms[1].columns.2.asFloat3()*/
+            
+            /*let leftBasisL = leftTransform.columns.0.asFloat3()
+            let leftBasisR = rightTransform.columns.0.asFloat3()
+            let upBasisL = leftTransform.columns.1.asFloat3()
+            let upBasisR = rightTransform.columns.1.asFloat3()
+            let outBasisL = leftTransform.columns.2.asFloat3()
+            let outBasisR = rightTransform.columns.2.asFloat3()*/
+            
+            let leftBasisL = transform.columns.0.asFloat3()
+            let leftBasisR = transform.columns.0.asFloat3()
+            let upBasisL = transform.columns.1.asFloat3()
+            let upBasisR = transform.columns.1.asFloat3()
+            let outBasisL = transform.columns.2.asFloat3()
+            let outBasisR = transform.columns.2.asFloat3()
+            
             /*let leftBasisL = simd_float3(1.0, 0.0, 0.0)
             let leftBasisR = simd_float3(1.0, 0.0, 0.0)
             let upBasisL = simd_float3(0.0, 1.0, 0.0)
@@ -2194,19 +2211,25 @@ class WorldTracker {
             var leftRightL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightR.rawValue]))
             var leftRightR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightL.rawValue]))
             
+            // TODO: pull this from gaze pinches
+            //let test = Float(sin(CACurrentMediaTime() * 0.1) * 0.05) - 0.10
+            let leftRightCalib: Float = -0.10
+            leftRightL += leftRightCalib
+            leftRightR += leftRightCalib
+            
             // tbqh I don't think this math works
             if leftRightL < 0.0 {
                 leftRightL = asin(leftRightL)
             }
             else {
-                leftRightL = asin(leftRightL)
+                leftRightL = asin(leftRightL) * 0.9
             }
             
             if leftRightR < 0.0 {
                 leftRightR = asin(leftRightR)
             }
             else {
-                leftRightR = asin(leftRightR)
+                leftRightR = asin(leftRightR) * 0.9
             }
             
             var upDownL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownR.rawValue]))
@@ -2217,19 +2240,19 @@ class WorldTracker {
             
             // TODO idk why it's like this
             if upDownL < 0.0 {
-                upDownL = -asin(-upDownL) * 1.2
+                upDownL = -asin(-upDownL) * 1.5
             }
             else {
                 //upDownL *= 1.0
-                upDownL = asin(upDownL) * 0.5
+                upDownL = asin(upDownL) * 1.2
             }
             
             if upDownR < 0.0 {
-                upDownR = -asin(-upDownR) * 1.2
+                upDownR = -asin(-upDownR) * 1.5
             }
             else {
                 //upDownR *= 1.0
-                upDownR = asin(upDownR) * 0.5
+                upDownR = asin(upDownR) * 1.2
             }
             
             directionTargetL += leftBasisL * (leftRightL * 50.0)
@@ -2246,20 +2269,21 @@ class WorldTracker {
             let orientL = simd_look(at: -directionL)
             let orientR = simd_look(at: -directionR)*/
             
-            let directionL = directionTargetL
-            let directionR = directionTargetR
+            let directionL = leftEyeFilter.filter(directionTargetL, timestamp: CACurrentMediaTime())
+            let directionR = rightEyeFilter.filter(directionTargetR, timestamp: CACurrentMediaTime())
+            
             let orientL = simd_look(at: directionL)
             let orientR = simd_look(at: directionR)
             
-            qL = leftOrientation * simd_quaternion(orientL)
-            qR = rightOrientation * simd_quaternion(orientR)
+            qL = simd_quaternion(orientL)
+            qR = simd_quaternion(orientR)
             
             // Weird: The orientation I get from qL is consistent with the ray direction from the
             // *combined* ray, not the left ray.
             // Also the depth is off by 4x for some reason, but it does seem weirdly accurate
-            let depth = vergenceDepthTest(leftTransform * orientL, rightTransform * orientR) * 4.0
+            let depth = vergenceDepthTest2(leftTransform.translationOnly() * orientL, rightTransform.translationOnly() * orientR)
             let averageLeftRight = (leftTransform.columns.3.asFloat3() + rightTransform.columns.3.asFloat3()) * 0.5
-            let fullCombinedTransform = averageLeftRight.asFloat4x4() * transform.orientationOnly().asFloat4x4() * orientL
+            let fullCombinedTransform = averageLeftRight.asFloat4x4() * orientL
             //let fullCombinedTransform = transform * orientL
             //print("depth1", depth)
             let combinedForward = (-fullCombinedTransform.columns.2.asFloat3() * depth) + fullCombinedTransform.columns.3.asFloat3() //+ viewTransforms[0].columns.3.asFloat3()// + ((viewTransforms[0].columns.3.asFloat3() + viewTransforms[1].columns.3.asFloat3()) * 0.5)
@@ -2269,8 +2293,8 @@ class WorldTracker {
             let orientLFix = simd_look(at: directionLFix)
             let orientRFix = simd_look(at: directionRFix)
             
-            qL = simd_quaternion(orientLFix)
-            qR = simd_quaternion(orientRFix)
+            //qL = simd_quaternion(orientLFix)
+            //qR = simd_quaternion(orientRFix)
 
 #if false
             if rightIsPinching {
@@ -2758,7 +2782,7 @@ class WorldTracker {
             if let eyeGazeRight = eyeGazeRightPtr {
                 let matL = convertSteamVRPoseToApple(eyeGazeLeft[0].asFloat4x4())
                 let matR = convertSteamVRPoseToApple(eyeGazeRight[0].asFloat4x4())
-                gazeDepth = vergenceDepthTest(matL, matR)
+                gazeDepth = vergenceDepthTest2(matL, matR)
                 
                 //let leftOrigin = matL.columns.3.asFloat3()
                 //let rightOrigin = matR.columns.3.asFloat3()
@@ -2774,7 +2798,7 @@ class WorldTracker {
                 var farR = (rightOrigin + (matR.columns.2.asFloat3() * -gazeDepth))
                 var combined = ((farL + farR) * 0.5).asFloat4x4()
                 
-                //WorldTracker.shared.addDebuggablePose(combined, 0.01)
+                WorldTracker.shared.addDebuggablePose(combined, 0.01)
                 print("depth", gazeDepth)
             }
         }
@@ -2800,7 +2824,7 @@ class WorldTracker {
             matLFar.columns.3 -= (matL.columns.2.asFloat3() * gazeDepth).asFloat4()
             
             WorldTracker.shared.addDebuggablePose(matLNear, 0.005)
-            WorldTracker.shared.addDebuggablePose(matLFar, 0.005)
+            //WorldTracker.shared.addDebuggablePose(matLFar, 0.005)
             
         }
         
@@ -2826,6 +2850,8 @@ class WorldTracker {
             WorldTracker.shared.addDebuggablePose(matRNear, 0.005)
             //WorldTracker.shared.addDebuggablePose(matRFar, 0.01)
         }
+        
+        WorldTracker.shared.addDebuggablePose((appleOriginFromAnchor.columns.3.asFloat3() - appleOriginFromAnchor.columns.2.asFloat3()).asFloat4x4(), 0.005)
         WorldTracker.shared.unlockDebuggables()
 #endif
 
@@ -2984,5 +3010,48 @@ class WorldTracker {
             
             return depth
         }
+    }
+    
+    // Returns the vergence angle (in radians) between two view matrices.
+    /// Assumes -Z axis is the forward direction.
+    func vergenceAngle(_ left: simd_float4x4, _ right: simd_float4x4) -> Float {
+        // Extract forward (-Z) for each matrix.
+        // In a column-major right-handed transform:
+        //   Forward = -third column (index 2)
+        let fL = normalize(-left.columns.2.asFloat3())
+        let fR = normalize(-right.columns.2.asFloat3())
+
+        // Clamp dot to avoid NaN from floating point drift
+        let dotVal = max(-1.0, min(1.0, dot(fL, fR)))
+
+        // Angle between the two forward vectors
+        return acos(dotVal)
+    }
+    
+    /// Returns the vergence angle (in radians) between two view matrices,
+    /// using only the horizontal (XZ-plane) components of the forward rays.
+    /// Assumes -Z is forward.
+    func vergenceAngleHorizontal(_ left: simd_float4x4, _ right: simd_float4x4) -> Float {
+        // Extract forward (-Z direction)
+        let fL = -left.columns.2.asFloat3()
+        let fR = -right.columns.2.asFloat3()
+
+        // Zero out Y so only horizontal direction matters
+        var hL = simd_float3(fL.x, 0, fL.z)
+        var hR = simd_float3(fR.x, 0, fR.z)
+
+        // Normalize safely
+        hL = normalize(hL)
+        hR = normalize(hR)
+
+        let dotVal = max(-1.0, min(1.0, dot(hL, hR)))
+        return acos(dotVal)
+    }
+    
+    func vergenceDepthTest2(_ leftMat: simd_float4x4, _ rightMat: simd_float4x4) -> Float {
+        let angle = vergenceAngle(leftMat, rightMat)
+        let ipd = simd_distance(leftMat.columns.3.asFloat3(), rightMat.columns.3.asFloat3())
+        return pow(ipd / tan(angle * 0.5), 2) * 4.0
+        //return ((ipd * 0.5) / tan(angle * 0.5)) * 4.0
     }
 }

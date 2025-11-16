@@ -34,6 +34,7 @@
 		E7285AAE2B9C44CB0032514C /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E7285AAD2B9C44CB0032514C /* AVKit.framework */; };
 		E769ABF22C1CE6D900E016CE /* ALVRClientCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; };
 		E769ABF32C1CE6D900E016CE /* ALVRClientCore.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C588CC1F2B6BC7AA00D00DF0 /* ALVRClientCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E77BFB7F2EC975670072DCC5 /* Filters.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77BFB7E2EC975640072DCC5 /* Filters.swift */; };
 		E77FDE582EC5D98200B0ED4F /* CameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77FDE572EC5D97F00B0ED4F /* CameraView.swift */; };
 		E78D482D2EBA7508000F77D7 /* AV1Parser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E78D482C2EBA7504000F77D7 /* AV1Parser.swift */; };
 		E78D482F2EBA76BB000F77D7 /* NALParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E78D482E2EBA76B8000F77D7 /* NALParser.swift */; };
@@ -116,6 +117,7 @@
 		E71DEFB22C19263D008A2074 /* ALVRClient.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ALVRClient.entitlements; sourceTree = "<group>"; };
 		E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalClientSystem.swift; sourceTree = "<group>"; };
 		E7285AAD2B9C44CB0032514C /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
+		E77BFB7E2EC975640072DCC5 /* Filters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Filters.swift; sourceTree = "<group>"; };
 		E77FDE572EC5D97F00B0ED4F /* CameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraView.swift; sourceTree = "<group>"; };
 		E78D482C2EBA7504000F77D7 /* AV1Parser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AV1Parser.swift; sourceTree = "<group>"; };
 		E78D482E2EBA76B8000F77D7 /* NALParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NALParser.swift; sourceTree = "<group>"; };
@@ -237,6 +239,7 @@
 		E71DEF962C18D425008A2074 /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
+				E77BFB7E2EC975640072DCC5 /* Filters.swift */,
 				E71352CD2DF784BF0079F12B /* GCController.swift */,
 				E70C9AE92C9377F20035B4F9 /* Codable.swift */,
 				E71DEF932C18D325008A2074 /* RealityKit.swift */,
@@ -379,6 +382,7 @@
 				E7F222422BE2F03800D10191 /* RealityKitClientView.swift in Sources */,
 				C5E590382B6379ED00328ED6 /* Shaders.metal in Sources */,
 				E7A98AA02BE2EEEA003DF333 /* RealityKitClientSystem.swift in Sources */,
+				E77BFB7F2EC975670072DCC5 /* Filters.swift in Sources */,
 				E70C9AEA2C9377F50035B4F9 /* Codable.swift in Sources */,
 				D61E6FE02B71CE080076031A /* VideoHandler.swift in Sources */,
 				8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */,
