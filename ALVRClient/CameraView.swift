@@ -365,7 +365,8 @@ final class CameraModel: NSObject, ObservableObject {
         let area = polygonArea(pts)
 
         // Normalize by eye width squared (removes scale dependence)
-        let width = (self.firstSampleEyeWidthL+self.firstSampleEyeWidthR)*0.5 //pts.map(\.x).max()! - pts.map(\.x).min()!
+        //let width = (self.firstSampleEyeWidthL+self.firstSampleEyeWidthR)*0.5
+        let width = pts.map(\.x).max()! - pts.map(\.x).min()!
         let normArea = area / (width * width)
 
         return clamp01(normArea)
@@ -537,7 +538,10 @@ final class CameraModel: NSObject, ObservableObject {
                 let outerLipsL = lm.outerLips?.normalizedPoints.dropFirst(3).dropLast(3) ?? []
                 let outerLipsR = (lm.outerLips?.normalizedPoints[0..<4] ?? []) + (lm.outerLips?.normalizedPoints.suffix(4) ?? [])
                 
-                let ipdScale = CGFloat(EventHandler.shared.lastIpd) / dist(avg(leftEye), avg(rightEye))
+                let leftEyeIntermediate = leftEye.map { faceToImage($0, bb: bb, scale: 1.0) }
+                let rightEyeIntermediate = rightEye.map { faceToImage($0, bb: bb, scale: 1.0) }
+                
+                let ipdScale = CGFloat(EventHandler.shared.lastIpd) / dist(avg(leftEyeIntermediate), avg(rightEyeIntermediate))
                 let faceW = max(0.00001, bb.width * ipdScale)
                 let faceH = max(0.00001, bb.height * ipdScale)
 
@@ -583,7 +587,7 @@ final class CameraModel: NSObject, ObservableObject {
                 let faceCenterX = avg(outerImg).x
                 let noseHeight = (noseCrestImg.isEmpty ? 0 : (noseCrestImg.max(by: { $0.y < $1.y })!.y - noseCrestImg.min(by: { $0.y < $1.y })!.y))
                 
-                print(eyeWidthL, eyeCenterDist, eyeWidthL/faceW)
+                //print(eyeWidthL, eyeCenterDist, eyeWidthL/faceW)
 
                 // jawOpen
                 var jawDropCurrent: Float = 0.0
@@ -852,10 +856,8 @@ final class CameraModel: NSObject, ObservableObject {
                     //let eyesWideOpenEstimateYCurrent = (maxY - minY)
                     //let estimatedEyeCenterY = (maxY) - (eyesWideOpenEstimateY * 0.5)
                     
-                    let test: CGFloat = CGFloat((sin(CACurrentMediaTime() * 0.1) * 0.25) + 0.25)
-                    print(test)
                     let relY = (c.y - eyeEdgeY)
-                    let dy = ((relY / max(0.001, eyesWideOpenEstimateX * 0.5)) + 0.333333333) * 2.0 // tbh idk why this works, something something approximating the radius with the eye width
+                    let dy = ((relY / max(0.001, eyesWideOpenEstimateX * 0.5)) + (1.0/3.0)) * 2.0 // tbh idk why this works, something something approximating the radius with the eye width
                     let centeredDy = (dy)
                     
                     let up: Float = norm(-(centeredDy) * 2.0)

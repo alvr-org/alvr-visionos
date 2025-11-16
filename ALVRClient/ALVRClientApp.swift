@@ -64,7 +64,7 @@ struct ALVRClientApp: App {
     \n\
     What's changed?\n\
     \n\
-    • Improved face tracking quality, particularly for asymmetry and gaze tracking.\n\
+    • Improved face tracking quality, particularly for asymmetry, eye winking and squinting, and gaze tracking.\n\
     \n\
     ________________________________\n\
     \n\

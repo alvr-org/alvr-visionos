@@ -463,6 +463,7 @@ class WorldTracker {
     var needsRecenterTrigger = false
     var leftEyeFilter = OneEuroFilter3(minCutoff: 1.0, beta: 0.007, derivCutoff: 1.0)
     var rightEyeFilter = OneEuroFilter3(minCutoff: 1.0, beta: 0.007, derivCutoff: 1.0)
+    var currentVergenceDepth: Float = 100.0
     
     init(arSession: ARKitSession = ARKitSession(), worldTracking: WorldTrackingProvider = WorldTrackingProvider(), handTracking: HandTrackingProvider = HandTrackingProvider(), sceneReconstruction: SceneReconstructionProvider = SceneReconstructionProvider(), planeDetection: PlaneDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])) {
         self.arSession = arSession
@@ -2187,8 +2188,10 @@ class WorldTracker {
             var leftRightL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightR.rawValue]))
             var leftRightR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookLeftL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookRightL.rawValue]))
             
-            var upDownL = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownR.rawValue]))
-            var upDownR = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownL.rawValue]))
+            let upDownLRaw = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpR.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownR.rawValue]))
+            let upDownRRaw = Float((-self.fbFaceTracking[XrFaceExpression2FB.eyesLookUpL.rawValue] + self.fbFaceTracking[XrFaceExpression2FB.eyesLookDownL.rawValue]))
+            var upDownL = upDownLRaw//(upDownLRaw + upDownRRaw) * 0.5
+            var upDownR = upDownRRaw//(upDownLRaw + upDownRRaw) * 0.5
             
             // TODO: pull this from gaze pinches
             //let test = Float(sin(CACurrentMediaTime() * 0.1) * 0.05) - 0.10
@@ -2217,7 +2220,7 @@ class WorldTracker {
             // TODO idk why it's like this
             // TODO: autocalibrate on pinches
             if upDownL < 0.0 {
-                upDownL = -asin(-upDownL) * 1.0
+                upDownL = -asin(-upDownL) * 0.5
             }
             else {
                 //upDownL *= 1.0
@@ -2225,7 +2228,7 @@ class WorldTracker {
             }
             
             if upDownR < 0.0 {
-                upDownR = -asin(-upDownR) * 1.0
+                upDownR = -asin(-upDownR) * 0.5
             }
             else {
                 //upDownR *= 1.0
@@ -2263,6 +2266,7 @@ class WorldTracker {
             let fullCombinedTransform = averageLeftRight.asFloat4x4() * orientL
             //let fullCombinedTransform = transform * orientL
             //print("depth1", depth)
+            WorldTracker.shared.currentVergenceDepth = depth
             let combinedForward = (-fullCombinedTransform.columns.2.asFloat3() * depth) + fullCombinedTransform.columns.3.asFloat3() //+ viewTransforms[0].columns.3.asFloat3()// + ((viewTransforms[0].columns.3.asFloat3() + viewTransforms[1].columns.3.asFloat3()) * 0.5)
             let directionLFix = leftTransform.columns.3.asFloat3() - combinedForward
             let directionRFix = rightTransform.columns.3.asFloat3() - combinedForward
@@ -3030,7 +3034,8 @@ class WorldTracker {
         let angle = vergenceAngle(leftMat, rightMat)
         let ipd = simd_distance(leftMat.columns.3.asFloat3(), rightMat.columns.3.asFloat3())
         //let val = pow(ipd / tan(angle * 0.5), 2) * 4.0 // Correct
-        let val = ((ipd * 0.5) / tan(angle * 0.5)) * 4.0 // Not correct but works on PFD
+        let val = ((ipd * 0.5) / tan(angle * 0.5)) * 4.0 // Not correct but worked on PFD
+        //let val = vergenceDepthTest(leftMat, rightMat) * 4.0
         return (val > 100.0) ? 0.25 : val
     }
 }
