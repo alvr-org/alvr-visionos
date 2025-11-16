@@ -2219,8 +2219,9 @@ class WorldTracker {
             
             // TODO idk why it's like this
             // TODO: autocalibrate on pinches
+            // TODO: The upper gaze keeps flipping between needing the 0.5 mult and not
             if upDownL < 0.0 {
-                upDownL = -asin(-upDownL) * 0.5
+                upDownL = -asin(-upDownL) * 1.0
             }
             else {
                 //upDownL *= 1.0
@@ -2228,7 +2229,7 @@ class WorldTracker {
             }
             
             if upDownR < 0.0 {
-                upDownR = -asin(-upDownR) * 0.5
+                upDownR = -asin(-upDownR) * 1.0
             }
             else {
                 //upDownR *= 1.0
