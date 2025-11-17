@@ -71,6 +71,7 @@ struct ALVRClientApp: App {
     Bug fixes:\n\
     \n\
     • Fixed a bug where the room would randomly recenter when encoding errors happened.\n\
+    • Fixed a bug where the SteamVR dashboard would be sunk into the ground when entering.\n\
     \n\
     ________________________________\n\
     \n\
