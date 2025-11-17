@@ -544,7 +544,7 @@ class EventHandler: ObservableObject {
                 {
                     alvr_report_frame_decoded(timestamp)
                     
-                    let dummyPose = AlvrPose(simd_quatf(), simd_float3(x: 0.0, y: 1.3, z: 0.0).asFloat4x4()) // keep the dummy at a reasonable height for both seated/standing entry
+                    let dummyPose = AlvrPose(orientation: AlvrQuat(simd_quatf()), position: (0.0, 1.3, 0.0)) // keep the dummy at a reasonable height for both seated/standing entry
                     let viewParamsDummy = [AlvrViewParams(pose: dummyPose, fov: viewFovs[0]), AlvrViewParams(pose: dummyPose, fov: viewFovs[1])]
 
                     // TODO: For some reason, really low frame rates seem to decode the wrong image for a split second?
