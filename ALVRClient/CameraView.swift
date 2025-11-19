@@ -873,7 +873,6 @@ final class CameraModel: NSObject, ObservableObject {
                     
                     //let relY = (c.y - eyeEdgeY)
                     let relY = (c.y - eyeCent.y)
-                    print("eye center y \(eyeCent.y), pupil y \(c.y), relY \(relY)")
                     let dy = ((relY / max(0.001, eyesWideOpenEstimateX * 0.5)) + (1.0/3.0)) * 6.0 // tbh idk why this works, something something approximating the radius with the eye width
                     let centeredDy = (dy)
                     
