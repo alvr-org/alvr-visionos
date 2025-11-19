@@ -120,36 +120,38 @@ struct BlendShapesDebugView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(blendShapes.keys.sorted(), id: \.self) { key in
+            VStack(alignment: .trailing) {
+                ForEach(blendShapes.keys.filter { blendShapes[$0] != nil }.sorted(), id: \.self) { key in
                     let v = blendShapes[key] ?? 0
-                    HStack(spacing: 8) {
+                    HStack(spacing: 12) {
                         Text(key)
-                            .font(.caption)
-                            .frame(width: 120, alignment: .leading)
+                            .font(.title)
+                            .dynamicTypeSize(DynamicTypeSize.large)
+                            .frame(width: 240,  height: 20, alignment: .leading)
                             .foregroundStyle(.secondary)
                         GeometryReader { geo in
                             ZStack(alignment: .leading) {
-                                Capsule().fill(Color.gray.opacity(0.2))
-                                Capsule().fill(v > 0 ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
+                                Capsule().fill(Color.gray)
+                                Capsule().fill(v > 0 ? Color.green : Color.red)
                                     .frame(width: geo.size.width * CGFloat(max(0, min(1, abs(v)))))
                             }
                         }
-                        .frame(height: 8)
+                        .frame(height: 20)
                         Text(String(format: "%.2f", v))
-                            .font(.caption2)
+                            .font(.subheadline)
+                            .dynamicTypeSize(DynamicTypeSize.large)
                             .monospacedDigit()
-                            .frame(width: 44, alignment: .trailing)
+                            .frame(width: 64, height: 20, alignment: .trailing)
                     }
                     .padding(.horizontal, 8)
                 }
             }
             .padding(8)
         }
-        .frame(maxWidth: 320)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .frame(maxWidth: 720)
+        .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 12))
         .overlay(
-            RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.15), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12).stroke(Color.white, lineWidth: 1)
         )
     }
 }
@@ -510,13 +512,25 @@ final class CameraModel: NSObject, ObservableObject {
                 //eyeCenterL.y = lm.leftEye?.normalizedPoints.max(by: { $0.y < $1.y })?.y ?? 0.0 // the bottom eyelid is more stable
                 //eyeCenterR.y = lm.rightEye?.normalizedPoints.max(by: { $0.y < $1.y })?.y ?? 0.0
                 
-                // Scale everything to mm
-                //let ipdScale = CGFloat(EventHandler.shared.lastIpd) / dist(preEyeCenterL, preEyeCenterR)
-                var eyeCenter = avg([preEyeCenterL, preEyeCenterR])
-                eyeCenter.y = max(pre_eyeLEdgeYLeft, pre_eyeLEdgeYRight, pre_eyeREdgeYLeft, pre_eyeREdgeYRight)
-                let noseCenter = eyeCenter
-                eyeCenter.x *= -1.0
-                eyeCenter.y *= -1.0
+                // Replace with requested snippet:
+                // Use the median line from landmarks as eyeCenter if available
+                var eyeCenter: CGPoint
+                if let median = lm.medianLine {
+                    let medianAvg = avg(median.normalizedPoints)
+                    eyeCenter = medianAvg
+                } else {
+                    eyeCenter = avg([preEyeCenterL, preEyeCenterR])
+                    eyeCenter.y = max(pre_eyeLEdgeYLeft, pre_eyeLEdgeYRight, pre_eyeREdgeYLeft, pre_eyeREdgeYRight)
+                }
+                let noseCenter: CGPoint = {
+                    if let crest = lm.noseCrest {
+                        return avg(crest.normalizedPoints)
+                    } else {
+                        return eyeCenter
+                    }
+                }()
+//                eyeCenter.x *= -1.0
+//                eyeCenter.y *= -1.0
                 
                 
 
@@ -598,18 +612,18 @@ final class CameraModel: NSObject, ObservableObject {
                 }
 
                 // jawLeft / jawRight (horizontal offset of mouth center vs face center)
-                if !outerImg.isEmpty {
-                    let dx = (mouthCenter.x - faceCenterX) / faceW
-                    newBlendShapes["jawSidewaysRight"] = 0.0//norm(max(0, dx * 3.0))
-                    newBlendShapes["jawSidewaysLeft"] = 0.0//norm(max(0, -dx * 3.0))
-                }
+//                if !outerImg.isEmpty {
+//                    let dx = (mouthCenter.x - faceCenterX) / faceW
+//                    newBlendShapes["jawSidewaysRight"] = 0.0//norm(max(0, dx * 3.0))
+//                    newBlendShapes["jawSidewaysLeft"] = 0.0//norm(max(0, -dx * 3.0))
+//                }
                 
                 // TODO: This needs ML probably
                 // jawForward (mouth protrusion approximated by increased inner lip height vs width)
-                if mouthWidth > 0 {
-                    let ratio = (mouthHeight / mouthWidth)
-                    newBlendShapes["jawThrust"] = 0.0//norm((ratio - 0.25) * 3.0)
-                }
+//                if mouthWidth > 0 {
+//                    let ratio = (mouthHeight / mouthWidth)
+//                    newBlendShapes["jawThrust"] = 0.0//norm((ratio - 0.25) * 3.0)
+//                }
                 
                 let baseMouthWidth = self.firstSampleMouthWidth
                 let baseMouthWidthL = self.firstSampleMouthWidthL
@@ -831,6 +845,7 @@ final class CameraModel: NSObject, ObservableObject {
                     //c.y /= faceH
                     
                     var eyeCent = avg(eye)
+                    eyeCent.y += 0.0005
                     //eyeCent.x /= faceW
                     //eyeCent.y /= faceH
 
@@ -856,14 +871,15 @@ final class CameraModel: NSObject, ObservableObject {
                     //let eyesWideOpenEstimateYCurrent = (maxY - minY)
                     //let estimatedEyeCenterY = (maxY) - (eyesWideOpenEstimateY * 0.5)
                     
-                    let relY = (c.y - eyeEdgeY)
-                    let dy = ((relY / max(0.001, eyesWideOpenEstimateX * 0.5)) + (1.0/3.0)) * 2.0 // tbh idk why this works, something something approximating the radius with the eye width
+                    //let relY = (c.y - eyeEdgeY)
+                    let relY = (c.y - eyeCent.y)
+                    let dy = ((relY / max(0.001, eyesWideOpenEstimateX * 0.5)) + (1.0/3.0)) * 6.0 // tbh idk why this works, something something approximating the radius with the eye width
                     let centeredDy = (dy)
                     
-                    let up: Float = norm(-(centeredDy) * 2.0)
-                    let down: Float = norm((centeredDy) * 2.0)
-                    let left: Float = norm(-(centeredDx) * 2.0)
-                    let right: Float = norm((centeredDx) * 2.0)
+                    let up: Float = norm(-(centeredDy))
+                    let down: Float = norm((centeredDy))
+                    let left: Float = norm(-(centeredDx))
+                    let right: Float = norm((centeredDx))
                     return (up, down, left, right)
                 }
                 let lLook = eyeLook(0, [lEyeImg, rEyeImg], lPupilImg, self.firstSampleEyeWidthL, self.firstSampleEyeHeightL)
@@ -903,14 +919,14 @@ final class CameraModel: NSObject, ObservableObject {
                 }
 
                 // Not possible with Persona avatars?
-                newBlendShapes["noseWrinklerL"] = 0.0
-                newBlendShapes["noseWrinklerR"] = 0.0
+//                newBlendShapes["noseWrinklerL"] = 0.0
+//                newBlendShapes["noseWrinklerR"] = 0.0
 
                 // tongueOut (use inner mouth height beyond jawOpen as proxy)
-                if mouthHeight > 0 {
-                    let t = max(0, (mouthHeight / faceH) - 0.12) * 4.0
-                    newBlendShapes["tongueOut"] = 0.0//norm(t)
-                }
+//                if mouthHeight > 0 {
+//                    let t = max(0, (mouthHeight / faceH) - 0.12) * 4.0
+//                    newBlendShapes["tongueOut"] = 0.0//norm(t)
+//                }
                 
                 // Recurrent state
                 if self.firstSampleEyeHeightL < (eyeHeightL) {
@@ -1137,3 +1153,4 @@ nonisolated extension CameraModel: AVCaptureVideoDataOutputSampleBufferDelegate 
         }
     }
 }
+
