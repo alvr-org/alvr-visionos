@@ -72,6 +72,7 @@ struct ALVRClientApp: App {
     \n\
     • Fixed a bug where the room would randomly recenter when encoding errors happened.\n\
     • Fixed a bug where the SteamVR dashboard would be sunk into the ground when entering.\n\
+    • Fixed a bug where the gaze-pinch system button gesture (pinching both hands and moving them apart) would not trigger.\n\
     \n\
     ________________________________\n\
     \n\

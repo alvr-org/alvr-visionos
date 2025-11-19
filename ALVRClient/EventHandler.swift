@@ -167,6 +167,7 @@ class EventHandler: ObservableObject {
     var timeLastFrameDecoded: Double = 0.0
     var numberOfEventThreadRestarts: Int = 0
     var mdnsListener: NWListener? = nil
+    var mdnsListenerRegistered = false
     
     var stutterSampleStart = 0.0
     var stutterEventsCounted = 0
@@ -318,6 +319,7 @@ class EventHandler: ObservableObject {
         if mdnsListener != nil {
             mdnsListener!.cancel()
             mdnsListener = nil
+            mdnsListenerRegistered = false
         }
 
         if mdnsListener == nil && !streamingActive {
@@ -329,7 +331,7 @@ class EventHandler: ObservableObject {
             }
             
             if let listener = mdnsListener {
-                let txtRecord = NWTXTRecord(["protocol" : getMdnsProtocolId(), "device_id" : getHostname()])
+                let txtRecord = NWTXTRecord(["protocol" : getMdnsProtocolId(), "device_id" : getHostname(), "salt" : CACurrentMediaTime().description])
                 listener.service = NWListener.Service(name: "ALVR Apple Vision Pro", type: getMdnsService(), txtRecord: txtRecord)
 
                 // Handle errors if any
@@ -349,6 +351,7 @@ class EventHandler: ObservableObject {
                 listener.serviceRegistrationUpdateHandler = { change in
                     print("mDNS registration updated:", change)
                     self.timeLastSentMdnsBroadcast = CACurrentMediaTime()
+                    self.mdnsListenerRegistered = true
                 }
                 listener.newConnectionHandler = { connection in
                     connection.cancel()
@@ -544,7 +547,7 @@ class EventHandler: ObservableObject {
                 {
                     alvr_report_frame_decoded(timestamp)
                     
-                    let dummyPose = AlvrPose(orientation: AlvrQuat(simd_quatf()), position: (0.0, 1.3, 0.0)) // keep the dummy at a reasonable height for both seated/standing entry
+                    let dummyPose = AlvrPose()
                     let viewParamsDummy = [AlvrViewParams(pose: dummyPose, fov: viewFovs[0]), AlvrViewParams(pose: dummyPose, fov: viewFovs[1])]
 
                     // TODO: For some reason, really low frame rates seem to decode the wrong image for a split second?
@@ -706,7 +709,7 @@ class EventHandler: ObservableObject {
             if currentTime - timeLastSentPeriodicUpdatedValues >= 15.0 {
                 handlePeriodicUpdatedValues()
             }
-            if currentTime - timeLastSentMdnsBroadcast >= 5.0 {
+            if (currentTime - timeLastSentMdnsBroadcast >= 2.1 && self.mdnsListenerRegistered) || (currentTime - timeLastSentMdnsBroadcast >= 5.1) {
                 handleMdnsBroadcasts()
             }
             
@@ -722,6 +725,10 @@ class EventHandler: ObservableObject {
                         }
                         exit(0)
                     }
+                }
+                
+                if !renderStarted && streamingActive {
+                    WorldTracker.shared.sendFakeTracking(viewFovs: viewFovs, targetTimestamp: CACurrentMediaTime() - 1.0)
                 }
             }
             

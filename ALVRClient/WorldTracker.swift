@@ -406,6 +406,7 @@ class WorldTracker {
     var leftIsPinching = false
     var lastLeftIsPinching = false
     var leftPinchTrigger: Float = 0.0
+    var bothPinchSystemButtonTime: Float = 0.0
     
     var rightSelectionRayId = -1
     var rightSelectionRayOrigin = simd_float3(0.0, 0.0, 0.0)
@@ -418,6 +419,7 @@ class WorldTracker {
     var lastRightIsPinching = false
     var rightPinchTrigger: Float = 0.0
     
+    var lastPinchSentTime = 0.0
     var leftPinchEyeDelta = simd_float3()
     var rightPinchEyeDelta = simd_float3()
     var floorCorrectionTransform = simd_float3()
@@ -2546,6 +2548,166 @@ class WorldTracker {
             }
         }
         
+        func boolVal(_ val: Bool) -> AlvrButtonValue {
+            return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_BINARY, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field0(binary: val)))
+        }
+        
+        func scalarVal(_ val: Float) -> AlvrButtonValue {
+            return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_SCALAR, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field1(scalar: val)))
+        }
+        
+        // MARK: - Emulated pinch interactions overwrite emulated controller motions
+        if ALVRClientApp.gStore.settings.emulatedPinchInteractions {
+            // Menu press with two pinches
+            // (have to override triggers to prevent screenshot send)
+            var systemButton = WorldTracker.leftMenuClick
+            var systemIsRight = false
+            if let otherSettings = Settings.getAlvrSettings() {
+                let emulationMode = otherSettings.headset.controllers?.emulation_mode ?? ""
+                if emulationMode == "PSVR2Sense" {
+                    systemButton = WorldTracker.rightSystemClick
+                    systemIsRight = true
+                }
+            }
+            
+            let deltaSinceLastPinch = Float(max(CACurrentMediaTime() - lastPinchSentTime, 0.011))
+            lastPinchSentTime = CACurrentMediaTime()
+            
+            let skeletonHysteresisForPinches = defaultSkeletonDisableHysteresis
+            let pinchTriggerSpeed: Float = 0.15 * (deltaSinceLastPinch / 0.011)
+            
+            if (rightIsPinching && leftIsPinching) {
+                leftPinchTrigger -= pinchTriggerSpeed
+                if leftPinchTrigger < 0.0 {
+                    leftPinchTrigger = pinchTriggerSpeed
+                }
+                rightPinchTrigger -= pinchTriggerSpeed
+                if rightPinchTrigger < 0.0 {
+                    rightPinchTrigger = pinchTriggerSpeed
+                }
+                
+                bothPinchSystemButtonTime += pinchTriggerSpeed
+                if bothPinchSystemButtonTime > 1.0 {
+                    bothPinchSystemButtonTime = 1.0
+                }
+
+                if leftPinchTrigger <= pinchTriggerSpeed && rightPinchTrigger <= pinchTriggerSpeed && bothPinchSystemButtonTime < 0.3 {
+                    alvr_send_button(systemButton, boolVal(true))
+                }
+                else {
+                    alvr_send_button(systemButton, boolVal(false))
+                }
+                
+                if (!systemIsRight) {
+                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
+                    //alvr_send_button(WorldTracker.rightTriggerClick, boolVal(false))
+                    //alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(0.0))
+                }
+                else {
+                    //alvr_send_button(WorldTracker.leftTriggerClick, boolVal(false))
+                    //alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(0.0))
+                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
+                }
+                
+                trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdLeftHand })
+                trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdRightHand })
+                
+                trackingMotions.append(pinchToAlvrDeviceMotion(.left))
+                trackingMotions.append(pinchToAlvrDeviceMotion(.right))
+                
+                if steamVRInput2p0Enabled {
+                    leftSkeletonDisableHysteresis = skeletonHysteresisForPinches
+                    rightSkeletonDisableHysteresis = skeletonHysteresisForPinches
+                    skeletonLeft = nil
+                    skeletonRight = nil
+                }
+            }
+            else {
+                bothPinchSystemButtonTime = 0.0
+
+                if leftIsPinching {
+                    trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdLeftHand })
+                    trackingMotions.append(pinchToAlvrDeviceMotion(.left))
+                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
+                    leftPinchTrigger += pinchTriggerSpeed
+                    if leftPinchTrigger > 1.0 {
+                        leftPinchTrigger = 1.0
+                    }
+                    
+                    if steamVRInput2p0Enabled{
+                        leftSkeletonDisableHysteresis = skeletonHysteresisForPinches
+                        skeletonLeft = nil
+                    }
+                }
+                else if !leftIsPinching && leftPinchTrigger > 0.0 {
+                    trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdLeftHand })
+                    trackingMotions.append(pinchToAlvrDeviceMotion(.left))
+                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
+                    leftPinchTrigger -= pinchTriggerSpeed
+                    if leftPinchTrigger <= pinchTriggerSpeed {
+                        WorldTracker.shared.leftSelectionRayOrigin = simd_float3()
+                        WorldTracker.shared.leftSelectionRayDirection = simd_float3()
+                    }
+                    if leftPinchTrigger < 0.0 {
+                        leftPinchTrigger = 0.0
+                    }
+                    if steamVRInput2p0Enabled {
+                        leftSkeletonDisableHysteresis = skeletonHysteresisForPinches
+                        skeletonLeft = nil
+                    }
+                }
+                
+                if rightIsPinching {
+                    trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdRightHand })
+                    trackingMotions.append(pinchToAlvrDeviceMotion(.right))
+                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
+                    rightPinchTrigger += pinchTriggerSpeed
+                    if rightPinchTrigger > 1.0 {
+                        rightPinchTrigger = 1.0
+                    }
+                    
+                    if steamVRInput2p0Enabled {
+                        rightSkeletonDisableHysteresis = skeletonHysteresisForPinches
+                        skeletonRight = nil
+                    }
+                }
+                else if !rightIsPinching && rightPinchTrigger > 0.0 {
+                    trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdRightHand })
+                    trackingMotions.append(pinchToAlvrDeviceMotion(.right))
+                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
+                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
+                    rightPinchTrigger -= pinchTriggerSpeed
+                    if rightPinchTrigger <= pinchTriggerSpeed {
+                        WorldTracker.shared.rightSelectionRayOrigin = simd_float3()
+                        WorldTracker.shared.rightSelectionRayDirection = simd_float3()
+                    }
+                    if rightPinchTrigger < 0.0 {
+                        rightPinchTrigger = 0.0
+                    }
+                    
+                    if steamVRInput2p0Enabled {
+                        rightSkeletonDisableHysteresis = skeletonHysteresisForPinches
+                        skeletonRight = nil
+                    }
+                }
+                
+                if leftPinchTrigger > 0.0 && !systemIsRight {
+                    alvr_send_button(systemButton, boolVal(false))
+                }
+                else if rightPinchTrigger > 0.0 && systemIsRight {
+                    alvr_send_button(systemButton, boolVal(false))
+                }
+            }
+        }
+        lastLeftIsPinching = leftIsPinching
+        lastRightIsPinching = rightIsPinching
+        
+        // Handle this after the pinch gestures can override the skeletons
         if skeletonLeft != nil {
             if skeletonLeft!.count >= SteamVRJoints.numberOfJoints.rawValue {
                 skeletonLeftPtr = UnsafeMutablePointer<AlvrPose>.allocate(capacity: 26)
@@ -2572,117 +2734,6 @@ class WorldTracker {
         }
         lastSkeletonLeft = skeletonLeft
         lastSkeletonRight = skeletonRight
-        
-        func boolVal(_ val: Bool) -> AlvrButtonValue {
-            return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_BINARY, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field0(binary: val)))
-        }
-        
-        func scalarVal(_ val: Float) -> AlvrButtonValue {
-            return AlvrButtonValue(tag: ALVR_BUTTON_VALUE_SCALAR, AlvrButtonValue.__Unnamed_union___Anonymous_field1(AlvrButtonValue.__Unnamed_union___Anonymous_field1.__Unnamed_struct___Anonymous_field1(scalar: val)))
-        }
-        
-        // MARK: - Emulated pinch interactions overwrite emulated controller motions
-        if ALVRClientApp.gStore.settings.emulatedPinchInteractions {
-            // Menu press with two pinches
-            // (have to override triggers to prevent screenshot send)
-            var systemButton = WorldTracker.leftMenuClick
-            var systemIsRight = false
-            if let otherSettings = Settings.getAlvrSettings() {
-                let emulationMode = otherSettings.headset.controllers?.emulation_mode ?? ""
-                if emulationMode == "PSVR2Sense" {
-                    systemButton = WorldTracker.rightSystemClick
-                    systemIsRight = true
-                }
-            }
-            
-            if (rightIsPinching && leftIsPinching) {
-                leftPinchTrigger -= 0.1
-                if leftPinchTrigger < 0.0 {
-                    leftPinchTrigger = 0.1
-                }
-                rightPinchTrigger -= 0.1
-                if rightPinchTrigger < 0.0 {
-                    rightPinchTrigger = 0.1
-                }
-        
-                if leftPinchTrigger <= 0.1 && rightPinchTrigger <= 0.1 {
-                    alvr_send_button(systemButton, boolVal(true))
-                }
-                else {
-                    alvr_send_button(systemButton, boolVal(false))
-                }
-                alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
-                alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
-                alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
-                alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
-                
-                trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdLeftHand })
-                trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdRightHand })
-                
-                trackingMotions.append(pinchToAlvrDeviceMotion(.left))
-                trackingMotions.append(pinchToAlvrDeviceMotion(.right))
-            }
-            else {
-                if leftIsPinching {
-                    trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdLeftHand })
-                    trackingMotions.append(pinchToAlvrDeviceMotion(.left))
-                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
-                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
-                    leftPinchTrigger += 0.1
-                    if leftPinchTrigger > 1.0 {
-                        leftPinchTrigger = 1.0
-                    }
-                }
-                else if !leftIsPinching && leftPinchTrigger > 0.0 {
-                    trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdLeftHand })
-                    trackingMotions.append(pinchToAlvrDeviceMotion(.left))
-                    alvr_send_button(WorldTracker.leftTriggerClick, boolVal(leftPinchTrigger > 0.7))
-                    alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(leftPinchTrigger))
-                    leftPinchTrigger -= 0.1
-                    if leftPinchTrigger <= 0.1 {
-                        WorldTracker.shared.leftSelectionRayOrigin = simd_float3()
-                        WorldTracker.shared.leftSelectionRayDirection = simd_float3()
-                    }
-                    if leftPinchTrigger < 0.0 {
-                        leftPinchTrigger = 0.0
-                    }
-                }
-                
-                if rightIsPinching {
-                    trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdRightHand })
-                    trackingMotions.append(pinchToAlvrDeviceMotion(.right))
-                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
-                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
-                    rightPinchTrigger += 0.1
-                    if rightPinchTrigger > 1.0 {
-                        rightPinchTrigger = 1.0
-                    }
-                }
-                else if !rightIsPinching && rightPinchTrigger > 0.0 {
-                    trackingMotions.removeAll(where: {$0.device_id == WorldTracker.deviceIdRightHand })
-                    trackingMotions.append(pinchToAlvrDeviceMotion(.right))
-                    alvr_send_button(WorldTracker.rightTriggerClick, boolVal(rightPinchTrigger > 0.7))
-                    alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(rightPinchTrigger))
-                    rightPinchTrigger -= 0.1
-                    if rightPinchTrigger <= 0.1 {
-                        WorldTracker.shared.rightSelectionRayOrigin = simd_float3()
-                        WorldTracker.shared.rightSelectionRayDirection = simd_float3()
-                    }
-                    if rightPinchTrigger < 0.0 {
-                        rightPinchTrigger = 0.0
-                    }
-                }
-                
-                if leftPinchTrigger > 0.0 && !systemIsRight {
-                    alvr_send_button(systemButton, boolVal(false))
-                }
-                else if rightPinchTrigger > 0.0 && systemIsRight {
-                    alvr_send_button(systemButton, boolVal(false))
-                }
-            }
-        }
-        lastLeftIsPinching = leftIsPinching
-        lastRightIsPinching = rightIsPinching
         
         // MARK: - Calculate the positional/angular velocities for the head
         var headLinVel: (Float, Float, Float) = (0,0,0)
@@ -2893,18 +2944,26 @@ class WorldTracker {
             return
         }
         
-        let dummyPose = AlvrPose()
+        var trackingMotions:[AlvrDeviceMotion] = []
+        
+        let dummyPoseView = AlvrPose()
+        let dummyPoseHeadset = AlvrPose(orientation: AlvrQuat(simd_quatf()), position: (0.0, 1.2, 0.0)) // keep the dummy at a reasonable height for both seated/standing entry
         let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         
         let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
         defer { viewFovsPtr.deallocate() }
-        viewFovsPtr[0] = AlvrViewParams(pose: dummyPose, fov: viewFovs[0])
-        viewFovsPtr[1] = AlvrViewParams(pose: dummyPose, fov: viewFovs[1])
+        viewFovsPtr[0] = AlvrViewParams(pose: dummyPoseView, fov: viewFovs[0])
+        viewFovsPtr[1] = AlvrViewParams(pose: dummyPoseView, fov: viewFovs[1])
+        
+        let headLinVel: (Float, Float, Float) = (0,0,0)
+        let headAngVel: (Float, Float, Float) = (0,0,0)
+        let headMotion = AlvrDeviceMotion(device_id: WorldTracker.deviceIdHead, pose: dummyPoseHeadset, linear_velocity: headLinVel, angular_velocity: headAngVel)
+        trackingMotions.append(headMotion)
         
         alvr_send_view_params(UnsafePointer(viewFovsPtr))
-        alvr_send_tracking(targetTimestampNS, nil, 0, nil, nil)
+        alvr_send_tracking(targetTimestampNS, trackingMotions, UInt64(trackingMotions.count), nil, nil)
         
-        
+        print("Sending fake tracking...")
     }
     
     func angularVelocityBetweenQuats(_ q1: AlvrQuat, _ q2: AlvrQuat, _ dt: Float) -> (Float, Float, Float) {
