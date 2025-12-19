@@ -282,6 +282,10 @@ class WorldTracker {
     var secondControllerClickTime = 0.0
     var controllersAreDisabledByClickTogether = false
     
+    // Tell streamer we have PSVR active interaction profile
+    var detectedPsvr = false
+    static let psvrInteractionProfile = alvr_path_string_to_id("/interaction_profiles/sony/playstation_vr2_sense_controller")
+
     // Face tracking
     var fbFaceTracking = Array(repeating: Float(0.0), count: 70)
     var fbFaceTrackingValid = false
@@ -305,6 +309,8 @@ class WorldTracker {
     static let leftButtonY = alvr_path_string_to_id("/user/hand/left/input/y/click")
     static let leftTriggerClick = alvr_path_string_to_id("/user/hand/left/input/trigger/click")
     static let leftTriggerValue = alvr_path_string_to_id("/user/hand/left/input/trigger/value")
+    static let leftTriggerSensorValue = alvr_path_string_to_id("/user/hand/left/input/trigger/sensor/value")
+
     static let leftThumbstickX = alvr_path_string_to_id("/user/hand/left/input/thumbstick/x")
     static let leftThumbstickY = alvr_path_string_to_id("/user/hand/left/input/thumbstick/y")
     static let leftThumbstickClick = alvr_path_string_to_id("/user/hand/left/input/thumbstick/click")
@@ -313,7 +319,8 @@ class WorldTracker {
     static let leftSqueezeClick = alvr_path_string_to_id("/user/hand/left/input/squeeze/click")
     static let leftSqueezeValue = alvr_path_string_to_id("/user/hand/left/input/squeeze/value")
     static let leftSqueezeForce = alvr_path_string_to_id("/user/hand/left/input/squeeze/force")
-    
+    static let leftSqueezeSensorValue = alvr_path_string_to_id("/user/hand/left/input/squeeze/sensor/value")
+
     static let leftButtonATouched = alvr_path_string_to_id("/user/hand/left/input/a/touch")
     static let leftButtonBTouched = alvr_path_string_to_id("/user/hand/left/input/b/touch")
     static let leftButtonXTouched = alvr_path_string_to_id("/user/hand/left/input/x/touch")
@@ -331,6 +338,8 @@ class WorldTracker {
     static let rightButtonY = alvr_path_string_to_id("/user/hand/right/input/y/click")
     static let rightTriggerClick = alvr_path_string_to_id("/user/hand/right/input/trigger/click")
     static let rightTriggerValue = alvr_path_string_to_id("/user/hand/right/input/trigger/value")
+    static let rightTriggerSensorValue = alvr_path_string_to_id("/user/hand/right/input/trigger/sensor/value")
+
     static let rightThumbstickX = alvr_path_string_to_id("/user/hand/right/input/thumbstick/x")
     static let rightThumbstickY = alvr_path_string_to_id("/user/hand/right/input/thumbstick/y")
     static let rightThumbstickClick = alvr_path_string_to_id("/user/hand/right/input/thumbstick/click")
@@ -339,7 +348,8 @@ class WorldTracker {
     static let rightSqueezeClick = alvr_path_string_to_id("/user/hand/right/input/squeeze/click")
     static let rightSqueezeValue = alvr_path_string_to_id("/user/hand/right/input/squeeze/value")
     static let rightSqueezeForce = alvr_path_string_to_id("/user/hand/right/input/squeeze/force")
-    
+    static let rightSqueezeSensorValue = alvr_path_string_to_id("/user/hand/right/input/squeeze/sensor/value")
+
     static let rightButtonATouched = alvr_path_string_to_id("/user/hand/right/input/a/touch")
     static let rightButtonBTouched = alvr_path_string_to_id("/user/hand/right/input/b/touch")
     static let rightButtonXTouched = alvr_path_string_to_id("/user/hand/right/input/x/touch")
@@ -529,12 +539,22 @@ class WorldTracker {
                 //print(GCController.controllers())
                 
                 var accessories: [Accessory] = []
+                self.detectedPsvr = false
                 for spatialController in GCController.spatialControllers() {
                     do {
                         let accessory = try await Accessory(device: spatialController)
+
+                        // For now we never need to disable this interaction profile as we are using the generic controller button paths
+                        if accessory.name.contains("PlayStation VR") {
+                            self.detectedPsvr = true
+                        }
                         accessories.append(accessory)
                     } catch {
                         print("Error during accessory initialization: \(error)")
+                    }
+                    if detectedPsvr {
+                        alvr_send_active_interaction_profile(WorldTracker.deviceIdLeftHand, WorldTracker.psvrInteractionProfile)
+                        alvr_send_active_interaction_profile(WorldTracker.deviceIdRightHand, WorldTracker.psvrInteractionProfile)
                     }
                 }
                 for stylus in GCStylus.styli {
@@ -1641,7 +1661,6 @@ class WorldTracker {
             // Special-case PSVR controllers because we plan to support them specifically
             // Need to check visionOS 26 here because forceInputs e.g. for triggers, are a 26-only feature.
             if #available(visionOS 26.0, *) {
-            
                 /*
                 if let inputs = controller.input.unmapped {
                     print("BEGIN")
@@ -1677,17 +1696,21 @@ class WorldTracker {
                         alvr_send_button(WorldTracker.leftThumbstickY, scalarVal(dpads["Thumbstick"]?.yAxis.value ?? 0.0))
                         if leftPinchTrigger <= 0.0 {
                             alvr_send_button(WorldTracker.leftTriggerClick, boolVal(buttons["Trigger"]?.pressedInput.isPressed ?? false))
-                            alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(buttons["Trigger"]?.pressedInput.value ?? ((buttons["Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                            alvr_send_button(WorldTracker.leftTriggerValue, scalarVal(buttons["Trigger"]?.pressedInput.value ?? 0.0 ))
                         }
 
                         alvr_send_button(WorldTracker.leftSqueezeClick, boolVal(buttons["Grip"]?.pressedInput.isPressed ?? false))
-                        alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal(((buttons["Grip"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                        alvr_send_button(WorldTracker.leftSqueezeValue, scalarVal((buttons["Grip"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
                         alvr_send_button(WorldTracker.leftSqueezeTouched, boolVal(buttons["Grip"]?.touchedInput?.isTouched ?? false))
+                        // Workaround until Apple supports grip sensor
+                        alvr_send_button(WorldTracker.leftSqueezeSensorValue, scalarVal((buttons["Grip"]?.touchedInput?.isTouched ?? false) ? 1.0 : 0.0))
 
                         alvr_send_button(WorldTracker.leftButtonXTouched, boolVal(buttons["Button A"]?.touchedInput?.isTouched ?? false))
                         alvr_send_button(WorldTracker.leftButtonYTouched, boolVal(buttons["Button B"]?.touchedInput?.isTouched ?? false))
                         alvr_send_button(WorldTracker.leftThumbstickTouched, boolVal(buttons["Thumbstick Button"]?.touchedInput?.isTouched ?? false))
                         alvr_send_button(WorldTracker.leftTriggerTouched, boolVal(buttons["Trigger"]?.touchedInput?.isTouched ?? false))
+                        // Workaround until Apple supports trigger sensors
+                        alvr_send_button(WorldTracker.leftTriggerSensorValue, scalarVal((buttons["Trigger"]?.touchedInput?.isTouched ?? false) ? 1.0 : 0.0))
 
                         alvr_send_button(WorldTracker.leftMenuTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
                         alvr_send_button(WorldTracker.leftSystemTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
@@ -1704,17 +1727,21 @@ class WorldTracker {
 
                         if rightPinchTrigger <= 0.0 {
                             alvr_send_button(WorldTracker.rightTriggerClick, boolVal(buttons["Trigger"]?.pressedInput.isPressed ?? false))
-                            alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(buttons["Trigger"]?.pressedInput.value ?? ((buttons["Trigger"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0)))
+                            alvr_send_button(WorldTracker.rightTriggerValue, scalarVal(buttons["Trigger"]?.pressedInput.value ?? 0.0))
                         }
 
                         alvr_send_button(WorldTracker.rightSqueezeClick, boolVal(buttons["Grip"]?.pressedInput.isPressed ?? false))
                         alvr_send_button(WorldTracker.rightSqueezeValue, scalarVal((buttons["Grip"]?.pressedInput.isPressed ?? false) ? 1.0 : 0.0))
                         alvr_send_button(WorldTracker.rightSqueezeTouched, boolVal(buttons["Grip"]?.touchedInput?.isTouched ?? false))
-                        
+                        // Workaround until Apple supports grip sensor
+                        alvr_send_button(WorldTracker.rightSqueezeSensorValue, scalarVal(((buttons["Grip"]?.touchedInput?.isTouched ?? false) ? 1.0 : 0.0)))
+
                         alvr_send_button(WorldTracker.rightButtonATouched, boolVal(buttons["Button A"]?.touchedInput?.isTouched ?? false))
                         alvr_send_button(WorldTracker.rightButtonBTouched, boolVal(buttons["Button B"]?.touchedInput?.isTouched ?? false))
                         alvr_send_button(WorldTracker.rightThumbstickTouched, boolVal(buttons["Thumbstick Button"]?.touchedInput?.isTouched ?? false))
                         alvr_send_button(WorldTracker.rightTriggerTouched, boolVal(buttons["Trigger"]?.touchedInput?.isTouched ?? false))
+                        // Workaround until Apple supports trigger sensors
+                        alvr_send_button(WorldTracker.rightTriggerSensorValue, scalarVal(((buttons["Trigger"]?.touchedInput?.isTouched ?? false) ? 1.0 : 0.0)))
 
                         alvr_send_button(WorldTracker.rightMenuTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
                         alvr_send_button(WorldTracker.rightSystemTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
