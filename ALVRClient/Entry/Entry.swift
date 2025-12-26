@@ -238,6 +238,13 @@ struct Entry: View {
                             .font(.system(size: 10))
                     }
                     .toggleStyle(.switch)
+
+                    Toggle(isOn: $gStore.settings.enableProgressive) {
+                        Text("Enable progressive mode (use Digital Crown)")
+                        Text("*Currently requires RealityKit renderer")
+                            .font(.system(size: 10))
+                    }
+                    .toggleStyle(.switch)
                     
                     Toggle(isOn: $gStore.settings.dismissWindowOnEnter) {
                         Text("Dismiss this window on entry")
