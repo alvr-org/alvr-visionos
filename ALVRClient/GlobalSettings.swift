@@ -28,6 +28,7 @@ struct GlobalSettings: Codable {
     var targetHandsAtRoundtripLatency = false
     var enablePersonaFaceTracking = false
     var showFaceTrackingDebug = false
+    var enableProgressive = false
     var lastUsedAppVersion = "never launched"
     
     init() {}
@@ -55,6 +56,7 @@ struct GlobalSettings: Codable {
         self.targetHandsAtRoundtripLatency = try container.decodeIfPresent(Bool.self, forKey: .targetHandsAtRoundtripLatency) ?? self.targetHandsAtRoundtripLatency
         self.enablePersonaFaceTracking = try container.decodeIfPresent(Bool.self, forKey: .enablePersonaFaceTracking) ?? self.enablePersonaFaceTracking
         self.showFaceTrackingDebug = try container.decodeIfPresent(Bool.self, forKey: .showFaceTrackingDebug) ?? self.showFaceTrackingDebug
+        self.enableProgressive = try container.decodeIfPresent(Bool.self, forKey: .enableProgressive) ?? self.enableProgressive
         self.lastUsedAppVersion = try container.decodeIfPresent(String.self, forKey: .lastUsedAppVersion) ?? self.lastUsedAppVersion
     }
 }

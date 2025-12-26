@@ -47,9 +47,11 @@ struct ALVRClientApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openWindow) var openWindow
     @Environment(\.dismissWindow) var dismissWindow
-    @State private var clientImmersionStyle: ImmersionStyle = .mixed
-    
     static var gStore = GlobalSettingsStore()
+
+    @State private var clientImmersionStyle: ImmersionStyle = .mixed
+    @State private var realityKitImmersionStyle: ImmersionStyle = .mixed
+    
     @State private var chromaKeyColor = Color(.sRGB, red: 0.98, green: 0.9, blue: 0.2)
     
     static let shared = ALVRClientApp()
@@ -130,6 +132,8 @@ struct ALVRClientApp: App {
             .task {
                 if #unavailable(visionOS 2.0) {
                     clientImmersionStyle = .full
+                } else {
+                    realityKitImmersionStyle = ALVRClientApp.gStore.settings.enableProgressive ? .progressive : .mixed
                 }
                 loadSettings()
                 model.isShowingClient = false
@@ -207,7 +211,7 @@ struct ALVRClientApp: App {
             RealityKitClientView()
         }
         .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
-        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+        .immersionStyle(selection: $realityKitImmersionStyle, in: .mixed, .progressive)
         .upperLimbVisibility(ALVRClientApp.gStore.settings.showHandsOverlaid ? .visible : .hidden)
 
         ImmersiveSpace(id: "MetalClient") {
