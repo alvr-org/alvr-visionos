@@ -106,6 +106,7 @@ class Renderer {
     var drawPlanesWithInformedColors: Bool = false
     var fadeInOverlayAlpha: Float = 0.0
     var coolPulsingColorsTime: Float = 0.0
+    private let chaperoneSystem = ChaperoneSystem()
     var reprojectedFramesInARow: Int = 0
     var roundTripRenderTime: Double = 0.0
     var lastRoundTripRenderTimestamp: Double = 0.0
@@ -1318,6 +1319,97 @@ class Renderer {
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
     }
+
+    // Renders the chaperone proximity overlay on top of the existing video frame.
+    func renderChaperone(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], rasterizationRateMap: MTLRasterizationRateMap?, simdDeviceAnchor: simd_float4x4) {
+        if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
+            return
+        }
+        let chaperoneDistanceCm = ALVRClientApp.gStore.settings.chaperoneDistanceCm
+
+        let renderPassDescriptor = MTLRenderPassDescriptor()
+        renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
+        renderPassDescriptor.colorAttachments[0].loadAction = .load
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        renderPassDescriptor.depthAttachment.texture = renderTargetDepth
+        renderPassDescriptor.depthAttachment.loadAction = .clear
+        renderPassDescriptor.depthAttachment.storeAction = .dontCare
+        renderPassDescriptor.depthAttachment.clearDepth = 0.0
+        renderPassDescriptor.rasterizationRateMap = rasterizationRateMap
+        renderPassDescriptor.renderTargetArrayLength = viewports.count
+
+        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            fatalError("Failed to create render encoder")
+        }
+        renderEncoder.label = "Chaperone Render Encoder"
+        renderEncoder.pushDebugGroup("Draw chaperone")
+        renderEncoder.setCullMode(.back)
+        renderEncoder.setFrontFacing(.counterClockwise)
+        renderEncoder.setViewports(viewports)
+        renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset:uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
+        renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue) // unused
+
+        if viewports.count > 1 {
+            var viewMappings = (0..<viewports.count).map {
+                MTLVertexAmplificationViewMapping(viewportArrayIndexOffset: UInt32($0),
+                                                  renderTargetArrayIndexOffset: UInt32($0))
+            }
+            renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
+        }
+
+        renderEncoder.setRenderPipelineState(pipelineState)
+        renderEncoder.setDepthStencilState(depthStateGreater)
+#if !targetEnvironment(simulator)
+        renderEncoder.setDepthClipMode(.clamp)
+#endif
+
+        let output = chaperoneSystem.update(planes: WorldTracker.shared.snapshotPlaneData(),
+                                            headPose: simdDeviceAnchor,
+                                            leftHandPose: WorldTracker.shared.lastLeftHandPose,
+                                            rightHandPose: WorldTracker.shared.lastRightHandPose,
+                                            worldFromSteamVR: WorldTracker.shared.worldTrackingSteamVRTransform,
+                                            chaperoneDistanceCm: ALVRClientApp.gStore.settings.chaperoneDistanceCm,
+                                            now: CACurrentMediaTime(),
+                                            leftControllerPresent: WorldTracker.shared.leftControllerPose != nil,
+                                            rightControllerPresent: WorldTracker.shared.rightControllerPose != nil) { isLeft, amplitude, duration in
+            WorldTracker.shared.enqueueHapticsPulse(isLeft: isLeft, amplitude: amplitude, duration: duration)
+        }
+
+        var firstBind = true
+        for (plane, planeColor) in output.renderables {
+            let faces = plane.geometry.meshFaces
+
+            // VRR can't do lines
+            if faces.primitive != GeometryElement.Primitive.triangle {
+                continue
+            }
+
+            renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.position.rawValue)
+            renderEncoder.setVertexBuffer(plane.geometry.meshVertices.buffer, offset: 0, index: VertexAttribute.texcoord.rawValue)
+
+            selectNextPlaneUniformBuffer()
+            self.planeUniforms[0].planeTransform = plane.originFromAnchorTransform
+            self.planeUniforms[0].planeColor = planeColor
+            self.planeUniforms[0].planeDoProximity = 1.0
+            if firstBind {
+                renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                firstBind = false
+            } else {
+                renderEncoder.setVertexBufferOffset(planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+            }
+            
+            renderEncoder.setTriangleFillMode(.fill)
+            renderEncoder.drawIndexedPrimitives(type: faces.primitive == .triangle ? MTLPrimitiveType.triangle : MTLPrimitiveType.line,
+                                                indexCount: faces.count*3,
+                                                indexType: faces.bytesPerIndex == 2 ? MTLIndexType.uint16 : MTLIndexType.uint32,
+                                                indexBuffer: faces.buffer,
+                                                indexBufferOffset: 0)
+        }
+
+        renderEncoder.popDebugGroup()
+        renderEncoder.endEncoding()
+    }
     
     // Sets up rendering a video frame, including uniforms
     func beginRenderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], sentViewTangents: [simd_float4], realViewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4, drawable: LayerRenderer.Drawable?) -> (any MTLRenderCommandEncoder)? {
@@ -1471,6 +1563,9 @@ class Renderer {
             // outside of the video frame box be 0.0 depth or it won't get rastered by the compositor at all.
             // So we re-render the frame depth.
             renderOverlay(commandBuffer: commandBuffer, renderTargetColor: renderTargetColor, renderTargetDepth: renderTargetDepth, viewports: viewports, viewTransforms: viewTransforms, sentViewTangents: sentViewTangents, realViewTangents: realViewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
+        }
+        if ALVRClientApp.gStore.settings.chaperoneDistanceCm > 0 || chaperoneSystem.hasActiveState {
+            renderChaperone(commandBuffer: commandBuffer, renderTargetColor: renderTargetColor, renderTargetDepth: renderTargetDepth, viewports: viewports, rasterizationRateMap: rasterizationRateMap, simdDeviceAnchor: simdDeviceAnchor)
         }
         if !isRealityKit {
             renderStreamingFrameDepth(commandBuffer: commandBuffer, renderTargetColor: renderTargetColor, renderTargetDepth: renderTargetDepth, viewports: viewports, viewTransforms: viewTransforms, sentViewTangents: sentViewTangents, realViewTangents: realViewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame)

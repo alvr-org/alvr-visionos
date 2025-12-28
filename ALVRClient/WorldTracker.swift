@@ -228,6 +228,20 @@ func jointIdxIsMoreMobile(_ idx: Int) -> Bool {
 class WorldTracker {
     static let shared = WorldTracker()
     
+
+    struct CachedPlaneData {
+        let id: UUID
+        let classification: PlaneAnchor.Classification
+        let transform: simd_float4x4
+        let position: SIMD3<Float>
+        let normal: SIMD3<Float>
+        let right: SIMD3<Float>
+        let forward: SIMD3<Float>
+        let halfWidth: Float
+        let halfHeight: Float
+        let boundingRadius: Float
+    }
+
     let arSession: ARKitSession!
     var worldTracking: WorldTrackingProvider!
     var handTracking: HandTrackingProvider!
@@ -240,6 +254,7 @@ class WorldTracker {
     
     // Playspace and boundaries state
     var planeAnchors: [UUID: PlaneAnchor] = [:]
+    var planeCache: [UUID: CachedPlaneData] = [:]
     var worldAnchors: [UUID: WorldAnchor] = [:]
     var worldAnchorsToRemove: [WorldAnchor] = []
     var worldTrackingAddedOriginAnchor = false
@@ -882,12 +897,14 @@ class WorldTracker {
     func updatePlane(_ anchor: PlaneAnchor) {
         lockPlaneAnchors()
         planeAnchors[anchor.id] = anchor
+        planeCache[anchor.id] = cachedPlaneData(from: anchor)
         unlockPlaneAnchors()
     }
 
     func removePlane(_ anchor: PlaneAnchor) {
         lockPlaneAnchors()
         planeAnchors.removeValue(forKey: anchor.id)
+        planeCache.removeValue(forKey: anchor.id)
         unlockPlaneAnchors()
     }
     
@@ -897,6 +914,42 @@ class WorldTracker {
     
     func unlockPlaneAnchors() {
          objc_sync_exit(planeLock)
+    }
+
+    func snapshotPlaneData() -> [(PlaneAnchor, CachedPlaneData)] {
+        lockPlaneAnchors()
+        let snapshot = planeAnchors.compactMap { (id, anchor) -> (PlaneAnchor, CachedPlaneData)? in
+            guard let cached = planeCache[id] else { return nil }
+            return (anchor, cached)
+        }
+        unlockPlaneAnchors()
+        return snapshot
+    }
+
+    private func cachedPlaneData(from anchor: PlaneAnchor) -> CachedPlaneData {
+        let transform = anchor.originFromAnchorTransform
+        let position = SIMD3<Float>(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
+        let normal = normalize(SIMD3<Float>(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z))
+        let right = normalize(SIMD3<Float>(transform.columns.0.x, transform.columns.0.y, transform.columns.0.z))
+        let forward = normalize(SIMD3<Float>(transform.columns.2.x, transform.columns.2.y, transform.columns.2.z))
+        let extent = anchor.geometry.extent
+
+        let halfWidth = extent.width / 2.0
+        let halfHeight = extent.height / 2.0
+        let boundingRadius = sqrt((halfWidth * halfWidth) + (halfHeight * halfHeight))
+
+        return CachedPlaneData(
+            id: anchor.id,
+            classification: anchor.classification,
+            transform: transform,
+            position: position,
+            normal: normal,
+            right: right,
+            forward: forward,
+            halfWidth: halfWidth,
+            halfHeight: halfHeight,
+            boundingRadius: boundingRadius
+        )
     }
     
     func lockDebuggables() {
@@ -912,6 +965,27 @@ class WorldTracker {
         WorldTracker.shared.debuggableScales.append(scale)
     }
     
+    func enqueueHapticsPulse(isLeft: Bool, amplitude: Float, duration: TimeInterval) {
+        let now = CACurrentMediaTime()
+        if isLeft {
+            if leftHapticsEnd > now {
+                return
+            }
+            leftHapticsStart = now
+            leftHapticsEnd = now + duration
+            leftHapticsAmplitude = amplitude
+            leftHapticsFreq = 0.0
+        } else {
+            if rightHapticsEnd > now {
+                return
+            }
+            rightHapticsStart = now
+            rightHapticsEnd = now + duration
+            rightHapticsAmplitude = amplitude
+            rightHapticsFreq = 0.0
+        }
+    }
+
     // Wrist-only pose
     func handAnchorToPoseFallback(_ hand: HandAnchor, _ correctOrientationForSkeletonRoot: Bool) -> AlvrPose {
         let transform = self.worldTrackingSteamVRTransform.inverse * hand.originFromAnchorTransform
