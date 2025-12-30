@@ -1232,6 +1232,12 @@ class WorldTracker {
         let device_id = hand.chirality == .left ? WorldTracker.deviceIdLeftHand : WorldTracker.deviceIdRightHand
         let controllerMotion = controllerToAlvrDeviceMotion(hand.chirality == .left, targetTs)
         if controllerMotion != nil {
+            // Update hand pose for chaperone system even when using controllers
+            if hand.chirality == .left {
+                lastLeftHandPose = controllerMotion!.pose
+            } else {
+                lastRightHandPose = controllerMotion!.pose
+            }
             return controllerMotion!
         }
         
