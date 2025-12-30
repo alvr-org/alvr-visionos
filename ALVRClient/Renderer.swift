@@ -1215,8 +1215,8 @@ class Renderer {
         var firstBind = true
         if fadeInOverlayAlpha > 0.0 {
             // Render planes
-            for plane in WorldTracker.shared.planeAnchors {
-                let plane = plane.value
+            for planeEntry in WorldTracker.shared.planeAnchors {
+                let plane = planeEntry.value
                 let faces = plane.geometry.meshFaces
                 
                 // VRR can't do lines
@@ -1248,8 +1248,8 @@ class Renderer {
             }
             
             // Render lines
-            for plane in WorldTracker.shared.planeAnchors {
-                let plane = plane.value
+            for planeEntry in WorldTracker.shared.planeAnchors {
+                let plane = planeEntry.value
                 let faces = plane.geometry.meshFaces
                 
                 // VRR can't do lines
