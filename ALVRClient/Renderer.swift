@@ -107,6 +107,13 @@ class Renderer {
     var fadeInOverlayAlpha: Float = 0.0
     var coolPulsingColorsTime: Float = 0.0
     private let chaperoneSystem = ChaperoneSystem()
+#if CHAPERONE_PROFILE
+    private var chaperoneProfileAccumMs: Double = 0.0
+    private var chaperoneProfileSamples: Int = 0
+    private var chaperoneProfileLastLog: Double = 0.0
+    private var chaperoneProfileWindow: [Double] = []
+    private let chaperoneProfileWindowSize: Int = 120
+#endif
     var reprojectedFramesInARow: Int = 0
     var roundTripRenderTime: Double = 0.0
     var lastRoundTripRenderTimestamp: Double = 0.0
@@ -1325,7 +1332,6 @@ class Renderer {
         if currentRenderColorFormat != renderTargetColor.pixelFormat && isRealityKit {
             return
         }
-        let chaperoneDistanceCm = ALVRClientApp.gStore.settings.chaperoneDistanceCm
 
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
@@ -1364,7 +1370,11 @@ class Renderer {
         renderEncoder.setDepthClipMode(.clamp)
 #endif
 
-        let output = chaperoneSystem.update(planes: WorldTracker.shared.snapshotPlaneData(),
+        let planesSnapshot = WorldTracker.shared.snapshotPlaneData()
+#if CHAPERONE_PROFILE
+        let profileStart = CACurrentMediaTime()
+#endif
+        let output = chaperoneSystem.update(planes: planesSnapshot,
                                             headPose: simdDeviceAnchor,
                                             leftHandPose: WorldTracker.shared.lastLeftHandPose,
                                             rightHandPose: WorldTracker.shared.lastRightHandPose,
@@ -1375,6 +1385,33 @@ class Renderer {
                                             rightControllerPresent: WorldTracker.shared.rightControllerPose != nil) { isLeft, amplitude, duration in
             WorldTracker.shared.enqueueHapticsPulse(isLeft: isLeft, amplitude: amplitude, duration: duration)
         }
+
+#if CHAPERONE_PROFILE
+        let elapsedMs = (CACurrentMediaTime() - profileStart) * 1000.0
+        chaperoneProfileAccumMs += elapsedMs
+        chaperoneProfileSamples += 1
+        chaperoneProfileWindow.append(elapsedMs)
+        if chaperoneProfileWindow.count > chaperoneProfileWindowSize {
+            chaperoneProfileWindow.removeFirst(chaperoneProfileWindow.count - chaperoneProfileWindowSize)
+        }
+        let now = CACurrentMediaTime()
+        if now - chaperoneProfileLastLog > 2.0 {
+            chaperoneProfileLastLog = now
+            let avg = chaperoneProfileAccumMs / Double(max(1, chaperoneProfileSamples))
+            let maxSample = chaperoneProfileWindow.max() ?? 0.0
+            var median: Double = 0.0
+            if !chaperoneProfileWindow.isEmpty {
+                let sorted = chaperoneProfileWindow.sorted()
+                median = sorted[sorted.count / 2]
+            }
+            let recomputeSamples = max(1, output.profile.recomputeSamples)
+            let recomputePct = Int((Double(output.profile.recomputeTrue) / Double(recomputeSamples)) * 100.0)
+            let avgRenderables = Double(output.profile.renderableCount) / Double(recomputeSamples)
+            print("[ChaperoneProfile] avg=\(String(format: "%.3f", avg))ms median=\(String(format: "%.3f", median))ms max=\(String(format: "%.3f", maxSample))ms samples=\(chaperoneProfileSamples) planes=\(planesSnapshot.count) recompute=\(recomputePct)% exact=\(output.profile.exactProximityChecks) renderables=\(String(format: "%.1f", avgRenderables)) interval=\(output.profile.recomputeIntervalFrames)")
+            chaperoneProfileAccumMs = 0.0
+            chaperoneProfileSamples = 0
+        }
+#endif
 
         var firstBind = true
         for (plane, planeColor) in output.renderables {

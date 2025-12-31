@@ -5,6 +5,9 @@ import simd
 final class ChaperoneSystem {
     struct Output {
         let renderables: [(PlaneAnchor, simd_float4)]
+#if CHAPERONE_PROFILE
+        let profile: ProfileSnapshot
+#endif
     }
 
     var baseColor = simd_float3(0.0, 0.8, 1.0) // Cyan
@@ -58,12 +61,24 @@ final class ChaperoneSystem {
     private var lastSeatPlaneTime: Double = 0.0
     private var leftHapticsLastTime: Double = 0.0
     private var rightHapticsLastTime: Double = 0.0
+#if CHAPERONE_PROFILE
+    private var profileRecomputeSamples: Int = 0
+    private var profileRecomputeTrue: Int = 0
+    private var profileExactProximityChecks: Int = 0
+    private var profileRenderableCount: Int = 0
+#endif
 
     func reset() {
         planeStates.removeAll()
         recomputeIntervalFrames = 3
         leftHapticsLastTime = 0.0
         rightHapticsLastTime = 0.0
+#if CHAPERONE_PROFILE
+        profileRecomputeSamples = 0
+        profileRecomputeTrue = 0
+        profileExactProximityChecks = 0
+        profileRenderableCount = 0
+#endif
     }
 
     func update(planes: [(PlaneAnchor, WorldTracker.CachedPlaneData)],
@@ -78,7 +93,11 @@ final class ChaperoneSystem {
                 enqueuePulse: (Bool, Float, Double) -> Void) -> Output {
         guard chaperoneDistanceCm > 0 else {
             reset()
+#if CHAPERONE_PROFILE
+            return Output(renderables: [], profile: ProfileSnapshot.empty)
+#else
             return Output(renderables: [])
+#endif
         }
 
         let chaperoneRadius = Float(chaperoneDistanceCm) / 100.0 // Convert cm to meters
@@ -87,6 +106,12 @@ final class ChaperoneSystem {
 
         frameIndex = (frameIndex + 1) % 60
         let recomputeTargets = frameIndex % recomputeIntervalFrames == 0 || planeStates.isEmpty
+#if CHAPERONE_PROFILE
+        profileRecomputeSamples += 1
+        if recomputeTargets {
+            profileRecomputeTrue += 1
+        }
+#endif
 
         frameCounter += 1
         let currentFrame = frameCounter
@@ -113,6 +138,9 @@ final class ChaperoneSystem {
             var nextState = state
 
             if recomputeTargets {
+#if CHAPERONE_PROFILE
+                profileExactProximityChecks += 1
+#endif
                 if let proximity = computeProximity(cachedPlane: cachedPlane, points: points, chaperoneRadius: chaperoneRadius, state: state) {
                     nextState.targetAlpha = proximity.targetAlpha
                     minApproxDistance = min(minApproxDistance, proximity.minDistance)
@@ -156,6 +184,10 @@ final class ChaperoneSystem {
             }
         }
 
+#if CHAPERONE_PROFILE
+        profileRenderableCount += renderables.count
+#endif
+
         if recomputeTargets {
             updateRecomputeInterval(anyTargetActive: anyTargetActive, minApproxDistance: minApproxDistance)
         }
@@ -171,9 +203,37 @@ final class ChaperoneSystem {
                     now: now,
                     enqueuePulse: enqueuePulse)
 
+#if CHAPERONE_PROFILE
+        let profile = ProfileSnapshot(recomputeSamples: profileRecomputeSamples,
+                                      recomputeTrue: profileRecomputeTrue,
+                                      exactProximityChecks: profileExactProximityChecks,
+                                      renderableCount: profileRenderableCount,
+                                      recomputeIntervalFrames: recomputeIntervalFrames)
+        profileRecomputeSamples = 0
+        profileRecomputeTrue = 0
+        profileExactProximityChecks = 0
+        profileRenderableCount = 0
+        return Output(renderables: renderables, profile: profile)
+#else
         return Output(renderables: renderables)
+#endif
     }
 
+#if CHAPERONE_PROFILE
+    struct ProfileSnapshot {
+        let recomputeSamples: Int
+        let recomputeTrue: Int
+        let exactProximityChecks: Int
+        let renderableCount: Int
+        let recomputeIntervalFrames: Int
+
+        static let empty = ProfileSnapshot(recomputeSamples: 0,
+                                           recomputeTrue: 0,
+                                           exactProximityChecks: 0,
+                                           renderableCount: 0,
+                                           recomputeIntervalFrames: 0)
+    }
+#endif
     private struct ProximityResult {
         let targetAlpha: Float
         let minDistance: Float
