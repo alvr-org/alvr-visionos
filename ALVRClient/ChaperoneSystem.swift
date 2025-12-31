@@ -28,6 +28,7 @@ final class ChaperoneSystem {
     }
 
     private var planeStates: [UUID: PlaneState] = [:]
+    private var activePlanes: [(PlaneAnchor, WorldTracker.CachedPlaneData)] = []
     private var renderables: [(PlaneAnchor, simd_float4)] = []
     private var frameIndex: Int = 0
     private var frameCounter: Int = 0
@@ -79,6 +80,7 @@ final class ChaperoneSystem {
         profileExactProximityChecks = 0
         profileRenderableCount = 0
 #endif
+        activePlanes.removeAll()
     }
 
     func update(planes: [(PlaneAnchor, WorldTracker.CachedPlaneData)],
@@ -105,13 +107,30 @@ final class ChaperoneSystem {
         renderables.reserveCapacity(planes.count)
 
         frameIndex = (frameIndex + 1) % 60
-        let recomputeTargets = frameIndex % recomputeIntervalFrames == 0 || planeStates.isEmpty
+        let recomputeTargets = frameIndex % recomputeIntervalFrames == 0
 #if CHAPERONE_PROFILE
         profileRecomputeSamples += 1
         if recomputeTargets {
             profileRecomputeTrue += 1
         }
 #endif
+
+        if !recomputeTargets && planeStates.isEmpty {
+#if CHAPERONE_PROFILE
+            let profile = ProfileSnapshot(recomputeSamples: profileRecomputeSamples,
+                                          recomputeTrue: profileRecomputeTrue,
+                                          exactProximityChecks: profileExactProximityChecks,
+                                          renderableCount: profileRenderableCount,
+                                          recomputeIntervalFrames: recomputeIntervalFrames)
+            profileRecomputeSamples = 0
+            profileRecomputeTrue = 0
+            profileExactProximityChecks = 0
+            profileRenderableCount = 0
+            return Output(renderables: renderables, profile: profile)
+#else
+            return Output(renderables: renderables)
+#endif
+        }
 
         frameCounter += 1
         let currentFrame = frameCounter
@@ -128,7 +147,30 @@ final class ChaperoneSystem {
         let maxBodyRange = chaperoneRadius + (chaperoneRadius * bodyFadeRatio)
         let maxRange = max(maxHandRange, maxBodyRange)
 
-        for (plane, cachedPlane) in planes {
+        if !recomputeTargets && activePlanes.isEmpty {
+#if CHAPERONE_PROFILE
+            let profile = ProfileSnapshot(recomputeSamples: profileRecomputeSamples,
+                                          recomputeTrue: profileRecomputeTrue,
+                                          exactProximityChecks: profileExactProximityChecks,
+                                          renderableCount: profileRenderableCount,
+                                          recomputeIntervalFrames: recomputeIntervalFrames)
+            profileRecomputeSamples = 0
+            profileRecomputeTrue = 0
+            profileExactProximityChecks = 0
+            profileRenderableCount = 0
+            return Output(renderables: renderables, profile: profile)
+#else
+            return Output(renderables: renderables)
+#endif
+        }
+
+        let planesToProcess = recomputeTargets ? planes : activePlanes
+        var nextActivePlanes: [(PlaneAnchor, WorldTracker.CachedPlaneData)] = []
+        if recomputeTargets {
+            activePlanes.removeAll(keepingCapacity: true)
+        }
+
+        for (plane, cachedPlane) in planesToProcess {
             if shouldCullPlane(cachedPlane, points: points, maxRange: maxRange, isSeated: isSeated) {
                 continue
             }
@@ -181,8 +223,10 @@ final class ChaperoneSystem {
             if nextState.alpha > 0.0 {
                 let planeColor = simd_float4(baseColor.x, baseColor.y, baseColor.z, nextState.alpha)
                 renderables.append((plane, planeColor))
+                nextActivePlanes.append((plane, cachedPlane))
             }
         }
+        activePlanes = nextActivePlanes
 
 #if CHAPERONE_PROFILE
         profileRenderableCount += renderables.count
