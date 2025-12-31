@@ -278,6 +278,8 @@ struct Entry: View {
                         }
                     )) {
                         Text("Proximity Chaperone")
+                        Text("Highlights nearby objects when you get too close.")
+                            .font(.system(size: 10))
                     }
                     .toggleStyle(.switch)
 
@@ -308,9 +310,6 @@ struct Entry: View {
                                .frame(width: 60, alignment: .trailing)
                                .foregroundColor(.secondary)
                         }
-                        Text("Highlights nearby objects when you get too close.")
-                            .font(.system(size: 10))
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .frame(minWidth: 450)
