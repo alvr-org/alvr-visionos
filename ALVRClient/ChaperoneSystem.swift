@@ -171,7 +171,8 @@ final class ChaperoneSystem {
         }
 
         for (plane, cachedPlane) in planesToProcess {
-            if shouldCullPlane(cachedPlane, points: points, maxRange: maxRange, isSeated: isSeated) {
+            let isSeatedHorizontal = isSeatedHorizontalPlane(cachedPlane)
+            if shouldCullPlane(cachedPlane, points: points, maxRange: maxRange) {
                 continue
             }
 
@@ -183,7 +184,11 @@ final class ChaperoneSystem {
 #if CHAPERONE_PROFILE
                 profileExactProximityChecks += 1
 #endif
-                if let proximity = computeProximity(cachedPlane: cachedPlane, points: points, chaperoneRadius: chaperoneRadius, state: state) {
+                if isSeated && isSeatedHorizontal {
+                    if let approx = approxDistanceToPlane(points.bodyCenter, plane: cachedPlane, margin: 1.0) {
+                        minApproxDistance = min(minApproxDistance, approx)
+                    }
+                } else if let proximity = computeProximity(cachedPlane: cachedPlane, points: points, chaperoneRadius: chaperoneRadius, state: state) {
                     nextState.targetAlpha = proximity.targetAlpha
                     minApproxDistance = min(minApproxDistance, proximity.minDistance)
                     anyTargetActive = true
@@ -204,6 +209,13 @@ final class ChaperoneSystem {
                         minApproxDistance = min(minApproxDistance, approx)
                     }
                 }
+            }
+
+            if isSeated && isSeatedHorizontal {
+                if nextState.holdFrames > 0 {
+                    nextState.holdFrames -= 1
+                }
+                nextState.targetAlpha = 0.0
             }
 
             nextState.lastSeenFrame = currentFrame
@@ -285,13 +297,13 @@ final class ChaperoneSystem {
         let rightDistance: Float?
     }
 
-    // Determines seated mode using seat planes; caches a last-seen seat plane to survive classification dropouts.
+    // Determines seated mode using horizontal planes; caches a last-seen plane to survive classification dropouts.
     private func evaluateSeatedState(planes: [(PlaneAnchor, WorldTracker.CachedPlaneData)], headPosition: SIMD3<Float>, now: Double) -> Bool {
         var isWithinSeat = false
         var seatPlaneForState: WorldTracker.CachedPlaneData? = nil
 
         for (_, cachedPlane) in planes {
-            guard cachedPlane.classification == .seat else { continue }
+            guard isSeatedHorizontalPlane(cachedPlane) else { continue }
             let toHead = headPosition - cachedPlane.position
             let localX = dot(toHead, cachedPlane.right)
             let localZ = dot(toHead, cachedPlane.forward)
@@ -349,11 +361,8 @@ final class ChaperoneSystem {
         return seatedActive
     }
 
-    // Broad-phase cull: filters seated horizontal planes, tiny planes, and anything beyond padded range.
-    private func shouldCullPlane(_ cachedPlane: WorldTracker.CachedPlaneData, points: Points, maxRange: Float, isSeated: Bool) -> Bool {
-        if isSeated, abs(cachedPlane.normal.y) > seatedVerticalNormalMaxY {
-            return true
-        }
+    // Broad-phase cull: filters tiny planes and anything beyond padded range.
+    private func shouldCullPlane(_ cachedPlane: WorldTracker.CachedPlaneData, points: Points, maxRange: Float) -> Bool {
         let planeArea = (cachedPlane.halfWidth * 2.0) * (cachedPlane.halfHeight * 2.0)
         if planeArea < minPlaneArea {
             return true
@@ -367,6 +376,13 @@ final class ChaperoneSystem {
         let paddedRange = cachedPlane.boundingRadius + maxRange
         let paddedRangeSq = paddedRange * paddedRange
         return minDistanceSq > paddedRangeSq
+    }
+
+    private func isSeatedHorizontalPlane(_ cachedPlane: WorldTracker.CachedPlaneData) -> Bool {
+        if cachedPlane.classification == .ceiling || cachedPlane.classification == .floor {
+            return false
+        }
+        return abs(cachedPlane.normal.y) > seatedVerticalNormalMaxY
     }
 
     // Computes per-plane proximity, returning max alpha and the min distance; no alpha smoothing here.
