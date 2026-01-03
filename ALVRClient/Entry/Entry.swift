@@ -269,6 +269,48 @@ struct Entry: View {
                         Text("Target hand prediction at round-trip latency (may cause jittering)")
                     }
                     .toggleStyle(.switch)
+
+                    Toggle(isOn: Binding(
+                        get: { gStore.settings.chaperoneDistanceCm > 0 },
+                        set: { isOn in
+                            gStore.settings.chaperoneDistanceCm = isOn ? 30 : 0
+                            saveAction()
+                        }
+                    )) {
+                        Text("Proximity Chaperone")
+                        Text("Highlights nearby objects when you get too close.")
+                            .font(.system(size: 10))
+                    }
+                    .toggleStyle(.switch)
+
+                    if gStore.settings.chaperoneDistanceCm > 0 {
+                        Text("Chaperone Distance").frame(maxWidth: .infinity, alignment: .leading)
+                        HStack {
+                           Slider(value: Binding(
+                               get: { Double(gStore.settings.chaperoneDistanceCm) },
+                               set: { newValue in
+                                   let rounded = Int(newValue.rounded())
+                                   // Snap invalid values: if between 1-29, snap to 30
+                                   if rounded > 0 && rounded < 30 {
+                                       gStore.settings.chaperoneDistanceCm = 30
+                                   } else {
+                                       gStore.settings.chaperoneDistanceCm = rounded
+                                   }
+                               }
+                           ),
+                           in: 30...60,
+                           step: 5) {
+                               Text("Chaperone Distance")
+                           }
+                           .onChange(of: gStore.settings.chaperoneDistanceCm) {
+                               saveAction()
+                           }
+
+                           Text("\(gStore.settings.chaperoneDistanceCm) cm")
+                               .frame(width: 60, alignment: .trailing)
+                               .foregroundColor(.secondary)
+                        }
+                    }
                 }
                 .frame(minWidth: 450)
                 .padding()

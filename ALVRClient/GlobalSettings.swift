@@ -29,6 +29,7 @@ struct GlobalSettings: Codable {
     var enablePersonaFaceTracking = false
     var showFaceTrackingDebug = false
     var lastUsedAppVersion = "never launched"
+    var chaperoneDistanceCm: Int = 0
     
     init() {}
     
@@ -56,6 +57,7 @@ struct GlobalSettings: Codable {
         self.enablePersonaFaceTracking = try container.decodeIfPresent(Bool.self, forKey: .enablePersonaFaceTracking) ?? self.enablePersonaFaceTracking
         self.showFaceTrackingDebug = try container.decodeIfPresent(Bool.self, forKey: .showFaceTrackingDebug) ?? self.showFaceTrackingDebug
         self.lastUsedAppVersion = try container.decodeIfPresent(String.self, forKey: .lastUsedAppVersion) ?? self.lastUsedAppVersion
+        self.chaperoneDistanceCm = try container.decodeIfPresent(Int.self, forKey: .chaperoneDistanceCm) ?? self.chaperoneDistanceCm
     }
 }
 
