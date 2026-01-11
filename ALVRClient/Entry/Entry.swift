@@ -141,186 +141,200 @@ struct Entry: View {
                 .tabItem {
                     Label("Main Settings", systemImage: "network")
                 }
-                VStack {
-                    Text("Advanced Settings:")
-                        .font(.system(size: 20, weight: .bold))
-                    
-                    Toggle(isOn: $gStore.settings.experimental40ppd) {
-                        Text("RealityKit renderer*")
-                        Text("*Deprecated! May cause juddering and/or nausea!")
-                        .font(.system(size: 10))
-                    }
-                    .toggleStyle(.switch)
-                    
-                    Toggle(isOn: $gStore.settings.chromaKeyEnabled) {
+                ScrollView {
+                    VStack {
+                        Text("Advanced Settings:")
+                            .font(.system(size: 20, weight: .bold))
+                        
+                        Toggle(isOn: $gStore.settings.experimental40ppd) {
+                            Text("RealityKit renderer*")
+                            Text("*Deprecated! May cause juddering and/or nausea!")
+                            .font(.system(size: 10))
+                        }
+                        .toggleStyle(.switch)
+                        
+                        Toggle(isOn: $gStore.settings.chromaKeyEnabled) {
 #if XCODE_BETA_16
-                        if #unavailable(visionOS 2.0) {
+                            if #unavailable(visionOS 2.0) {
+                                Text("Enable Chroma Keyed Passthrough*")
+                                Text("*Only works with 40PPD renderer")
+                                .font(.system(size: 10))
+                            }
+                            else {
+                                Text("Enable Chroma Keyed Passthrough")
+                            }
+#else
                             Text("Enable Chroma Keyed Passthrough*")
                             Text("*Only works with 40PPD renderer")
-                            .font(.system(size: 10))
-                        }
-                        else {
-                            Text("Enable Chroma Keyed Passthrough")
-                        }
-#else
-                        Text("Enable Chroma Keyed Passthrough*")
-                        Text("*Only works with 40PPD renderer")
-                            .font(.system(size: 10))
+                                .font(.system(size: 10))
 #endif
-                    }
-                    .toggleStyle(.switch)
-                    .onChange(of: gStore.settings.chromaKeyEnabled) {
-                        saveAction()
-                    }
-                    
-                    ColorPicker("Chroma Key Color", selection: $chromaKeyColor)
-                    .onChange(of: chromaKeyColor) {
-                        gStore.settings.chromaKeyColorR = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[0])
-                        gStore.settings.chromaKeyColorG = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[1])
-                        gStore.settings.chromaKeyColorB = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[2])
-                        saveAction()
-                   }
-                   
-                   Text("Chroma Blend Distance Min/Max").frame(maxWidth: .infinity, alignment: .leading)
-                   HStack {
-                       Slider(value: $gStore.settings.chromaKeyDistRangeMin,
-                              in: 0...chromaRangeMaximum,
-                              step: 0.01) {
-                           Text("Chroma Blend Distance Min")
-                       }
-                       .onChange(of: gStore.settings.chromaKeyDistRangeMin) {
-                           applyRangeSettings()
-                           
-                       }
-                       TextField("Chroma Blend Distance Min", value: $gStore.settings.chromaKeyDistRangeMin, formatter: chromaFormatter)
-                       .textFieldStyle(RoundedBorderTextFieldStyle())
-                       .onChange(of: gStore.settings.chromaKeyDistRangeMin) {
-                           applyRangeSettings()
-                       }
-                       .frame(width: 100)
-                   }
-                   HStack {
-                       Slider(value: $gStore.settings.chromaKeyDistRangeMax,
-                              in: 0.001...1,
-                              step: 0.01) {
-                           Text("Chroma Blend Distance Min")
-                       }
-                       .onChange(of: gStore.settings.chromaKeyDistRangeMax) {
-                           applyRangeSettings()
-                       }
-                       TextField("Chroma Blend Distance Max", value: $gStore.settings.chromaKeyDistRangeMax, formatter: chromaFormatter)
-                       .textFieldStyle(RoundedBorderTextFieldStyle())
-                       .onChange(of: gStore.settings.chromaKeyDistRangeMax) {
-                           applyRangeSettings()
-                       }
-                       .frame(width: 100)
-                   }
-#if IS_ALVR_TESTFLIGHT
-                   Toggle(isOn: $gStore.settings.forceMipmapEyeTracking) {
-                        Text("Force visionOS 1.x eye tracking")
-                        Text("*Eye tracking requires Experimental Renderer. Moves faster, but requires obstructing the left eye FoV.")
-                            .font(.system(size: 10))
-                        Text("Long click View Recording in the Control Center to select ALVR broadcaster.")
-                            .font(.system(size: 10))
-                    }
-                    .toggleStyle(.switch)
-#endif
-                    Toggle(isOn: $gStore.settings.enablePersonaFaceTracking) {
-                        Text("Use Spatial Persona for Face Tracking (Beta)")
-                        Text("*Currently requires RealityKit renderer")
-                            .font(.system(size: 10))
-                    }
-                    .toggleStyle(.switch)
-                    
-                    Toggle(isOn: $gStore.settings.showFaceTrackingDebug) {
-                        Text("Show Face Tracking Debug View (Beta)")
-                        Text("*Currently requires RealityKit renderer")
-                            .font(.system(size: 10))
-                    }
-                    .toggleStyle(.switch)
-
-                    Toggle(isOn: $gStore.settings.enableProgressive) {
-                        Text("Enable progressive mode (use Digital Crown)")
-                        Text("*Currently requires RealityKit renderer")
-                            .font(.system(size: 10))
-                    }
-                    .toggleStyle(.switch)
-                    
-                    Toggle(isOn: $gStore.settings.dismissWindowOnEnter) {
-                        Text("Dismiss this window on entry")
-                    }
-                    .toggleStyle(.switch)
-                    
-                    Text("FoV Scale").frame(maxWidth: .infinity, alignment: .leading)
-                    HStack {
-                       Slider(value: $gStore.settings.fovRenderScale,
-                              in: 0.2...1.6,
-                              step: 0.1) {
-                           Text("FoV Scale")
-                       }
-                       .onChange(of: gStore.settings.fovRenderScale) {
-                           applyRangeSettings()
-                       }
-                       TextField("FoV Scale", value: $gStore.settings.fovRenderScale, formatter: chromaFormatter)
-                       .textFieldStyle(RoundedBorderTextFieldStyle())
-                       .onChange(of: gStore.settings.fovRenderScale) {
-                           applyRangeSettings()
-                       }
-                       .frame(width: 100)
-                    }
-                    Text("Increase FoV for timewarp comfort, or sacrifice FoV for sharpness")
-                        .font(.system(size: 10))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    Toggle(isOn: $gStore.settings.targetHandsAtRoundtripLatency) {
-                        Text("Target hand prediction at round-trip latency (may cause jittering)")
-                    }
-                    .toggleStyle(.switch)
-
-                    Toggle(isOn: Binding(
-                        get: { gStore.settings.chaperoneDistanceCm > 0 },
-                        set: { isOn in
-                            gStore.settings.chaperoneDistanceCm = isOn ? 30 : 0
+                        }
+                        .toggleStyle(.switch)
+                        .onChange(of: gStore.settings.chromaKeyEnabled) {
                             saveAction()
                         }
-                    )) {
-                        Text("Proximity Chaperone")
-                        Text("Highlights nearby objects when you get too close.")
-                            .font(.system(size: 10))
+                        
+                    if gStore.settings.chromaKeyEnabled {
+                        ColorPicker("Chroma Key Color", selection: $chromaKeyColor)
+                        .onChange(of: chromaKeyColor) {
+                            gStore.settings.chromaKeyColorR = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[0])
+                            gStore.settings.chromaKeyColorG = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[1])
+                            gStore.settings.chromaKeyColorB = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[2])
+                            saveAction()
+                       }
+                       
+                       Text("Chroma Blend Distance Min/Max").frame(maxWidth: .infinity, alignment: .leading)
+                       HStack {
+                           Slider(value: $gStore.settings.chromaKeyDistRangeMin,
+                                  in: 0...chromaRangeMaximum,
+                                  step: 0.01) {
+                               Text("Chroma Blend Distance Min")
+                           }
+                           .onChange(of: gStore.settings.chromaKeyDistRangeMin) {
+                               applyRangeSettings()
+                               
+                           }
+                           TextField("Chroma Blend Distance Min", value: $gStore.settings.chromaKeyDistRangeMin, formatter: chromaFormatter)
+                           .textFieldStyle(RoundedBorderTextFieldStyle())
+                           .onChange(of: gStore.settings.chromaKeyDistRangeMin) {
+                               applyRangeSettings()
+                           }
+                           .frame(width: 100)
+                       }
+                       HStack {
+                           Slider(value: $gStore.settings.chromaKeyDistRangeMax,
+                                  in: 0.001...1,
+                                  step: 0.01) {
+                               Text("Chroma Blend Distance Min")
+                           }
+                           .onChange(of: gStore.settings.chromaKeyDistRangeMax) {
+                               applyRangeSettings()
+                           }
+                           TextField("Chroma Blend Distance Max", value: $gStore.settings.chromaKeyDistRangeMax, formatter: chromaFormatter)
+                           .textFieldStyle(RoundedBorderTextFieldStyle())
+                           .onChange(of: gStore.settings.chromaKeyDistRangeMax) {
+                               applyRangeSettings()
+                           }
+                           .frame(width: 100)
+                       }
                     }
-                    .toggleStyle(.switch)
-
-                    if gStore.settings.chaperoneDistanceCm > 0 {
-                        Text("Chaperone Distance").frame(maxWidth: .infinity, alignment: .leading)
+#if IS_ALVR_TESTFLIGHT
+                       Toggle(isOn: $gStore.settings.forceMipmapEyeTracking) {
+                            Text("Force visionOS 1.x eye tracking")
+                            Text("*Eye tracking requires Experimental Renderer. Moves faster, but requires obstructing the left eye FoV.")
+                                .font(.system(size: 10))
+                            Text("Long click View Recording in the Control Center to select ALVR broadcaster.")
+                                .font(.system(size: 10))
+                        }
+                        .toggleStyle(.switch)
+#endif
+                        Toggle(isOn: $gStore.settings.enablePersonaFaceTracking) {
+                            Text("Use Spatial Persona for Face Tracking (Beta)")
+                            Text("*Currently requires RealityKit renderer")
+                                .font(.system(size: 10))
+                        }
+                        .toggleStyle(.switch)
+                        
+                        Toggle(isOn: $gStore.settings.showFaceTrackingDebug) {
+                            Text("Show Face Tracking Debug View (Beta)")
+                            Text("*Currently requires RealityKit renderer")
+                                .font(.system(size: 10))
+                        }
+                        .toggleStyle(.switch)
+                        
+                        Toggle(isOn: $gStore.settings.enableProgressive) {
+                            Text("Enable progressive mode (use Digital Crown)")
+                            Text("*Currently requires RealityKit renderer")
+                                .font(.system(size: 10))
+                        }
+                        .toggleStyle(.switch)
+                        
+                        Toggle(isOn: $gStore.settings.dismissWindowOnEnter) {
+                            Text("Dismiss this window on entry")
+                        }
+                        .toggleStyle(.switch)
+                        
+                        Text("FoV Scale").frame(maxWidth: .infinity, alignment: .leading)
                         HStack {
-                           Slider(value: Binding(
-                               get: { Double(gStore.settings.chaperoneDistanceCm) },
-                               set: { newValue in
-                                   let rounded = Int(newValue.rounded())
-                                   // Snap invalid values: if between 1-29, snap to 30
-                                   if rounded > 0 && rounded < 30 {
-                                       gStore.settings.chaperoneDistanceCm = 30
-                                   } else {
-                                       gStore.settings.chaperoneDistanceCm = rounded
-                                   }
-                               }
-                           ),
-                           in: 30...60,
-                           step: 5) {
-                               Text("Chaperone Distance")
+                           Slider(value: $gStore.settings.fovRenderScale,
+                                  in: 0.2...1.6,
+                                  step: 0.1) {
+                               Text("FoV Scale")
                            }
-                           .onChange(of: gStore.settings.chaperoneDistanceCm) {
-                               saveAction()
+                           .onChange(of: gStore.settings.fovRenderScale) {
+                               applyRangeSettings()
                            }
+                           TextField("FoV Scale", value: $gStore.settings.fovRenderScale, formatter: chromaFormatter)
+                           .textFieldStyle(RoundedBorderTextFieldStyle())
+                           .onChange(of: gStore.settings.fovRenderScale) {
+                               applyRangeSettings()
+                           }
+                           .frame(width: 100)
+                        }
+                        Text("Increase FoV for timewarp comfort, or sacrifice FoV for sharpness")
+                            .font(.system(size: 10))
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                           Text("\(gStore.settings.chaperoneDistanceCm) cm")
-                               .frame(width: 60, alignment: .trailing)
-                               .foregroundColor(.secondary)
+                        Toggle(isOn: $gStore.settings.targetHandsAtRoundtripLatency) {
+                            Text("Target hand prediction at round-trip latency (may cause jittering)")
+                        }
+                        .toggleStyle(.switch)
+
+                        Toggle(isOn: Binding(
+                            get: { gStore.settings.chaperoneDistanceCm > 0 },
+                            set: { isOn in
+                                gStore.settings.chaperoneDistanceCm = isOn ? 30 : 0
+                                saveAction()
+                            }
+                        )) {
+                            Text("Proximity Chaperone")
+                            Text("Highlights nearby objects when you get too close.")
+                                .font(.system(size: 10))
+                        }
+                        .toggleStyle(.switch)
+
+                        if gStore.settings.chaperoneDistanceCm > 0 {
+                            Text("Chaperone Distance").frame(maxWidth: .infinity, alignment: .leading)
+                            HStack {
+                               Slider(value: Binding(
+                                   get: { Double(gStore.settings.chaperoneDistanceCm) },
+                                   set: { newValue in
+                                       let rounded = Int(newValue.rounded())
+                                       // Snap invalid values: if between 1-29, snap to 30
+                                       if rounded > 0 && rounded < 30 {
+                                           gStore.settings.chaperoneDistanceCm = 30
+                                       } else {
+                                           gStore.settings.chaperoneDistanceCm = rounded
+                                       }
+                                   }
+                               ),
+                               in: 30...60,
+                               step: 5) {
+                                   Text("Chaperone Distance")
+                               }
+                               .onChange(of: gStore.settings.chaperoneDistanceCm) {
+                                   saveAction()
+                               }
+
+                               Text("\(gStore.settings.chaperoneDistanceCm) cm")
+                                   .frame(width: 60, alignment: .trailing)
+                                   .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Toggle(isOn: $gStore.settings.showPerformanceHud) {
+                            Text("Performance HUD")
+                            Text("Shows a performance panel anchored to your left forearm.")
+                                .font(.system(size: 10))
+                        }
+                        .toggleStyle(.switch)
+                        .onChange(of: gStore.settings.showPerformanceHud) {
+                            saveAction()
                         }
                     }
+                    .frame(minWidth: 450)
+                    .padding()
                 }
-                .frame(minWidth: 450)
-                .padding()
                 .tabItem {
                     Label("Advanced Settings", systemImage: "gearshape")
                 }

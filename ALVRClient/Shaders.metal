@@ -78,6 +78,26 @@ fragment float4 fragmentShader(ColorInOutPlane in [[stage_in]])
     return color;
 }
 
+vertex ColorInOut hudVertexShader(Vertex in [[stage_in]],
+                                  ushort amp_id [[amplification_id]],
+                                  constant UniformsArray & uniformsArray [[ buffer(BufferIndexUniforms) ]],
+                                  constant PlaneUniform & planeUniform [[ buffer(BufferIndexPlaneUniforms) ]])
+{
+    ColorInOut out;
+    Uniforms uniforms = uniformsArray.uniforms[amp_id];
+    float4 position = float4(in.position, 1.0);
+    out.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * planeUniform.planeTransform * position;
+    out.texCoord = in.texCoord;
+    return out;
+}
+
+fragment half4 hudFragmentShader(ColorInOut in [[stage_in]],
+                                 texture2d<half> in_tex [[texture(TextureIndexColor)]])
+{
+    constexpr sampler s(mag_filter::linear, min_filter::linear);
+    return in_tex.sample(s, in.texCoord);
+}
+
 // from ALVR
 
 // FFR_COMMON_SHADER_FORMAT
