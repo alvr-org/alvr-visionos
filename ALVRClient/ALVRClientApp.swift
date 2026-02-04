@@ -130,12 +130,12 @@ struct ALVRClientApp: App {
                 }
             }
             .task {
+                loadSettings()
                 if #unavailable(visionOS 2.0) {
                     clientImmersionStyle = .full
                 } else {
                     realityKitImmersionStyle = ALVRClientApp.gStore.settings.enableProgressive ? .progressive : .mixed
                 }
-                loadSettings()
                 model.isShowingClient = false
                 EventHandler.shared.initializeAlvr()
                 await WorldTracker.shared.initializeAr()
