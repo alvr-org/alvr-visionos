@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		656A9FCF2F04031600D8DE2D /* ChaperoneSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 656A9FCE2F04031600D8DE2D /* ChaperoneSystem.swift */; };
+		93F10375671142039BA634E8 /* PerformanceTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FDF7F3AB0664D5089D91DE3 /* PerformanceTracker.swift */; };
+		E7AC9193873D48A2B7122E11 /* PerformanceOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BD00478C3614F7DB55D935E /* PerformanceOverlayView.swift */; };
 		8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240FE2B7CC02E005B75F2 /* Entry.swift */; };
 		8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1241022B7CC0E1005B75F2 /* EntryControls.swift */; };
 		8E458AB32B7E05FB0019FC73 /* EventHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E458AB22B7E05FB0019FC73 /* EventHandler.swift */; };
@@ -84,6 +86,8 @@
 
 /* Begin PBXFileReference section */
 		656A9FCE2F04031600D8DE2D /* ChaperoneSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChaperoneSystem.swift; sourceTree = "<group>"; };
+		0FDF7F3AB0664D5089D91DE3 /* PerformanceTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceTracker.swift; sourceTree = "<group>"; };
+		5BD00478C3614F7DB55D935E /* PerformanceOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceOverlayView.swift; sourceTree = "<group>"; };
 		8E1240FE2B7CC02E005B75F2 /* Entry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entry.swift; sourceTree = "<group>"; };
 		8E1241022B7CC0E1005B75F2 /* EntryControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryControls.swift; sourceTree = "<group>"; };
 		8E458AB22B7E05FB0019FC73 /* EventHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventHandler.swift; sourceTree = "<group>"; };
@@ -213,6 +217,8 @@
 				E77FDE572EC5D97F00B0ED4F /* CameraView.swift */,
 				D68FA8082B742F6F0052B7FF /* FFR.swift */,
 				E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */,
+				0FDF7F3AB0664D5089D91DE3 /* PerformanceTracker.swift */,
+				5BD00478C3614F7DB55D935E /* PerformanceOverlayView.swift */,
 				E72683DA2BE73DD10065B78B /* MetalClientSystem.swift */,
 				E7A98A9F2BE2EEEA003DF333 /* RealityKitClientSystem.swift */,
 				E7F222412BE2F03800D10191 /* RealityKitClientView.swift */,
@@ -393,6 +399,8 @@
 				E7A98A9E2BE2EEAB003DF333 /* DummyMetalRenderer.swift in Sources */,
 				E71DEF9A2C18D4B4008A2074 /* ALVRTypes.swift in Sources */,
 				E702FBDC2B899B8700EE75D0 /* GlobalSettings.swift in Sources */,
+				93F10375671142039BA634E8 /* PerformanceTracker.swift in Sources */,
+				E7AC9193873D48A2B7122E11 /* PerformanceOverlayView.swift in Sources */,
 				E72683DB2BE73DD10065B78B /* MetalClientSystem.swift in Sources */,
 				8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */,
 				E77FDE582EC5D98200B0ED4F /* CameraView.swift in Sources */,

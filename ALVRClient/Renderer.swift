@@ -42,6 +42,17 @@ let fullscreenQuadVertices:[Float] = [-panel_depth, -panel_depth, -panel_depth,
                                        0.5, 1,
                                        0, 0,
                                        0.5, 0]
+
+let hudQuadVertices: [Float] = [
+    -0.5, -0.5, 0.0,
+     0.5, -0.5, 0.0,
+    -0.5,  0.5, 0.0,
+     0.5,  0.5, 0.0,
+     0.0,  1.0,
+     1.0,  1.0,
+     0.0,  0.0,
+     1.0,  0.0
+]
                                        
 let unitVectorXYZVertices:[Float] = [0.0, 0.0, 0.0,
                                        1.0, 0.0, 0.0,
@@ -100,6 +111,10 @@ class Renderer {
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
     var unitVectorXYZBuffer:MTLBuffer!
+    var hudPipelineState: MTLRenderPipelineState!
+    var hudQuadBuffer: MTLBuffer!
+    var depthStateAlwaysNoWrite: MTLDepthStencilState!
+    var performanceHudRenderer: PerformanceHudRenderer?
     var encodingGamma: Float = 1.0
     var lastReconfigureTime: Double = 0.0
     
@@ -198,11 +213,26 @@ class Renderer {
         } catch {
             fatalError("Unable to compile render pipeline state.  Error info: \(error)")
         }
+        do {
+            hudPipelineState = try Renderer.buildRenderPipelineWithDevice(device: device,
+                                                                          mtlVertexDescriptor: mtlVertexDescriptor,
+                                                                          colorFormat: layerRenderer?.configuration.colorFormat ?? currentRenderColorFormat,
+                                                                          depthFormat: layerRenderer?.configuration.depthFormat ?? renderDepthFormat,
+                                                                          viewCount: layerRenderer?.properties.viewCount ?? renderViewCount,
+                                                                          vertexShaderName: "hudVertexShader",
+                                                                          fragmentShaderName: "hudFragmentShader")
+        } catch {
+            fatalError("Unable to compile HUD render pipeline state.  Error info: \(error)")
+        }
 
         let depthStateDescriptorAlways = MTLDepthStencilDescriptor()
         depthStateDescriptorAlways.depthCompareFunction = MTLCompareFunction.always
         depthStateDescriptorAlways.isDepthWriteEnabled = true
         self.depthStateAlways = device.makeDepthStencilState(descriptor:depthStateDescriptorAlways)!
+        let depthStateDescriptorAlwaysNoWrite = MTLDepthStencilDescriptor()
+        depthStateDescriptorAlwaysNoWrite.depthCompareFunction = .always
+        depthStateDescriptorAlwaysNoWrite.isDepthWriteEnabled = false
+        self.depthStateAlwaysNoWrite = device.makeDepthStencilState(descriptor: depthStateDescriptorAlwaysNoWrite)!
         
         let depthStateDescriptorGreater = MTLDepthStencilDescriptor()
         depthStateDescriptorGreater.depthCompareFunction = MTLCompareFunction.greater
@@ -214,6 +244,9 @@ class Renderer {
         }
         fullscreenQuadVertices.withUnsafeBytes {
             fullscreenQuadBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
+        }
+        hudQuadVertices.withUnsafeBytes {
+            hudQuadBuffer = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
         }
         
         unitVectorXYZVertices.withUnsafeBytes {
@@ -811,6 +844,10 @@ class Renderer {
         let vsyncTime = LayerRenderer.Clock.Instant.epoch.duration(to: mainDrawable.frameTiming.presentationTime).timeInterval
         let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
         let framePreviouslyPredictedPose = queuedFrame != nil ? WorldTracker.shared.convertSteamVRViewPose(queuedFrame!.viewParams) : nil
+        if ALVRClientApp.gStore.settings.showPerformanceHud {
+            PerformanceTracker.shared.recordFramePresentation(presentationTime: mainDrawable.frameTiming.presentationTime, timestampNs: queuedFrame?.timestamp)
+            PerformanceTracker.shared.logIfNeeded(presentationTime: mainDrawable.frameTiming.presentationTime)
+        }
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
         if EventHandler.shared.alvrInitialized && EventHandler.shared.lastIpd != -1 {
@@ -851,6 +888,10 @@ class Renderer {
                 //print("Finished:", queuedFrame!.timestamp)
                 alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
                 EventHandler.shared.lastSubmittedTimestamp = queuedFrame!.timestamp
+            }
+            if ALVRClientApp.gStore.settings.showPerformanceHud, let ts = queuedFrame?.timestamp {
+                PerformanceTracker.shared.recordSubmit(timestampNs: ts)
+                PerformanceTracker.shared.recordGpu(timestampNs: ts, gpuStartTime: commandBuffer.gpuStartTime, gpuEndTime: commandBuffer.gpuEndTime)
             }
         }
 
@@ -902,6 +943,13 @@ class Renderer {
             }
         }
 
+        
+        if ALVRClientApp.gStore.settings.showPerformanceHud,
+           renderingStreaming,
+           frameIsSuitableForDisplaying,
+           let queuedFrame {
+            PerformanceTracker.shared.recordCompositorStart(timestampNs: queuedFrame.timestamp)
+        }
         for drawable in drawables {
             drawable.deviceAnchor = deviceAnchor
             
@@ -1447,6 +1495,114 @@ class Renderer {
         renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
     }
+
+    func renderPerformanceHud(commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], rasterizationRateMap: MTLRasterizationRateMap?, simdDeviceAnchor: simd_float4x4) {
+        guard ALVRClientApp.gStore.settings.showPerformanceHud else { return }
+        if performanceHudRenderer == nil {
+            performanceHudRenderer = PerformanceHudRenderer(device: device)
+        }
+        guard let hudTexture = performanceHudRenderer?.updateIfNeeded() else { return }
+        selectNextPlaneUniformBuffer()
+        let worldFromSteamVR = WorldTracker.shared.worldTrackingSteamVRTransform
+        let handPose = WorldTracker.shared.lastLeftHandPose
+        let handWorld = worldFromSteamVR * handPose.asFloat4x4()
+        let handPosition = handWorld.columns.3.asFloat3()
+        var handRight = simd_normalize(handWorld.columns.0.asFloat3())
+        let handUp = simd_normalize(handWorld.columns.1.asFloat3())
+        let handForward = simd_normalize(handWorld.columns.2.asFloat3())
+        if simd_length(handRight) < 0.001 || simd_length(handUp) < 0.001 || simd_length(handForward) < 0.001 {
+            return
+        }
+        handRight = simd_normalize(handRight)
+        // Hand axes derived from the current left-hand pose.
+        // thumbAxis: toward thumb side of the hand (local +X).
+        // palmAxis: palm normal (local +Y).
+        // elbowAxis: from fingers toward wrist/elbow (local -Z).
+        let thumbAxis = -handForward
+        let palmAxis = handRight
+        let elbowAxis = handUp
+
+        // Panel axes in world space:
+        // panelFront: the face normal of the panel (should align with palmAxis).
+        // panelTopEdge: the top edge of the panel (should align with elbowAxis).
+        // panelRightEdge: the right edge of the panel (perpendicular to both).
+        let panelFront = simd_normalize(-palmAxis)
+        var panelTopEdge = simd_normalize(-elbowAxis)
+        var panelRightEdge = simd_normalize(-thumbAxis)
+        let palmTwist = simd_quatf(angle: Float.pi / 180.0 * 20.0, axis: simd_normalize(palmAxis))
+        panelTopEdge = simd_normalize(palmTwist.act(panelTopEdge))
+        panelRightEdge = simd_normalize(palmTwist.act(panelRightEdge))
+        let forearmDir = panelTopEdge
+
+        // Orientation uses panelRightEdge (X), panelTopEdge (Y), panelFront (Z).
+        let orientation = simd_float4x4(simd_float4(panelRightEdge, 0.0),
+                                        simd_float4(panelTopEdge, 0.0),
+                                        simd_float4(panelFront, 0.0),
+                                        simd_float4(0.0, 0.0, 0.0, 1.0))
+        // Position offsets:
+        // offsetIn: shift toward the inner forearm (away from thumb).
+        // offsetArm: shift toward elbow along the forearm.
+        // offsetDown: move slightly into the arm to sit on the surface.
+        let offsetIn = simd_float3()
+        let offsetArm = -forearmDir * 0.10
+        let offsetDown = panelFront * 0.025
+        let offset = offsetIn + offsetArm + offsetDown
+        let position = handPosition + offset
+        let translation = position.asFloat4x4()
+        let sizeY: Float = 0.07
+        let aspect = Float(hudTexture.width) / Float(hudTexture.height)
+        let sizeX: Float = sizeY * aspect
+        let scale = simd_float4x4(simd_float4(sizeX, 0.0, 0.0, 0.0),
+                                  simd_float4(0.0, sizeY, 0.0, 0.0),
+                                  simd_float4(0.0, 0.0, 1.0, 0.0),
+                                  simd_float4(0.0, 0.0, 0.0, 1.0))
+        let transform = translation * orientation * scale
+
+        self.planeUniforms[0].planeTransform = transform
+        self.planeUniforms[0].planeColor = simd_float4(1.0, 1.0, 1.0, 1.0)
+        self.planeUniforms[0].planeDoProximity = 0.0
+
+        let renderPassDescriptor = MTLRenderPassDescriptor()
+        renderPassDescriptor.colorAttachments[0].texture = renderTargetColor
+        renderPassDescriptor.colorAttachments[0].loadAction = .load
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+        renderPassDescriptor.depthAttachment.texture = renderTargetDepth
+        renderPassDescriptor.depthAttachment.loadAction = .load
+        renderPassDescriptor.depthAttachment.storeAction = .dontCare
+        renderPassDescriptor.depthAttachment.clearDepth = 0.0
+        renderPassDescriptor.rasterizationRateMap = rasterizationRateMap
+        renderPassDescriptor.renderTargetArrayLength = viewports.count
+
+        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            fatalError("Failed to create HUD render encoder")
+        }
+
+        renderEncoder.label = "HUD Render Encoder"
+        renderEncoder.setCullMode(.back)
+        renderEncoder.setFrontFacing(.counterClockwise)
+        renderEncoder.setViewports(viewports)
+        renderEncoder.setVertexBuffer(dynamicUniformBuffer, offset: uniformBufferOffset, index: BufferIndex.uniforms.rawValue)
+        renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset: planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+
+        if viewports.count > 1 {
+            var viewMappings = (0..<viewports.count).map {
+                MTLVertexAmplificationViewMapping(viewportArrayIndexOffset: UInt32($0),
+                                                  renderTargetArrayIndexOffset: UInt32($0))
+            }
+            renderEncoder.setVertexAmplificationCount(viewports.count, viewMappings: &viewMappings)
+        }
+
+        renderEncoder.setRenderPipelineState(hudPipelineState)
+        renderEncoder.setDepthStencilState(depthStateAlwaysNoWrite)
+#if !targetEnvironment(simulator)
+        renderEncoder.setDepthClipMode(.clamp)
+#endif
+        renderEncoder.setVertexBuffer(hudQuadBuffer, offset: 0, index: VertexAttribute.position.rawValue)
+        renderEncoder.setVertexBuffer(hudQuadBuffer, offset: (3 * 4) * 4, index: VertexAttribute.texcoord.rawValue)
+        renderEncoder.setFragmentTexture(hudTexture, index: TextureIndex.color.rawValue)
+        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        renderEncoder.endEncoding()
+    }
     
     // Sets up rendering a video frame, including uniforms
     func beginRenderStreamingFrame(_ whichIdx: Int, commandBuffer: MTLCommandBuffer, renderTargetColor: MTLTexture, renderTargetDepth: MTLTexture, viewports: [MTLViewport], viewTransforms: [simd_float4x4], sentViewTangents: [simd_float4], realViewTangents: [simd_float4], nearZ: Double, farZ: Double, rasterizationRateMap: MTLRasterizationRateMap?, queuedFrame: QueuedFrame?, framePose: simd_float4x4, simdDeviceAnchor: simd_float4x4, drawable: LayerRenderer.Drawable?) -> (any MTLRenderCommandEncoder)? {
@@ -1606,6 +1762,9 @@ class Renderer {
         }
         if !isRealityKit {
             renderStreamingFrameDepth(commandBuffer: commandBuffer, renderTargetColor: renderTargetColor, renderTargetDepth: renderTargetDepth, viewports: viewports, viewTransforms: viewTransforms, sentViewTangents: sentViewTangents, realViewTangents: realViewTangents, nearZ: nearZ, farZ: farZ, rasterizationRateMap: rasterizationRateMap, queuedFrame: queuedFrame)
+        }
+        if !isRealityKit && ALVRClientApp.gStore.settings.showPerformanceHud {
+            renderPerformanceHud(commandBuffer: commandBuffer, renderTargetColor: renderTargetColor, renderTargetDepth: renderTargetDepth, viewports: viewports, rasterizationRateMap: rasterizationRateMap, simdDeviceAnchor: simdDeviceAnchor)
         }
     }
 }
