@@ -297,8 +297,7 @@ class WorldTracker {
     var secondControllerClickTime = 0.0
     var controllersAreDisabledByClickTogether = false
     
-    // Tell streamer we have PSVR active interaction profile
-    var detectedPsvr = false
+    // PS VR2 controller interaction profile from Sony PS VR2 steam app
     static let psvrInteractionProfile = alvr_path_string_to_id("/interaction_profiles/sony/playstation_vr2_sense_controller")
 
     // Face tracking
@@ -554,22 +553,23 @@ class WorldTracker {
                 //print(GCController.controllers())
                 
                 var accessories: [Accessory] = []
-                self.detectedPsvr = false
+                var detectedPsvr = false
                 for spatialController in GCController.spatialControllers() {
                     do {
                         let accessory = try await Accessory(device: spatialController)
-
-                        // For now we never need to disable this interaction profile as we are using the generic controller button paths
                         if accessory.name.contains("PlayStation VR") {
-                            self.detectedPsvr = true
+                            detectedPsvr = true
                         }
                         accessories.append(accessory)
                     } catch {
                         print("Error during accessory initialization: \(error)")
                     }
-                    if detectedPsvr {
-                        alvr_send_active_interaction_profile(WorldTracker.deviceIdLeftHand, WorldTracker.psvrInteractionProfile)
-                        alvr_send_active_interaction_profile(WorldTracker.deviceIdRightHand, WorldTracker.psvrInteractionProfile)
+                }
+                if let alvrSettings = Settings.getAlvrSettings() {
+                    let emulationMode = alvrSettings.headset.controllers?.emulation_mode ?? ""
+                    if emulationMode == "PSVR2Sense" && detectedPsvr {
+                            alvr_send_active_interaction_profile(WorldTracker.deviceIdLeftHand, WorldTracker.psvrInteractionProfile)
+                            alvr_send_active_interaction_profile(WorldTracker.deviceIdRightHand, WorldTracker.psvrInteractionProfile)
                     }
                 }
                 for stylus in GCStylus.styli {
