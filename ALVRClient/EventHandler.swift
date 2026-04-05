@@ -8,7 +8,6 @@
 // Other notable things include:
 // - mDNS/Bonjour management (handleMdnsBroadcasts)
 // - Connection flavor text and versioning info for Entry UI
-// - AWDL detection (pollNALs)
 // - The main event thread (handleAlvrEvents)
 //
 
@@ -172,7 +171,6 @@ class EventHandler: ObservableObject {
     var stutterSampleStart = 0.0
     var stutterEventsCounted = 0
     var lastStutterTime = 0.0
-    var awdlAlertPresented = false
     var audioIsOff = false
     var needsEncoderReset = true
     var encodingGamma: Float = 1.0
@@ -448,28 +446,14 @@ class EventHandler: ObservableObject {
         // If we're receiving NALs timestamped from >400ms ago, stop decoding them
         // to prevent a cascade of needless decoding lag
         let ns_diff_from_last_req_ts = self.lastRequestedTimestamp > timestamp ? self.lastRequestedTimestamp &- timestamp : 0
-        let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*600 && self.framesSinceLastIDR > 90*2)
+        let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*600 && self.framesSinceLastIDR > Int(refreshRate*2))
         
         if CACurrentMediaTime() - self.stutterSampleStart >= 60.0 {
             print("Stuttter events in the last minute:", self.stutterEventsCounted)
             self.stutterSampleStart = CACurrentMediaTime()
             
             if self.stutterEventsCounted >= 50 {
-                print("AWDL detected!")
-                if ALVRClientApp.gStore.settings.dontShowAWDLAlertAgain {
-                    print("User doesn't want to see the alert.")
-                }
-                else {
-                    /*DispatchQueue.main.async {
-                        if self.awdlAlertPresented {
-                            return
-                        }
-                        self.awdlAlertPresented = true
-                        
-                        // Not super kosher but I don't see another way.
-                        ALVRClientApp.shared.openWindow(id: "AWDLAlert")
-                    }*/
-                }
+                print("stutter detected!")
             }
             
             self.stutterEventsCounted = 0
@@ -483,7 +467,7 @@ class EventHandler: ObservableObject {
         }
         // TODO: adjustable framerate
         // TODO: maybe also call this if we fail to decode for too long.
-        if self.lastRequestedTimestamp != 0 && (lagSpiked || self.framesSinceLastDecode > 90*2) {
+        if self.lastRequestedTimestamp != 0 && (lagSpiked || self.framesSinceLastDecode > Int(refreshRate*2)) {
             objc_sync_exit(self.frameQueueLock)
 
             print("Handle spike! lagSpiked=\(lagSpiked) lastRequestedTimestamp=\(self.lastRequestedTimestamp), timestamp=\(timestamp), framesSinceLastDecode=\(self.framesSinceLastDecode) framesSinceLastIDR=\(self.framesSinceLastIDR) ns_diff_from_last_req_ts=\(ns_diff_from_last_req_ts)")
@@ -535,11 +519,7 @@ class EventHandler: ObservableObject {
                     return
                 }
                 
-                //print(timestamp, (CACurrentMediaTime() - timeLastFrameDecoded) * 1000.0)
                 timeLastFrameDecoded = CACurrentMediaTime()
-
-                //let imageBufferPtr = Unmanaged.passUnretained(imageBuffer).toOpaque()
-                //print("finish decode: \(timestamp), \(framesSinceLastDecode)")
 
                 objc_sync_enter(frameQueueLock)
                 framesSinceLastDecode = 0
@@ -784,6 +764,15 @@ class EventHandler: ObservableObject {
                     let hudMessageBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: 1024)
                     alvr_hud_message(hudMessageBuffer.baseAddress)
                     let message = String(cString: hudMessageBuffer.baseAddress!, encoding: .utf8)!
+                    if message.starts(with: "The streamer is restarting") {
+                        if streamingActive {
+                            streamingActive = false
+                            stop()
+                            timeLastAlvrEvent = CACurrentMediaTime()
+                            timeLastFrameSent = CACurrentMediaTime()
+                            currentCodec = -1
+                        }
+                    }
                     parseMessage(message)
                     print(message)
                     hudMessageBuffer.deallocate()
@@ -794,6 +783,7 @@ class EventHandler: ObservableObject {
                 print("streaming started \(alvrEvent.STREAMING_STARTED)")
                 updateHostVersion()
                 numberOfEventThreadRestarts = 0
+                
                 encodingGamma = alvrEvent.STREAMING_STARTED.encoding_gamma
                 enableHdr = alvrEvent.STREAMING_STARTED.enable_hdr
                 if !streamingActive {
@@ -962,6 +952,12 @@ class EventHandler: ObservableObject {
         DispatchQueue.main.async {
             self.hostAlvrVersion = ""
         }
+    }
+
+    func isHostVersionAtLeast(_ major: Int, _ minor: Int, _ revision: Int) -> Bool {
+        if hostAlvrMajor != major { return hostAlvrMajor > major }
+        if hostAlvrMinor != minor { return hostAlvrMinor > minor }
+        return hostAlvrRevision >= revision
     }
 }
 

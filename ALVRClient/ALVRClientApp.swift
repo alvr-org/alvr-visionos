@@ -3,12 +3,11 @@
 //
 // High-level application stuff, notably includes:
 // - Changelogs (incl app version checks)
-// - The AWDL alert
 // - GlobalSettings save/load hooks
 // - Each different space:
 //   - DummyImmersiveSpace: Literally just fetches FOV information/view transforms and exits
-//   - RealityKitClient: The "40PPD" RealityKit renderer.
-//   - MetalClient: Old reliable, the 26PPD Metal renderer.
+//   - RealityKitClient: The RealityKit renderer.
+//   - MetalClient: Old reliable, the Metal renderer.
 // - Metal Layer config (ContentStageConfiguration)
 //
 

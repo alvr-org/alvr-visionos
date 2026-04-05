@@ -5,6 +5,7 @@
 import Foundation
 import VideoToolbox
 import AVKit
+import QuartzCore
 
 #if !targetEnvironment(simulator)
 let forceFastSecretTextureFormats = true
@@ -12,6 +13,9 @@ let forceFastSecretTextureFormats = true
 let forceFastSecretTextureFormats = false
 #endif
 
+
+let defaultRefreshRate = Float(VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) ? 120.0 : 90.0)
+var refreshRate = defaultRefreshRate
 //
 // Non-conclusive list of interesting private Metal pixel formats
 //
@@ -603,7 +607,7 @@ struct VideoHandler {
             //print("status: \(status), image_nil?: \(imageBuffer == nil), infoFlags: \(infoFlags)")
             
             // If the decoder is failing somehow, request an IDR and get back on track
-            if status < 0 && EventHandler.shared.framesSinceLastIDR > 90*2 {
+            if status < 0 && EventHandler.shared.framesSinceLastIDR > Int(refreshRate) * 2 {
                 EventHandler.shared.framesSinceLastIDR = 0
                 EventHandler.shared.resetEncoding()
                 
@@ -980,33 +984,44 @@ struct VideoHandler {
             .first?.windows
     }
     
+
     static func applyRefreshRate(videoFormat: CMFormatDescription?) {
         let streamFPS = ALVRClientApp.gStore.settings.streamFPS
-        if videoFormat == nil || streamFPS == "Default" {
-            return
-        }
-        if streamFPS == "120" && !VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) {
-            return
-        }
-        
-        let refreshRate = Float(ALVRClientApp.gStore.settings.streamFPS) ?? 90
+
+        refreshRate = Float(streamFPS) ?? defaultRefreshRate
+
         print("Setting refresh rate preference to:", refreshRate)
-        
+
         DispatchQueue.main.async {
+            RefreshRateDisplayLink.shared.apply(refreshRate: refreshRate)
+            // Signal to the display hardware to match our content's refresh rate
+            if videoFormat == nil {
+               return
+            }
             if let window = currentKeyWindow() {
                 let avDisplayManager = window.avDisplayManager
                 avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: refreshRate, formatDescription: videoFormat!)
             }
-            
-            /*
-            let windows = getAllWindows()
-            if windows != nil {
-                for window in windows! {
-                    let avDisplayManager = window.avDisplayManager
-                    avDisplayManager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: Float(ALVRClientApp.gStore.settings.streamFPS) ?? 90, formatDescription: videoFormat!)
-                }
-            }
-             */
         }
+    }
+}
+
+class RefreshRateDisplayLink: NSObject {
+    static let shared = RefreshRateDisplayLink()
+    private var displayLink: CADisplayLink?
+
+    func apply(refreshRate: Float) {
+        displayLink?.invalidate()
+        let link = CADisplayLink(target: self, selector: #selector(tick))
+        link.preferredFrameRateRange = CAFrameRateRange(
+            minimum: refreshRate,
+            maximum: refreshRate,
+            preferred: refreshRate
+        )
+        link.add(to: .current, forMode: .default)
+        displayLink = link
+    }
+
+    @objc private func tick(displayLink: CADisplayLink) {
     }
 }

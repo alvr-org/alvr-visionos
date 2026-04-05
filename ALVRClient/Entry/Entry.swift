@@ -145,7 +145,7 @@ struct Entry: View {
                     Text("Advanced Settings:")
                         .font(.system(size: 20, weight: .bold))
                     
-                    Toggle(isOn: $gStore.settings.experimental40ppd) {
+                    Toggle(isOn: $gStore.settings.realityKitRenderer) {
                         Text("RealityKit renderer*")
                         Text("*Deprecated! May cause juddering and/or nausea!")
                         .font(.system(size: 10))
@@ -156,7 +156,7 @@ struct Entry: View {
 #if XCODE_BETA_16
                         if #unavailable(visionOS 2.0) {
                             Text("Enable Chroma Keyed Passthrough*")
-                            Text("*Only works with 40PPD renderer")
+                            Text("*Only works with RealityKit renderer")
                             .font(.system(size: 10))
                         }
                         else {
@@ -164,7 +164,7 @@ struct Entry: View {
                         }
 #else
                         Text("Enable Chroma Keyed Passthrough*")
-                        Text("*Only works with 40PPD renderer")
+                        Text("*Only works with RealityKit renderer")
                             .font(.system(size: 10))
 #endif
                     }

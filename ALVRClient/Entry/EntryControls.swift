@@ -47,7 +47,7 @@ struct EntryControls: View {
 
                     saveAction()
                     print("Opening Immersive Space")
-                    if gStore.settings.experimental40ppd {
+                    if gStore.settings.realityKitRenderer {
                         if !DummyMetalRenderer.haveRenderInfo {
                             var dummySpaceIsOpened = false
                             while !dummySpaceIsOpened {
