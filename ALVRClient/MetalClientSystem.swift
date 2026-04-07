@@ -26,12 +26,12 @@ class MetalClientSystem {
 
     var renderer: Renderer;
     let layerRenderer: LayerRenderer
-    
+
     init(_ layerRenderer: LayerRenderer) {
         self.renderer = Renderer(layerRenderer)
         self.layerRenderer = layerRenderer
     }
-    
+
     func startRenderLoop() {
         Task(priority: .userInteractive) {
             renderer.rebuildRenderPipelines()
