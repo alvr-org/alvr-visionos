@@ -47,9 +47,11 @@ struct ALVRClientApp: App {
     @Environment(\.openWindow) var openWindow
     @Environment(\.dismissWindow) var dismissWindow
     static var gStore = GlobalSettingsStore()
+    // Triggers body re-evaluation, and the .upper​Limb​Visibility modifiers will pick up the new show​Hands​Overlaid or progressive value live
+    @ObservedObject private var observedGStore = ALVRClientApp.gStore
 
     @State private var clientImmersionStyle: ImmersionStyle = .mixed
-    @State private var realityKitImmersionStyle: ImmersionStyle = .mixed
+    @State private var realityKitImmersionStyle: ImmersionStyle = ALVRClientApp.gStore.settings.enableProgressive ? .progressive : .mixed
     
     @State private var chromaKeyColor = Color(.sRGB, red: 0.98, green: 0.9, blue: 0.2)
     
@@ -129,16 +131,13 @@ struct ALVRClientApp: App {
                 }
             }
             .task {
-                loadSettings()
-                if #unavailable(visionOS 2.0) {
-                    clientImmersionStyle = .full
-                } else {
-                    realityKitImmersionStyle = ALVRClientApp.gStore.settings.enableProgressive ? .progressive : .mixed
-                }
                 model.isShowingClient = false
                 EventHandler.shared.initializeAlvr()
                 await WorldTracker.shared.initializeAr()
                 EventHandler.shared.start()
+            }
+            .onChange(of: observedGStore.settings.enableProgressive) {
+                realityKitImmersionStyle = ALVRClientApp.gStore.settings.enableProgressive ? .progressive : .mixed
             }
             .environment(model)
             .environmentObject(EventHandler.shared)
