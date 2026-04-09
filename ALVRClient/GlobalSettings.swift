@@ -69,6 +69,10 @@ extension GlobalSettingsStore {
 class GlobalSettingsStore: ObservableObject {
     @Published var settings: GlobalSettings = GlobalSettings()
     
+    init() {
+        try? load()
+    }
+
     private static func fileURL() throws -> URL {
         try FileManager.default.url(for: .documentDirectory,
                                     in: .userDomainMask,
