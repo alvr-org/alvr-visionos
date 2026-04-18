@@ -438,6 +438,9 @@ class EventHandler: ObservableObject {
         }
         
         let timestamp = frameData.timestamp_ns
+        if ALVRClientApp.gStore.settings.showPerformanceHud {
+            PerformanceTracker.shared.recordReceive(timestampNs: timestamp)
+        }
         let nal = UnsafeMutableBufferPointer<UInt8>(start: UnsafeMutablePointer(mutating: frameData.buffer_ptr), count: Int(frameData.buffer_size))
         
         objc_sync_enter(self.frameQueueLock)
@@ -501,6 +504,9 @@ class EventHandler: ObservableObject {
                 guard let imageBuffer = imageBuffer else {
                     //print("Frame not decoded")
                     return
+                }
+                if ALVRClientApp.gStore.settings.showPerformanceHud {
+                    PerformanceTracker.shared.recordDecodeEnd(timestampNs: timestamp)
                 }
                 //print("Frame decoded")
                 
