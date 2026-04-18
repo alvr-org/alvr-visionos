@@ -168,21 +168,12 @@ struct Entry: View {
                             Text("Enable Chroma Keyed Passthrough*")
                             Text("*Only works with RealityKit renderer")
                             .font(.system(size: 10))
+#endif
                         }
                         .toggleStyle(.switch)
                         .onChange(of: gStore.settings.chromaKeyEnabled) {
                             saveAction()
                         }
-#else
-                        Text("Enable Chroma Keyed Passthrough*")
-                        Text("*Only works with RealityKit renderer")
-                            .font(.system(size: 10))
-#endif
-                    }
-                    .toggleStyle(.switch)
-                    .onChange(of: gStore.settings.chromaKeyEnabled) {
-                        saveAction()
-                    }
                     
 #if IS_ALVR_TESTFLIGHT
                        Toggle(isOn: $gStore.settings.forceMipmapEyeTracking) {
