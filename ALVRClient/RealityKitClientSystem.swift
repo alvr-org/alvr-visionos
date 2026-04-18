@@ -30,6 +30,7 @@ import Metal
 import MetalKit
 import Spatial
 import AVFoundation
+import VideoToolbox
 
 let vrrGridSizeX = 59+1
 let vrrGridSizeY = 57+1
@@ -48,6 +49,7 @@ let renderZNear = 0.001
 let renderZFar = 1000.0
 let rkFramesInFlight = 3
 let realityKitRenderScale: Float = 2.25
+
 #if XCODE_BETA_16
 let forceDrawableQueue = false
 #else
@@ -77,23 +79,25 @@ struct VrrPlaneVertex {
 class VisionProVsyncPrediction: NSObject, ObservableObject {
     var nextFrameTime: TimeInterval = 0.0
 
-    var vsyncDelta: Double = (1.0 / 90.0)
-    var vsyncLatency: Double = (1.0 / 90.0) * 2
+    var vsyncDelta: Double = (1.0 / Double(refreshRate))
+    var vsyncLatency: Double = (1.0 / Double(refreshRate)) * 2
     var lastVsyncTime: Double = 0.0
     var rkAvgRenderTime: Double = 0.014
-    
+
     var vsyncCallback: ((Double, Double)->Void)? = nil
-    
+    private var displayLink: CADisplayLink? = nil
+
     override init() {
         super.init()
         self.createDisplayLink()
     }
-    
+
     func createDisplayLink() {
         let displaylink = CADisplayLink(target: self, selector: #selector(frame))
         displaylink.add(to: .current, forMode: RunLoop.Mode.default)
+        self.displayLink = displaylink
     }
-    
+
     @objc func frame(displaylink: CADisplayLink) {
         let frameDuration = displaylink.targetTimestamp - displaylink.timestamp
         
@@ -109,7 +113,7 @@ class VisionProVsyncPrediction: NSObject, ObservableObject {
         nextFrameTime = displaylink.targetTimestamp + vsyncLatency
         vsyncDelta = frameDuration
         //print("vsync frame", frameDuration, displaylink.targetTimestamp - CACurrentMediaTime(), displaylink.timestamp - CACurrentMediaTime())
-        
+
         if CACurrentMediaTime() - lastVsyncTime < 0.005 {
             return
         }
@@ -372,6 +376,7 @@ class DrawableWrapper {
         return nil
     }
     
+
     @MainActor func present(commandBuffer: MTLCommandBuffer) {
 #if XCODE_BETA_16
         if #available(visionOS 2.0, *) {
@@ -450,8 +455,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
     var lastLastSubmit = 0.0
     var roundTripRenderTime: Double = 0.0
     var lastRoundTripRenderTimestamp: Double = 0.0
-    var currentHzAvg: Double = 90.0
-    
+    var currentHzAvg: Float = defaultRefreshRate
+
     var renderer: Renderer
     
     var renderTangents = [simd_float4(1.73205, 1.0, 1.0, 1.19175), simd_float4(1.0, 1.73205, 1.0, 1.19175)]
@@ -530,6 +535,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         self.textureResourceB = self.drawableQueueB!.makeTextureResource()
         self.textureResourceC = self.drawableQueueC!.makeTextureResource()
         
+        
         Task {
             var filter = "Bicubic"
             var base = "/Root/SBSMaterial"
@@ -550,6 +556,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 self.surfaceMaterialA_L?.writesDepth = false
             }
 #endif
+      
             self.surfaceMaterialB_L = try! await ShaderGraphMaterial(
                 named: base + filter + "_L",
                 from: "SBSMaterial.usda"
@@ -599,19 +606,17 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             // A weird bug happened here, only surfaceMaterialC_R had readsDepth set correctly?
             // Turns out we don't want this anyway, causes the app to render in front of windows
             // and hands
-
 #if XCODE_BETA_16
             if #available(visionOS 2.0, *) {
                 self.surfaceMaterialC_R?.readsDepth = false
                 self.surfaceMaterialC_R?.writesDepth = false
             }
 #endif
-
         }
-        
+
         recreateFramePool()
         createCopyShaderPipelines()
-        
+
         print("Offscreen render res:", currentOffscreenRenderWidth, "x", currentOffscreenRenderHeight, "(", currentOffscreenRenderScale, ")")
         print("Offscreen render res foveated:", vrr.physicalSize(layer: 0).width, "x", vrr.physicalSize(layer: 0).height, "(", Float(vrr.physicalSize(layer: 0).width) / Float(renderWidth), ")")
         print("RK render res:", currentRenderWidth, "x", currentRenderHeight, "(", currentRenderScale, ")")
@@ -1095,11 +1100,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 }
             }
         }
-        
+ 
         if !self.setPlaneMaterialA_L || !self.setPlaneMaterialB_L || !self.setPlaneMaterialC_L || !self.setPlaneMaterialA_R || !self.setPlaneMaterialB_R || !self.setPlaneMaterialC_R {
             return false
         }
-        
+
         return true
     }
     
@@ -1110,13 +1115,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         // Check and see what RealityKit says its deltaTime is, unfortunately we're kinda locked to
         // whatever RK updates us at anyway
-        let currentHz = 1.0 / context.deltaTime
+        let currentHz = Float(1.0 / context.deltaTime)
         if context.deltaTime > 0.001 {
             currentHzAvg = (currentHzAvg * 0.95) + (currentHz * 0.05)
         }
         // Just in case(tm)
         if !currentHzAvg.isFinite || currentHzAvg.isNaN {
-            currentHzAvg = 90.0
+            currentHzAvg = defaultRefreshRate
         }
 
         // RealityKit automatically calls this every frame for every scene.
@@ -1177,11 +1182,11 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             // Recreate framebuffer
             self.drawableQueueA = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*renderViewCount, usage: [.renderTarget], isBiplanar: meshHasVrr)
             self.textureResourceA = self.drawableQueueA!.makeTextureResource()
+
             self.drawableQueueB = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*renderViewCount, usage: [.renderTarget], isBiplanar: meshHasVrr)
             self.textureResourceB = self.drawableQueueB!.makeTextureResource()
             self.drawableQueueC = DrawableWrapper(pixelFormat: currentDrawableRenderColorFormat, width: currentRenderWidth, height: currentRenderHeight*renderViewCount, usage: [.renderTarget], isBiplanar: meshHasVrr)
             self.textureResourceC = self.drawableQueueC!.makeTextureResource()
-            
             self.setPlaneMaterialA_L = false
             self.setPlaneMaterialB_L = false
             self.setPlaneMaterialC_L = false
@@ -1220,10 +1225,13 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         // pose synced. To prevent drawing a new frame on an old pose, we hide the A/B
         // entity in such a way that it will only display if the pose is correct to the
         // frame we sent.
+        //
+
         rkFramesRendered += 1
         let whichRkFrame = rkFramesRendered % 3
-    
+
         var drawable: MTLTexture? = nil
+
         if whichRkFrame == 0 {
             drawable = drawableQueueA?.nextTexture(commandBuffer: commandBuffer)
         }
@@ -1256,7 +1264,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         guard let frame = frame else {
             //print("no frame")
-            
+
             // Late abort, keep visionOS happy and present the drawable even though it won't be visible
             if whichRkFrame == 0 {
                 drawableQueueA!.present(commandBuffer: commandBuffer)
@@ -1271,7 +1279,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 print("aaaaaaaaaa this switch needs extending")
             }
             rkFramesRendered -= 1 // Ensure whichRkFrame is still correct next time around
-            
+
             return
         }
 
@@ -1331,9 +1339,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             copyTextureToTexture(commandBuffer, texture, drawable, vrrBuffer)
         }
 
-        let submitTime = CACurrentMediaTime()
         commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
-            if EventHandler.shared.alvrInitialized /*&& EventHandler.shared.lastSubmittedTimestamp != timestamp*/ {
+            if EventHandler.shared.alvrInitialized && EventHandler.shared.lastSubmittedTimestamp != timestamp {
                 vsyncTime = self.visionProVsyncPrediction.nextFrameTime
                 
                 let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
@@ -1343,10 +1350,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 //print("blit", (CACurrentMediaTime() - submitTime) * 1000.0)
                 let lastRenderTime = (CACurrentMediaTime() - startUpdateTime) + self.visionProVsyncPrediction.vsyncDelta
                 self.visionProVsyncPrediction.rkAvgRenderTime = (self.visionProVsyncPrediction.rkAvgRenderTime + lastRenderTime) * 0.5
-                Task(priority: .userInteractive) {
+                Task(priority: .high) {
                     alvr_report_submit(timestamp, vsyncTimeNs &- currentTimeNs)
                 }
-                
+               
                 //print("blit roundtrip", CACurrentMediaTime() - self.lastUpdate, timestamp)
                 self.lastUpdate = CACurrentMediaTime()
         
@@ -1355,13 +1362,14 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         }
         
         // Update only the A/B/C panel we will be showing, and hide the other one
+
         planeA_L.isEnabled = false
         planeB_L.isEnabled = false
         planeC_L.isEnabled = false
         planeA_R.isEnabled = false
         planeB_R.isEnabled = false
         planeC_R.isEnabled = false
-        
+
         var activePlane_L = planeA_L
         var activePlane_R = planeA_R
         if whichRkFrame == 1 {
@@ -1372,7 +1380,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             activePlane_L = planeC_L
             activePlane_R = planeC_R
         }
-        
+
         // left eye
         activePlane_L.position = position_L
         activePlane_L.orientation = orientation_L
@@ -1384,7 +1392,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         activePlane_R.orientation = orientation_R
         activePlane_R.scale = scale_R
         activePlane_R.isEnabled = true
-        
+
         if settings.chromaKeyEnabled {
             backdrop.isEnabled = false
         }
@@ -1596,7 +1604,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         var deviceAnchor = framePreviouslyPredictedPose ?? matrix_identity_float4x4
         
         // Do NOT move this, just in case, because DeviceAnchor is wonkey and every DeviceAnchor mutates each other.
-        if EventHandler.shared.alvrInitialized {
+        if EventHandler.shared.alvrInitialized  {
             // TODO: I suspect Apple changes view transforms every frame to account for pupil swim, figure out how to fit the latest view transforms in?
             // Since pupil swim is purely an axial thing, maybe we can just timewarp the view transforms as well idk
             let viewFovs = EventHandler.shared.viewFovs
@@ -1646,7 +1654,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         
         // List of reasons to not display a frame
         var frameIsSuitableForDisplaying = true
-        if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < 90 {
+        if EventHandler.shared.lastIpd == -1 || EventHandler.shared.framesRendered < Int(refreshRate) {
             // Don't show frame if we haven't sent the view config and received frames
             // with that config applied.
             frameIsSuitableForDisplaying = false
@@ -1700,7 +1708,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
 
             if isReprojected {
                 reprojectedFramesInARow += 1
-                if reprojectedFramesInARow > 90 {
+                if reprojectedFramesInARow > Int(refreshRate) {
                     renderer.fadeInOverlayAlpha += 0.02
                 }
             }

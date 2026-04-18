@@ -141,23 +141,24 @@ struct Entry: View {
                 .tabItem {
                     Label("Main Settings", systemImage: "network")
                 }
+
                 ScrollView {
                     VStack {
                         Text("Advanced Settings:")
                             .font(.system(size: 20, weight: .bold))
-                        
-                        Toggle(isOn: $gStore.settings.experimental40ppd) {
+                    
+                        Toggle(isOn: $gStore.settings.realityKitRenderer) {
                             Text("RealityKit renderer*")
                             Text("*Deprecated! May cause juddering and/or nausea!")
                             .font(.system(size: 10))
                         }
                         .toggleStyle(.switch)
-                        
+                    
                         Toggle(isOn: $gStore.settings.chromaKeyEnabled) {
 #if XCODE_BETA_16
                             if #unavailable(visionOS 2.0) {
                                 Text("Enable Chroma Keyed Passthrough*")
-                                Text("*Only works with 40PPD renderer")
+                                Text("*Only works with RealityKit renderer")
                                 .font(.system(size: 10))
                             }
                             else {
@@ -165,59 +166,24 @@ struct Entry: View {
                             }
 #else
                             Text("Enable Chroma Keyed Passthrough*")
-                            Text("*Only works with 40PPD renderer")
-                                .font(.system(size: 10))
-#endif
+                            Text("*Only works with RealityKit renderer")
+                            .font(.system(size: 10))
                         }
                         .toggleStyle(.switch)
                         .onChange(of: gStore.settings.chromaKeyEnabled) {
                             saveAction()
                         }
-                        
-                    if gStore.settings.chromaKeyEnabled {
-                        ColorPicker("Chroma Key Color", selection: $chromaKeyColor)
-                        .onChange(of: chromaKeyColor) {
-                            gStore.settings.chromaKeyColorR = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[0])
-                            gStore.settings.chromaKeyColorG = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[1])
-                            gStore.settings.chromaKeyColorB = Float((chromaKeyColor.cgColor?.components ?? [0.0, 1.0, 0.0])[2])
-                            saveAction()
-                       }
-                       
-                       Text("Chroma Blend Distance Min/Max").frame(maxWidth: .infinity, alignment: .leading)
-                       HStack {
-                           Slider(value: $gStore.settings.chromaKeyDistRangeMin,
-                                  in: 0...chromaRangeMaximum,
-                                  step: 0.01) {
-                               Text("Chroma Blend Distance Min")
-                           }
-                           .onChange(of: gStore.settings.chromaKeyDistRangeMin) {
-                               applyRangeSettings()
-                               
-                           }
-                           TextField("Chroma Blend Distance Min", value: $gStore.settings.chromaKeyDistRangeMin, formatter: chromaFormatter)
-                           .textFieldStyle(RoundedBorderTextFieldStyle())
-                           .onChange(of: gStore.settings.chromaKeyDistRangeMin) {
-                               applyRangeSettings()
-                           }
-                           .frame(width: 100)
-                       }
-                       HStack {
-                           Slider(value: $gStore.settings.chromaKeyDistRangeMax,
-                                  in: 0.001...1,
-                                  step: 0.01) {
-                               Text("Chroma Blend Distance Min")
-                           }
-                           .onChange(of: gStore.settings.chromaKeyDistRangeMax) {
-                               applyRangeSettings()
-                           }
-                           TextField("Chroma Blend Distance Max", value: $gStore.settings.chromaKeyDistRangeMax, formatter: chromaFormatter)
-                           .textFieldStyle(RoundedBorderTextFieldStyle())
-                           .onChange(of: gStore.settings.chromaKeyDistRangeMax) {
-                               applyRangeSettings()
-                           }
-                           .frame(width: 100)
-                       }
+#else
+                        Text("Enable Chroma Keyed Passthrough*")
+                        Text("*Only works with RealityKit renderer")
+                            .font(.system(size: 10))
+#endif
                     }
+                    .toggleStyle(.switch)
+                    .onChange(of: gStore.settings.chromaKeyEnabled) {
+                        saveAction()
+                    }
+                    
 #if IS_ALVR_TESTFLIGHT
                        Toggle(isOn: $gStore.settings.forceMipmapEyeTracking) {
                             Text("Force visionOS 1.x eye tracking")
