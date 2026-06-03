@@ -112,6 +112,9 @@ class EventHandler: ObservableObject {
         
     var alvrInitialized = false
     var streamingActive = false
+    // While true, the RealityKit client holds the stream off so the first-time face-tracking calibration
+    // overlay stays interactive. Set at immersive setup; cleared when calibration completes/loads.
+    var faceCalibrationPending = false
     
     
     @Published var connectionState: ConnectionState = .disconnected

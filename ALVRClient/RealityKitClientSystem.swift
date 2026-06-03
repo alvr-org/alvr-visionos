@@ -246,13 +246,19 @@ class RealityKitClientSystem : System {
                 content.add(cam)
             }
             
+            // Hold the stream until calibration if face tracking is on and we have no saved calibration.
+            EventHandler.shared.faceCalibrationPending =
+                ALVRClientApp.gStore.settings.enablePersonaFaceTracking && ALVRClientApp.gStore.settings.faceCalibration == nil
+
             if ALVRClientApp.gStore.settings.enablePersonaFaceTracking {
                 if let cam = attachments?.entity(for: "camera_view") {
                     //cam.setParent(nil)
                     cam.isEnabled = true
                     cam.name = "camera_view_ent"
-                    cam.position = simd_float3(0.0, 1.0, -2.0)
-                    content.add(cam)
+                    // Parent to the head anchor so the calibration prompt sits ~1m in front of the user's
+                    // face (in front of the input catcher at z=-1.5), instead of floating at a fixed spot.
+                    cam.position = simd_float3(0.0, -0.1, -1.0)
+                    anchor.addChild(cam)
                 }
             }
         }
@@ -1153,7 +1159,8 @@ class RealityKitClientSystemCorrectlyAssociated : System {
             return
         }
         
-        input_catcher.isEnabled = !(WorldTracker.shared.eyeTrackingActive && !WorldTracker.shared.eyeIsMipmapMethod)
+        // While the calibration overlay is up, disable the input catcher so taps reach the Calibrate button.
+        input_catcher.isEnabled = !(WorldTracker.shared.eyeTrackingActive && !WorldTracker.shared.eyeIsMipmapMethod) && !EventHandler.shared.faceCalibrationPending
         
         let settings = ALVRClientApp.gStore.settings
         
@@ -1465,6 +1472,10 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         /// Per frame updates hare
         EventHandler.shared.framesRendered += 1
         var streamingActiveForFrame = EventHandler.shared.streamingActive
+        // Don't start the stream until first-time face calibration is done — keeps the overlay interactive.
+        if EventHandler.shared.faceCalibrationPending {
+            streamingActiveForFrame = false
+        }
         var isReprojected = false
         
         var queuedFrame:QueuedFrame? = nil
