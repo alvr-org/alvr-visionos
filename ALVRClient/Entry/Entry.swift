@@ -198,7 +198,17 @@ struct Entry: View {
                                 .font(.system(size: 10))
                         }
                         .toggleStyle(.switch)
-                        
+
+                        Button("Clear Face Tracking Calibration") {
+                            gStore.settings.faceCalibration = nil
+                            saveAction()
+                        }
+                        .disabled(gStore.settings.faceCalibration == nil)
+                        Text(gStore.settings.faceCalibration == nil
+                             ? "*No calibration saved — you'll be prompted on entry."
+                             : "*Clears saved calibration; you'll re-calibrate on next entry.")
+                            .font(.system(size: 10))
+
                         Toggle(isOn: $gStore.settings.enableProgressive) {
                             Text("Enable progressive mode (use Digital Crown)")
                             Text("*Currently requires RealityKit renderer")

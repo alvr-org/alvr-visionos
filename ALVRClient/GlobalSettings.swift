@@ -7,6 +7,38 @@
 import Foundation
 import SwiftUI
 
+// Persisted neutral/closed face-tracking calibration (all values match CameraModel's firstSample* baselines).
+struct FaceCalibration: Codable, Equatable {
+    var mouthWidth: Double = 0.35
+    var mouthWidthL: Double = 0.175
+    var mouthWidthR: Double = 0.175
+    var mouthCenterX: Double = 0.5
+    var mouthCenterY: Double = 0.0
+    var mouthMinX: Double = 0.1
+    var mouthMaxX: Double = 0.4
+    var eyeWidthL: Double = 0.35
+    var eyeWidthR: Double = 0.35
+    var eyeHeightL: Double = 0.25
+    var eyeHeightR: Double = 0.25
+    var eyeMinYL: Double = 0.25
+    var eyeMinYR: Double = 0.25
+    var eyeMaxYL: Double = 0.25
+    var eyeMaxYR: Double = 0.25
+    var eyeGazeYL: Double = 0.0
+    var eyeGazeYR: Double = 0.0
+    var jawOffsetX: Double = 0.0
+    var upperLipGapL: Double = 0.12
+    var upperLipGapR: Double = 0.12
+    var lowerLipDropL: Double = 0.06
+    var lowerLipDropR: Double = 0.06
+    var cheekWidthL: Double = 0.45
+    var cheekWidthR: Double = 0.45
+    var eyeOpenRawNeutralL: Double = 0.25
+    var eyeOpenRawNeutralR: Double = 0.25
+    var eyeClosedRawL: Double = 0.06
+    var eyeClosedRawR: Double = 0.06
+}
+
 struct GlobalSettings: Codable {
     var keepSteamVRCenter: Bool = false
     var showHandsOverlaid: Bool = false
@@ -31,7 +63,8 @@ struct GlobalSettings: Codable {
     var lastUsedAppVersion = "never launched"
     var chaperoneDistanceCm: Int = 0
     var showPerformanceHud: Bool = false
-    
+    var faceCalibration: FaceCalibration? = nil   // nil => not yet calibrated (prompt on entry)
+
     init() {}
     
     init(from decoder: Decoder) throws {
@@ -60,6 +93,7 @@ struct GlobalSettings: Codable {
         self.lastUsedAppVersion = try container.decodeIfPresent(String.self, forKey: .lastUsedAppVersion) ?? self.lastUsedAppVersion
         self.chaperoneDistanceCm = try container.decodeIfPresent(Int.self, forKey: .chaperoneDistanceCm) ?? self.chaperoneDistanceCm
         self.showPerformanceHud = try container.decodeIfPresent(Bool.self, forKey: .showPerformanceHud) ?? self.showPerformanceHud
+        self.faceCalibration = try container.decodeIfPresent(FaceCalibration.self, forKey: .faceCalibration) ?? self.faceCalibration
     }
 }
 

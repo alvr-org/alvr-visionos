@@ -12,6 +12,7 @@ import CoreImage
 import Vision
 import Accelerate
 import simd
+import AudioToolbox
 
 extension VNFaceLandmarkRegion2D {
     func rotatedTranslated(by angle: Float, center: CGPoint, translate: CGPoint, scale: CGFloat = 1.0) -> [CGPoint] {
@@ -31,6 +32,16 @@ extension VNFaceLandmarkRegion2D {
         }
     }
 }
+
+// Incremental running mean: fold the n-th sample x into mean m in place. Used to average the neutral
+// pose across the calibration window so per-frame landmark noise doesn't bake into the baseline.
+private func accMean(_ m: inout Double, _ x: Double, _ n: Double) { m += (x - m) / n }
+private func accMean(_ m: inout CGFloat, _ x: CGFloat, _ n: CGFloat) { m += (x - m) / n }
+private func accMean(_ m: inout Float, _ x: Float, _ n: Float) { m += (x - m) / n }
+
+// Initial calibration sequence: average a still neutral pose, then prompt to close eyes and capture that
+// reference. After `.done`, neutral re-averages periodically (cooldown); the closed reference stays.
+enum CalibPhase { case neutral, closing, done }
 
 struct CameraView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -70,8 +81,25 @@ struct CameraView: View {
                                 .tint(.white)
                         }
                     }
-                    Text("Tracking...")
-                        .foregroundStyle(.secondary)
+                    VStack(spacing: 8) {
+                        if model.needsCalibrationButton {
+                            Button("Calibrate Face Tracking") { model.beginCalibration() }
+                                .buttonStyle(.borderedProminent)
+                        } else if model.isCalibrating || !model.hasCalibratedOnce {
+                            Label(model.calibPhase == .closing ? "Calibrating — close your eyes" : "Calibrating — hold a neutral pose", systemImage: "circle.fill")
+                                .foregroundStyle(.orange)
+                                .font(.headline)
+                                .symbolEffect(.pulse)
+                        } else {
+                            Text("Tracking...")
+                                .foregroundStyle(.secondary)
+#if ENABLE_FACE_RECALIBRATION
+                            Text(String(format: "Next recalibration in %.0fs", model.secondsUntilRecalib))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+#endif
+                        }
+                    }
                 case .notDetermined:
                     ProgressView("Requesting Camera Access…")
                 case .denied, .restricted:
@@ -89,6 +117,38 @@ struct CameraView: View {
                     Text("Camera unavailable")
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            // Non-debug: the only face-tracking UI the user ever sees — a transient prompt shown right
+            // after the camera initializes, until the neutral-pose baselines finish capturing. (Debug has
+            // its own inline recalibration indicator.)
+            if !model.hasCalibratedOnce && !enableDebug {
+                VStack(spacing: 24) {
+                    if model.needsCalibrationButton {
+                        Text("Calibrate Face Tracking")
+                            .font(.system(size: 56, weight: .bold))
+                        Text("Look forward with a relaxed, neutral expression, then press Calibrate.")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button("Calibrate") { model.beginCalibration() }
+                            .font(.system(size: 32, weight: .semibold))
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                    } else {
+                        ProgressView()
+                            .tint(.white)
+                            .scaleEffect(2.0)
+                            .padding(.bottom, 12)
+                        Text(model.calibPhase == .closing ? "Close your eyes" : "Hold a neutral pose")
+                            .font(.system(size: 56, weight: .bold))
+                        Text(model.calibPhase == .closing ? "Capturing closed-eye reference…" : "Calibrating face tracking…")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(56)
+                .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 32))
             }
         }
         .task {
@@ -223,6 +283,20 @@ final class CameraModel: NSObject, ObservableObject {
     @Published var detectedFaceRect: DetectedFaceRect? = nil
     @Published var detectedFaces: [DetectedFace] = []
     @Published var blendShapes: [String: Float] = [:]
+    // isCalibrating: true only while actively averaging a still-pose burst (drives the debug indicator).
+    // hasCalibratedOnce: false until the first calibration completes (drives the one-time entry prompt).
+    @Published var isCalibrating = false
+    @Published var hasCalibratedOnce = false
+    @Published var calibPhase: CalibPhase = .neutral
+    @Published var secondsUntilRecalib: Double = 0   // debug countdown to next neutral refresh
+    @Published var needsCalibrationButton = false    // face tracking on but no saved calibration -> show button
+    private var calibrationRequested = false         // user pressed Calibrate; gates the neutral capture
+    private var calibrationRequestedTime: Double = 0 // systemUptime when Calibrate was pressed
+    private let calibStartDelaySeconds: Double = 1.0 // settle time after pressing before capture begins
+    private var closingStart: Double = 0             // systemUptime when the close-eyes phase began
+    private var closingMinRawL: Float = 1.0          // min raw openness seen while closing (L)
+    private var closingMinRawR: Float = 1.0
+    private let calibClosingSeconds: Double = 3.5    // how long the close-eyes capture window lasts
 
     nonisolated private let sequenceRequestHandler = VNSequenceRequestHandler()
     nonisolated private lazy var faceLandmarksRequest: VNDetectFaceLandmarksRequest = {
@@ -260,15 +334,113 @@ final class CameraModel: NSObject, ObservableObject {
     private var firstSampleEyeHeightR: CGFloat = CGFloat(0.25)
     private var firstSampleEyeMinYR: CGFloat = CGFloat(0.25)
     private var firstSampleEyeMaxYR: CGFloat = CGFloat(0.25)
-    private var firstSampleEyeOpennessL: Float = -100000.0
-    private var firstSampleEyeClosednessL: Float = 1.0
-    private var firstSampleEyeOpennessR: Float = -100000.0
-    private var firstSampleEyeClosednessR: Float = 1.0
-    private var firstSampleEyeCornerMaxY: CGFloat = -100000.0
-    private var sampledInitialFace = false
+    private var firstSampleEyeGazeYL: CGFloat = 0.0 // neutral vertical-gaze ratio (pupil vs eye centroid)
+    private var firstSampleEyeGazeYR: CGFloat = 0.0
+    // Baselines for the "easy tier" blendshapes added below (mouth/jaw lateral, lip raise/depress, lid raise).
+    // Captured during the initial sampling window; non-zero defaults avoid spikes on the first frames.
+    private var firstSampleJawOffsetX: CGFloat = 0.0       // chin x relative to nose midline, faceW-normalized
+    private var firstSampleUpperLipGapL: CGFloat = 0.12    // nose-base -> upper-lip-top gap, faceH-normalized
+    private var firstSampleUpperLipGapR: CGFloat = 0.12
+    private var firstSampleLowerLipDropL: CGFloat = 0.06   // lower-lip-bottom drop below mouth center, faceH-normalized
+    private var firstSampleLowerLipDropR: CGFloat = 0.06
+    // Raw eye-openness references (computeEyeOpenness units) — the offset model for eyesClosed/widen.
+    private var firstSampleEyeOpenRawNeutralL: Float = 0.25  // raw openness at neutral (captured)
+    private var firstSampleEyeOpenRawNeutralR: Float = 0.25
+    private var firstSampleEyeClosedRawL: Float = 0.06       // raw openness with eyes closed (captured)
+    private var firstSampleEyeClosedRawR: Float = 0.06
+    private var firstSampleCheekWidthL: CGFloat = 0.45     // neutral cheek extent from nose midline, faceW-normalized
+    private var firstSampleCheekWidthR: CGFloat = 0.45
+    private var sampledInitialFace = false   // has at least one neutral calibration completed
+    // Automatic neutral calibration (no UI/button): when the face holds still (~neutral) the baselines are
+    // averaged over a few frames, then we wait a cooldown before allowing the next recalibration.
+    private var calibSampleCount = 0              // frames folded into the current neutral average
+    private var lastCalibrationTime: Double = 0   // systemUptime when the last calibration completed
+    private var prevStabilityFeat: [CGFloat] = [] // previous frame's stability feature vector
+    private let calibStableFrames = 15            // still frames to average per calibration (user-error margin)
+    private let calibCooldownSeconds: Double = 120 // calm time since last significant movement before re-calibrating
+    private var lastSignificantMovementTime: Double = 0
+    private var armedForRecalib = false               // a significant movement must occur before re-calibrating
+    private let calibSignificantMotion: CGFloat = 0.15 // frame-to-frame delta that counts as real movement
+
+    // One Euro filter state (per expression channel) — visionOS face landmarks are inherently jittery,
+    // so we low-pass each blendshape. The filter smooths hard when values are stable and eases off during
+    // fast motion, so it kills rest jitter without lagging real expressions.
+    private var oeValue = [Float](repeating: 0, count: 70)   // filtered value
+    private var oeDeriv = [Float](repeating: 0, count: 70)   // filtered derivative
+    private var oePrev  = [Float](repeating: 0, count: 70)   // previous raw target
+    private var oeInitialized = false
+    private var oeLastTime: Double = 0
+    // Light defaults: the jitter is subtle, so filter just enough to take the edge off without lag.
+    private let oeMinCutoff: Float = 4.0  // Hz; lower = smoother at rest (more lag). Tune.
+    private let oeBeta: Float = 0.05      // speed coefficient; higher = less lag on fast motion. Tune.
+    private let oeDCutoff: Float = 1.0
 
     override init() {
         super.init()
+        // Load a saved calibration if present -> skip straight to tracking. Otherwise prompt to calibrate.
+        if let c = ALVRClientApp.gStore.settings.faceCalibration {
+            importCalibration(c)
+            calibPhase = .done
+            hasCalibratedOnce = true
+        } else {
+            // No saved calibration: seed the baselines from FaceCalibration's defaults (single source of
+            // truth) and prompt the user to calibrate.
+            importCalibration(FaceCalibration())
+            needsCalibrationButton = true
+        }
+    }
+
+    /// Begin the first-time calibration sequence (user pressed the Calibrate button).
+    func beginCalibration() {
+        calibrationRequested = true
+        calibrationRequestedTime = ProcessInfo.processInfo.systemUptime
+        needsCalibrationButton = false
+        isCalibrating = true
+        calibPhase = .neutral
+        hasCalibratedOnce = false
+        calibSampleCount = 0
+    }
+
+    func exportCalibration() -> FaceCalibration {
+        FaceCalibration(
+            mouthWidth: firstSampleMouthWidth, mouthWidthL: firstSampleMouthWidthL, mouthWidthR: firstSampleMouthWidthR,
+            mouthCenterX: firstSampleMouthCenterX, mouthCenterY: firstSampleMouthCenterY,
+            mouthMinX: firstSampleMouthMinX, mouthMaxX: firstSampleMouthMaxX,
+            eyeWidthL: Double(firstSampleEyeWidthL), eyeWidthR: Double(firstSampleEyeWidthR),
+            eyeHeightL: Double(firstSampleEyeHeightL), eyeHeightR: Double(firstSampleEyeHeightR),
+            eyeMinYL: Double(firstSampleEyeMinYL), eyeMinYR: Double(firstSampleEyeMinYR),
+            eyeMaxYL: Double(firstSampleEyeMaxYL), eyeMaxYR: Double(firstSampleEyeMaxYR),
+            eyeGazeYL: Double(firstSampleEyeGazeYL), eyeGazeYR: Double(firstSampleEyeGazeYR),
+            jawOffsetX: Double(firstSampleJawOffsetX),
+            upperLipGapL: Double(firstSampleUpperLipGapL), upperLipGapR: Double(firstSampleUpperLipGapR),
+            lowerLipDropL: Double(firstSampleLowerLipDropL), lowerLipDropR: Double(firstSampleLowerLipDropR),
+            cheekWidthL: Double(firstSampleCheekWidthL), cheekWidthR: Double(firstSampleCheekWidthR),
+            eyeOpenRawNeutralL: Double(firstSampleEyeOpenRawNeutralL), eyeOpenRawNeutralR: Double(firstSampleEyeOpenRawNeutralR),
+            eyeClosedRawL: Double(firstSampleEyeClosedRawL), eyeClosedRawR: Double(firstSampleEyeClosedRawR)
+        )
+    }
+
+    func importCalibration(_ c: FaceCalibration) {
+        firstSampleMouthWidth = c.mouthWidth; firstSampleMouthWidthL = c.mouthWidthL; firstSampleMouthWidthR = c.mouthWidthR
+        firstSampleMouthCenterX = c.mouthCenterX; firstSampleMouthCenterY = c.mouthCenterY
+        firstSampleMouthMinX = c.mouthMinX; firstSampleMouthMaxX = c.mouthMaxX
+        firstSampleEyeWidthL = CGFloat(c.eyeWidthL); firstSampleEyeWidthR = CGFloat(c.eyeWidthR)
+        firstSampleEyeHeightL = CGFloat(c.eyeHeightL); firstSampleEyeHeightR = CGFloat(c.eyeHeightR)
+        firstSampleEyeMinYL = CGFloat(c.eyeMinYL); firstSampleEyeMinYR = CGFloat(c.eyeMinYR)
+        firstSampleEyeMaxYL = CGFloat(c.eyeMaxYL); firstSampleEyeMaxYR = CGFloat(c.eyeMaxYR)
+        firstSampleEyeGazeYL = CGFloat(c.eyeGazeYL); firstSampleEyeGazeYR = CGFloat(c.eyeGazeYR)
+        firstSampleJawOffsetX = CGFloat(c.jawOffsetX)
+        firstSampleUpperLipGapL = CGFloat(c.upperLipGapL); firstSampleUpperLipGapR = CGFloat(c.upperLipGapR)
+        firstSampleLowerLipDropL = CGFloat(c.lowerLipDropL); firstSampleLowerLipDropR = CGFloat(c.lowerLipDropR)
+        firstSampleCheekWidthL = CGFloat(c.cheekWidthL); firstSampleCheekWidthR = CGFloat(c.cheekWidthR)
+        firstSampleEyeOpenRawNeutralL = Float(c.eyeOpenRawNeutralL); firstSampleEyeOpenRawNeutralR = Float(c.eyeOpenRawNeutralR)
+        firstSampleEyeClosedRawL = Float(c.eyeClosedRawL); firstSampleEyeClosedRawR = Float(c.eyeClosedRawR)
+    }
+
+    /// One Euro smoothing factor for a given cutoff (Hz) and timestep (s).
+    private func oneEuroAlpha(_ cutoff: Float, _ dt: Float) -> Float {
+        let tau = 1.0 / (2.0 * Float.pi * cutoff)
+        return 1.0 / (1.0 + tau / dt)
     }
 
     @MainActor
@@ -555,7 +727,11 @@ final class CameraModel: NSObject, ObservableObject {
                 let leftEyeIntermediate = leftEye.map { faceToImage($0, bb: bb, scale: 1.0) }
                 let rightEyeIntermediate = rightEye.map { faceToImage($0, bb: bb, scale: 1.0) }
                 
-                let ipdScale = CGFloat(EventHandler.shared.lastIpd) / dist(avg(leftEyeIntermediate), avg(rightEyeIntermediate))
+                // lastIpd is only set once streaming is active; during the pre-stream calibration it's still
+                // -1, which would make ipdScale negative and collapse faceW/faceH (breaking calibration).
+                // Fall back to a typical IPD — it mostly cancels out of the normalized features anyway.
+                let ipdMeters = EventHandler.shared.lastIpd > 0 ? EventHandler.shared.lastIpd : 0.063
+                let ipdScale = CGFloat(ipdMeters) / dist(avg(leftEyeIntermediate), avg(rightEyeIntermediate))
                 let faceW = max(0.00001, bb.width * ipdScale)
                 let faceH = max(0.00001, bb.height * ipdScale)
 
@@ -691,12 +867,13 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["lipFunnelerRT"] = val
                 }
                 
-                // mouthPucker (width decreases while height increases)
+                // mouthPucker: lips narrow horizontally vs. the neutral mouth width (jawDrop subtracted so
+                // an open mouth doesn't read as pucker). puckerGain tunable.
                 if mouthWidth > 0 {
+                    let puckerGain: Float = 8.0
                     let w = mouthWidth / faceW
-                    let h = mouthHeight / faceH
-                    let pucker = clamp01((baseMouthWidth - w) * 3.0 + h * 1.0)
-                    var val = norm((pucker * 3.0) - CGFloat(jawDropCurrent))
+                    let narrowing = max(0, Float(baseMouthWidth) - Float(w)) // 0 at rest, grows as lips purse
+                    let val = norm(narrowing * puckerGain - jawDropCurrent)
                     newBlendShapes["lipPuckerL"] = val
                     newBlendShapes["lipPuckerR"] = val
                 }
@@ -731,19 +908,25 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["chinRaiserB"] = norm(towardCenter * 3.0)
                 }
                 
-                // cheekPuff (cheek outward vs face contour)
-                // This will definitely need some ML tbh
-                if !contourImg.isEmpty && !outerImg.isEmpty {
-                    let midY = avg(outerImg).y
-                    let leftCheek = contourImg.dropFirst().prefix(contourImg.count/4) // rough left cheek region
-                    let rightCheek = contourImg.suffix(contourImg.count/4) // rough right cheek region
-                    let leftAvg = avg(leftCheek.filter { abs($0.y - midY) < faceH * 0.15 })
-                    let rightAvg = avg(rightCheek.filter { abs($0.y - midY) < faceH * 0.15 })
-                    // Compare cheek outwardness relative to face center
-                    let puff = (abs(leftAvg.x - faceCenterX) + abs(rightAvg.x - faceCenterX)) / faceW
-                    let val = norm((puff - 0.45) * 3.0)
-                    newBlendShapes["cheekPuffL"] = 0.0//val
-                    newBlendShapes["cheekPuffR"] = 0.0//val
+                // cheekPuff: each cheek's silhouette bulges outward from the facial midline vs. its neutral
+                // baseline. A 2D-only approximation (no depth), autocalibrated per side and tunable.
+                var curCheekWidthL: CGFloat = self.firstSampleCheekWidthL
+                var curCheekWidthR: CGFloat = self.firstSampleCheekWidthR
+                if !contourImg.isEmpty && !noseCrestImg.isEmpty {
+                    let cheekPuffGain: Float = 12.0
+                    let midX = avg(noseCrestImg).x            // stable facial midline
+                    let cheekY = mouthCenter.y                // cheek band sits around mouth/nose level
+                    let bandHalf = faceH * 0.2
+                    // Max outward distance from the midline among contour points near cheek level, per side.
+                    func cheekExtent(_ pts: [CGPoint], _ sign: CGFloat) -> CGFloat {
+                        let near = pts.filter { abs($0.y - cheekY) < bandHalf }
+                        let outward = near.map { ($0.x - midX) * sign }.max() ?? 0
+                        return max(0, outward) / faceW
+                    }
+                    curCheekWidthL = cheekExtent(contourImg.filter { $0.x <= midX }, -1) // L = min-x side
+                    curCheekWidthR = cheekExtent(contourImg.filter { $0.x >= midX },  1)
+                    newBlendShapes["cheekPuffL"] = norm((Float(curCheekWidthL) - Float(self.firstSampleCheekWidthL)) * cheekPuffGain)
+                    newBlendShapes["cheekPuffR"] = norm((Float(curCheekWidthR) - Float(self.firstSampleCheekWidthR)) * cheekPuffGain)
                 }
                 
                 // Derived this from my eye look bc it actually seemed accidentally good at eyelids
@@ -776,52 +959,37 @@ final class CameraModel: NSObject, ObservableObject {
                 // eyeBlink L/R
                 let lEyeOpenedRaw: Float = Float(computeEyeOpenness(landmark: lm.leftEye))
                 let rEyeOpenedRaw: Float = Float(computeEyeOpenness(landmark: lm.rightEye))
-                let lEyeOpened = norm((lEyeOpenedRaw - self.firstSampleEyeClosednessL) / self.firstSampleEyeOpennessL)
-                let rEyeOpened = norm((rEyeOpenedRaw - self.firstSampleEyeClosednessR) / self.firstSampleEyeOpennessR)
-                
-                if lEyeOpenedRaw < self.firstSampleEyeClosednessL {
-                    self.firstSampleEyeClosednessL = lEyeOpenedRaw
-                }
-                if rEyeOpenedRaw < self.firstSampleEyeClosednessR {
-                    self.firstSampleEyeClosednessR = rEyeOpenedRaw
-                }
-                
-                if lEyeOpenedRaw - self.firstSampleEyeClosednessL > self.firstSampleEyeOpennessL {
-                    self.firstSampleEyeOpennessL = max(lEyeOpenedRaw - self.firstSampleEyeClosednessL, 0.00001)
-                }
-                if rEyeOpenedRaw - self.firstSampleEyeClosednessR > self.firstSampleEyeOpennessR {
-                    self.firstSampleEyeOpennessR = max(rEyeOpenedRaw - self.firstSampleEyeClosednessR, 0.00001)
-                }
+                // Offset model: 0 at the calibrated closed reference, 1 at the calibrated neutral-open reference.
+                let lEyeOpened = norm((lEyeOpenedRaw - self.firstSampleEyeClosedRawL) / max(0.0001, self.firstSampleEyeOpenRawNeutralL - self.firstSampleEyeClosedRawL))
+                let rEyeOpened = norm((rEyeOpenedRaw - self.firstSampleEyeClosedRawR) / max(0.0001, self.firstSampleEyeOpenRawNeutralR - self.firstSampleEyeClosedRawR))
                 let lEyeClosedOrLookingDown = CGFloat(eyeLidClosed(lEyeImg, lPupilImg))
                 let rEyeClosedOrLookingDown = CGFloat(eyeLidClosed(rEyeImg, rPupilImg))
                 
                 let lEyeUnopened: Float = 1.0 - lEyeOpened
                 let rEyeUnopened: Float = 1.0 - rEyeOpened
                 
-                // Try and increase the relative difference between eye openness because the Vision models
-                // and the Persona tracking seem to be weirdly overfitted/coactivated there
-                var lEyeClosedRaw = lEyeUnopened
-                var rEyeClosedRaw = rEyeUnopened
-                for _ in 0..<3 {
-                    let eyeDiff = max(abs(rEyeUnopened - lEyeUnopened), 0.00001)
-                    if rEyeUnopened > lEyeUnopened /*&& eyeDiff > 0.05*/ {
-                        lEyeClosedRaw *= (lEyeClosedRaw - eyeDiff)
-                        rEyeClosedRaw *= (rEyeClosedRaw + eyeDiff)
-                    }
-                    else if lEyeUnopened > rEyeUnopened /*&& eyeDiff > 0.05*/ {
-                        lEyeClosedRaw *= (lEyeClosedRaw + eyeDiff)
-                        rEyeClosedRaw *= (rEyeClosedRaw - eyeDiff)
-                    }
-                    else {
-                        lEyeClosedRaw *= lEyeClosedRaw
-                        rEyeClosedRaw *= rEyeClosedRaw
-                    }
+                // The Vision/Persona models co-activate both eyes, so closure is computed in two parts.
+                // 1) A saturating curve per eye: anything past `closeKnee` ramps to a full 1.0, while the
+                //    knee rejects the low-level co-activation the other eye picks up. (Tune on device.)
+                // 2) A *thresholded* wink separation: only a clear wink suppresses the more-open eye, so a
+                //    normal (slightly asymmetric) blink still drives BOTH eyes to 1.0.
+                // Linear position between neutral-open and the closed reference (lEyeUnopened == 1 - openness),
+                // then an S-curve: the flat low end rejects the other eye's co-activation bleed, and it
+                // saturates a full close to 1.0. lo/hi tunable. Each eye uses its own references.
+                let closeCurveLo: Float = 0.15  // co-activation is removed below, so the knee can stay low
+                let closeCurveHi: Float = 0.8   // lower if full closes don't reach 1.0
+                func closeCurve(_ x: Float) -> Float {
+                    let t = clamp01((x - closeCurveLo) / max(0.0001, closeCurveHi - closeCurveLo))
+                    return t * t * (3 - 2 * t)
                 }
-                lEyeClosedRaw *= 3.0
-                rEyeClosedRaw *= 3.0
-
-                let lEyeClosed = CGFloat(norm(CGFloat(lEyeClosedRaw)))
-                let rEyeClosed = CGFloat(norm(CGFloat(rEyeClosedRaw)))
+                // Common-mode rejection: Vision drops BOTH eyes' openness when one closes. Invert the
+                // symmetric mixing so a real both-blink survives (both high -> both stay ~1) but a wink's
+                // bleed into the open eye is subtracted out. coact = co-activation strength (0..1).
+                let coact: Float = 0.6
+                let dL = norm((lEyeUnopened - coact * rEyeUnopened) / (1 - coact))
+                let dR = norm((rEyeUnopened - coact * lEyeUnopened) / (1 - coact))
+                let lEyeClosed = CGFloat(closeCurve(dL))
+                let rEyeClosed = CGFloat(closeCurve(dR))
                 newBlendShapes["eyesClosedL"] = Float(lEyeClosed)
                 newBlendShapes["eyesClosedR"] = Float(rEyeClosed)
 
@@ -836,18 +1004,26 @@ final class CameraModel: NSObject, ObservableObject {
                 newBlendShapes["cheekRaiserR"] = norm(lidTightenerR * 0.7)
                 
                 // eyeLook Up/Down/Left/Right (pupil/eye centroid relative to socket)
-                func eyeLook(_ which: Int, _ eyes: [[CGPoint]], _ pupil: [CGPoint], _ eyesWideOpenEstimateX: CGFloat, _ eyesWideOpenEstimateY: CGFloat) -> (up: Float, down: Float, left: Float, right: Float) {
+                // Vertical gaze ratio: pupil offset from eye centroid, normalized by eye half-width.
+                // Shared by eyeLook and the neutral-baseline capture so the two can't drift apart.
+                func eyeVerticalRatio(_ eye: [CGPoint], _ pupil: [CGPoint], _ widthEstimate: CGFloat) -> CGFloat {
+                    // No pupil => avg([]) is (0,0), which would peg the ratio. Bail to neutral instead.
+                    guard !eye.isEmpty, !pupil.isEmpty else { return 0 }
+                    let c = avg(pupil)
+                    var eyeCent = avg(eye)
+                    eyeCent.y += 0.0005
+                    return (c.y - eyeCent.y) / max(0.001, widthEstimate * 0.5)
+                }
+                let eyeLookVerticalGain: CGFloat = 6.0 // up/down sensitivity; tune on device
+                func eyeLook(_ which: Int, _ eyes: [[CGPoint]], _ pupil: [CGPoint], _ eyesWideOpenEstimateX: CGFloat, _ eyesWideOpenEstimateY: CGFloat, _ verticalNeutral: CGFloat) -> (up: Float, down: Float, left: Float, right: Float) {
                     let eye = eyes[which]
-                    guard !eye.isEmpty else { return (0,0,0,0) }
-                    
+                    // When the pupil isn't detected (common when looking up — the lid occludes it),
+                    // avg([]) returns (0,0) and the gaze would stick at max. Treat as centered instead.
+                    guard !eye.isEmpty, !pupil.isEmpty else { return (0,0,0,0) }
+
                     var c = avg(pupil)
                     //c.x /= faceW
                     //c.y /= faceH
-                    
-                    var eyeCent = avg(eye)
-                    eyeCent.y += 0.0005
-                    //eyeCent.x /= faceW
-                    //eyeCent.y /= faceH
 
                     let eyeLEdgeYLeft = eyes[0].min(by: { $0.x < $1.x })!.y
                     let eyeLEdgeYRight = eyes[0].max(by: { $0.x < $1.x })!.y
@@ -871,20 +1047,39 @@ final class CameraModel: NSObject, ObservableObject {
                     //let eyesWideOpenEstimateYCurrent = (maxY - minY)
                     //let estimatedEyeCenterY = (maxY) - (eyesWideOpenEstimateY * 0.5)
                     
-                    //let relY = (c.y - eyeEdgeY)
-                    let relY = (c.y - eyeCent.y)
-                    let dy = ((relY / max(0.001, eyesWideOpenEstimateX * 0.5)) + (1.0/3.0)) * 6.0 // tbh idk why this works, something something approximating the radius with the eye width
-                    let centeredDy = (dy)
-                    
+                    // Subtract the captured neutral so a resting gaze reads ~0.
+                    let vertRatio = eyeVerticalRatio(eye, pupil, eyesWideOpenEstimateX)
+                    let centeredDy = (vertRatio - verticalNeutral) * eyeLookVerticalGain
+
                     let up: Float = norm(-(centeredDy))
                     let down: Float = norm((centeredDy))
                     let left: Float = norm(-(centeredDx))
                     let right: Float = norm((centeredDx))
                     return (up, down, left, right)
                 }
-                let lLook = eyeLook(0, [lEyeImg, rEyeImg], lPupilImg, self.firstSampleEyeWidthL, self.firstSampleEyeHeightL)
-                let rLook = eyeLook(1, [lEyeImg, rEyeImg], rPupilImg, self.firstSampleEyeWidthR, self.firstSampleEyeHeightR)
-                
+                let lLook = eyeLook(0, [lEyeImg, rEyeImg], lPupilImg, self.firstSampleEyeWidthL, self.firstSampleEyeHeightL, self.firstSampleEyeGazeYL)
+                let rLook = eyeLook(1, [lEyeImg, rEyeImg], rPupilImg, self.firstSampleEyeWidthR, self.firstSampleEyeHeightR, self.firstSampleEyeGazeYR)
+
+                // Adaptive neutral: slowly recenter the gaze baseline toward the resting gaze, but ONLY while
+                // the eye is already near neutral. This corrects baseline drift (the cause of look-up/down
+                // latching at the rail) without fading a deliberately-held gaze, which sits outside the band.
+                let gazeAdaptBand: CGFloat = 0.04 // ratio units around neutral where we recalibrate
+                let gazeAdaptRate: CGFloat = 0.02 // how fast the neutral follows (per frame)
+                if self.sampledInitialFace {
+                    if !lPupilImg.isEmpty {
+                        let r = eyeVerticalRatio(lEyeImg, lPupilImg, self.firstSampleEyeWidthL)
+                        if abs(r - self.firstSampleEyeGazeYL) < gazeAdaptBand {
+                            self.firstSampleEyeGazeYL += (r - self.firstSampleEyeGazeYL) * gazeAdaptRate
+                        }
+                    }
+                    if !rPupilImg.isEmpty {
+                        let r = eyeVerticalRatio(rEyeImg, rPupilImg, self.firstSampleEyeWidthR)
+                        if abs(r - self.firstSampleEyeGazeYR) < gazeAdaptBand {
+                            self.firstSampleEyeGazeYR += (r - self.firstSampleEyeGazeYR) * gazeAdaptRate
+                        }
+                    }
+                }
+
                 newBlendShapes["eyesLookUpL"] = lLook.up
                 newBlendShapes["eyesLookDownL"] = lLook.down
                 newBlendShapes["eyesLookLeftL"] = lLook.right // TODO double check
@@ -918,6 +1113,76 @@ final class CameraModel: NSObject, ObservableObject {
                     newBlendShapes["outerBrowRaiserR"] = norm((rOuterUp * 4.0) - CGFloat(0.5*rEyeClosed))
                 }
 
+                // MARK: - Easy-tier blendshapes (heuristic, NEEDS ON-DEVICE TUNING)
+                // All gains/signs below are first guesses. Watch BlendShapesDebugView and tune:
+                // verify directions FIRST (these can be mirrored), then scale the gains.
+                let mouthLateralGain: Float = 8.0       // mouthLeft/Right sensitivity
+                let jawLateralGain: Float = 6.0         // jawSideways sensitivity
+                let lowerLipDropGain: Float = 12.0      // lowerLipDepressor sensitivity
+                let lowerLipJawCompensation: Float = 1.0 // how much jawDrop is subtracted from lowerLipDepressor
+                let upperLipRaiseGain: Float = 12.0     // upperLipRaiser sensitivity
+
+                // Per-frame baseline samples (read by the initial-sampling block further below).
+                var curJawOffsetX: CGFloat = self.firstSampleJawOffsetX
+                var curUpperLipGapL: CGFloat = self.firstSampleUpperLipGapL
+                var curUpperLipGapR: CGFloat = self.firstSampleUpperLipGapR
+                var curLowerLipDropL: CGFloat = self.firstSampleLowerLipDropL
+                var curLowerLipDropR: CGFloat = self.firstSampleLowerLipDropR
+
+                // mouthLeft / mouthRight: lateral shift of the mouth center vs. the neutral baseline.
+                // SIGN: +x == Right (min-x == L), matching the existing lip L/R convention. Flip if mirrored.
+                if !outerImg.isEmpty {
+                    let dx = Float(mouthCenter.x / faceW) - Float(firstSampleMouthCenterX)
+                    newBlendShapes["mouthRight"] = norm(dx * mouthLateralGain)
+                    newBlendShapes["mouthLeft"]  = norm(-dx * mouthLateralGain)
+                }
+
+                // jawSidewaysLeft / jawSidewaysRight: chin x vs. nose midline, baselined to cancel head yaw.
+                // SIGN: +x == Right, same convention as above. Flip if mirrored.
+                let noseMid: CGPoint?
+                if !noseCrestImg.isEmpty { noseMid = avg(noseCrestImg) }
+                else if !noseImg.isEmpty { noseMid = avg(noseImg) }
+                else { noseMid = nil }
+                if !contourImg.isEmpty, let mid = noseMid {
+                    let chinX = contourImg.max(by: { $0.y < $1.y })!.x // lowest contour point ≈ chin
+                    curJawOffsetX = (chinX - mid.x) / faceW
+                    let dxJaw = Float(curJawOffsetX) - Float(self.firstSampleJawOffsetX)
+                    newBlendShapes["jawSidewaysRight"] = norm(dxJaw * jawLateralGain)
+                    newBlendShapes["jawSidewaysLeft"]  = norm(-dxJaw * jawLateralGain)
+                }
+
+                // Per-side lip vertical motion: split the roll-corrected outer lip by mouth-center x.
+                if !outerImg.isEmpty {
+                    let mcx = mouthCenter.x
+                    let outerLeft  = outerImg.filter { $0.x <= mcx } // min-x side == L
+                    let outerRight = outerImg.filter { $0.x >= mcx }
+                    let centerY = mouthCenter.y / faceH
+
+                    if !outerLeft.isEmpty && !outerRight.isEmpty {
+                        // lowerLipDepressor: lower-lip bottom drops below mouth center, beyond jaw-driven opening.
+                        curLowerLipDropL = (outerLeft.max(by: { $0.y < $1.y })!.y  / faceH) - centerY
+                        curLowerLipDropR = (outerRight.max(by: { $0.y < $1.y })!.y / faceH) - centerY
+                        let depL = (Float(curLowerLipDropL) - Float(self.firstSampleLowerLipDropL)) * lowerLipDropGain
+                        let depR = (Float(curLowerLipDropR) - Float(self.firstSampleLowerLipDropR)) * lowerLipDropGain
+                        newBlendShapes["lowerLipDepressorL"] = norm(depL - jawDropCurrent * lowerLipJawCompensation)
+                        newBlendShapes["lowerLipDepressorR"] = norm(depR - jawDropCurrent * lowerLipJawCompensation)
+
+                        // upperLipRaiser: upper-lip top rises toward the nose base (gap shrinks).
+                        if !noseImg.isEmpty {
+                            let noseBottomY = noseImg.max(by: { $0.y < $1.y })!.y / faceH // lowest nose point ≈ nostril base
+                            curUpperLipGapL = (outerLeft.min(by: { $0.y < $1.y })!.y  / faceH) - noseBottomY
+                            curUpperLipGapR = (outerRight.min(by: { $0.y < $1.y })!.y / faceH) - noseBottomY
+                            newBlendShapes["upperLipRaiserL"] = norm((Float(self.firstSampleUpperLipGapL) - Float(curUpperLipGapL)) * upperLipRaiseGain)
+                            newBlendShapes["upperLipRaiserR"] = norm((Float(self.firstSampleUpperLipGapR) - Float(curUpperLipGapR)) * upperLipRaiseGain)
+                        }
+                    }
+                }
+
+                // upperLidRaiser = eye WIDEN: raw openness beyond the calibrated neutral, per eye.
+                let widenFrac: Float = 0.25  // ~25% wider than neutral reads as full widen; tune
+                newBlendShapes["upperLidRaiserL"] = norm((lEyeOpenedRaw - self.firstSampleEyeOpenRawNeutralL) / max(0.0001, self.firstSampleEyeOpenRawNeutralL * widenFrac))
+                newBlendShapes["upperLidRaiserR"] = norm((rEyeOpenedRaw - self.firstSampleEyeOpenRawNeutralR) / max(0.0001, self.firstSampleEyeOpenRawNeutralR * widenFrac))
+
                 // Not possible with Persona avatars?
 //                newBlendShapes["noseWrinklerL"] = 0.0
 //                newBlendShapes["noseWrinklerR"] = 0.0
@@ -928,49 +1193,132 @@ final class CameraModel: NSObject, ObservableObject {
 //                    newBlendShapes["tongueOut"] = 0.0//norm(t)
 //                }
                 
-                // Recurrent state
-                if self.firstSampleEyeHeightL < (eyeHeightL) {
-                    self.firstSampleEyeHeightL = (eyeHeightL)
-                }
-                if self.firstSampleEyeHeightR < (eyeHeightR) {
-                    self.firstSampleEyeHeightR = (eyeHeightR)
-                }
-                
-                if self.firstSampleEyeWidthL < (eyeWidthL) {
-                    self.firstSampleEyeWidthL = (eyeWidthL)
-                }
-                if self.firstSampleEyeWidthR < (eyeWidthR) {
-                    self.firstSampleEyeWidthR = (eyeWidthR)
-                }
-                
-                if self.firstSampleEyeMaxYL < (eyeMaxYL / faceH) {
-                    self.firstSampleEyeMaxYL = eyeMaxYL / faceH
-                }
-                if self.firstSampleEyeMaxYR < (eyeMaxYR / faceH) {
-                    self.firstSampleEyeMaxYR = eyeMaxYR / faceH
-                }
-                
-                if !self.sampledInitialFace {
-                    self.firstSampleMouthWidth = mouthWidth / faceW
-                    self.firstSampleMouthWidthL = mouthWidthL / faceW
-                    self.firstSampleMouthWidthR = mouthWidthR / faceW
-                    self.firstSampleMouthCenterY = mouthCenter.y / faceH
-                    self.firstSampleMouthCenterX = mouthCenter.x / faceW
-                    self.firstSampleMouthMinX = mouthMinX / faceW
-                    self.firstSampleMouthMaxX = mouthMaxX / faceW
-                    self.firstSampleEyeWidthL = eyeWidthL
-                    self.firstSampleEyeHeightL = eyeHeightL
-                    self.firstSampleEyeMinYL = eyeMinYL / faceH
-                    self.firstSampleEyeMaxYL = eyeMaxYL / faceH
-                    self.firstSampleEyeWidthR = eyeWidthR
-                    self.firstSampleEyeHeightR = eyeHeightR
-                    self.firstSampleEyeMinYR = eyeMinYR / faceH
-                    self.firstSampleEyeMaxYR = eyeMaxYR / faceH
-                    //self.firstSampleEyeOpenness = (lEyeOpenedRaw + rEyeOpenedRaw) * 0.5
-                    
-                    if frameIdx > 30 {
-                        self.sampledInitialFace = true
+                // Automatic calibration. .neutral/.done: detect a held-still (≈neutral) pose and average the
+                // baselines, then cooldown. .closing: capture the eyes-closed reference. No button.
+                let calibNow = ProcessInfo.processInfo.systemUptime
+#if ENABLE_FACE_RECALIBRATION
+                self.secondsUntilRecalib = (self.calibPhase == .done && self.armedForRecalib)
+                    ? max(0, self.calibCooldownSeconds - (calibNow - self.lastSignificantMovementTime)) : 0
+#else
+                self.secondsUntilRecalib = 0
+#endif
+
+                if self.calibPhase == .closing {
+                    // "Close your eyes" window: track the most-closed openness per eye.
+                    self.isCalibrating = true
+                    self.closingMinRawL = min(self.closingMinRawL, lEyeOpenedRaw)
+                    self.closingMinRawR = min(self.closingMinRawR, rEyeOpenedRaw)
+                    if calibNow - self.closingStart >= self.calibClosingSeconds {
+                        // Fall back to a fraction of neutral if the user didn't actually close.
+                        // Deepest close seen, nudged 25% back toward neutral so a *normal* close (not a hard
+                        // clench) reads as fully closed. Fallback to neutral*0.4 if the user didn't close.
+                        let closedBlendL = self.closingMinRawL + (self.firstSampleEyeOpenRawNeutralL - self.closingMinRawL) * 0.25
+                        let closedBlendR = self.closingMinRawR + (self.firstSampleEyeOpenRawNeutralR - self.closingMinRawR) * 0.25
+                        self.firstSampleEyeClosedRawL = (self.firstSampleEyeOpenRawNeutralL - self.closingMinRawL > 0.02) ? closedBlendL : self.firstSampleEyeOpenRawNeutralL * 0.4
+                        self.firstSampleEyeClosedRawR = (self.firstSampleEyeOpenRawNeutralR - self.closingMinRawR > 0.02) ? closedBlendR : self.firstSampleEyeOpenRawNeutralR * 0.4
+                        self.calibPhase = .done
+                        self.hasCalibratedOnce = true
+                        self.isCalibrating = false
+                        self.lastCalibrationTime = calibNow
+                        self.calibrationRequested = false
+                        // Persist the calibration so future sessions skip straight to tracking.
+                        ALVRClientApp.gStore.settings.faceCalibration = self.exportCalibration()
+                        try? ALVRClientApp.gStore.save(settings: ALVRClientApp.gStore.settings)
+                        // Calibration done -> release the stream.
+                        EventHandler.shared.faceCalibrationPending = false
+                        AudioServicesPlaySystemSound(1114)
                     }
+                } else {
+                // Head/mouth position only — excludes eye openness so natural blinks don't register as
+                // movement and reset the neutral capture.
+                let stabilityFeat: [CGFloat] = [mouthCenter.x / faceW, mouthCenter.y / faceH, mouthWidth / faceW]
+                var faceMotion: CGFloat = .greatestFiniteMagnitude
+                if self.prevStabilityFeat.count == stabilityFeat.count {
+                    faceMotion = zip(stabilityFeat, self.prevStabilityFeat).reduce(CGFloat(0)) { $0 + abs($1.0 - $1.1) }
+                }
+                self.prevStabilityFeat = stabilityFeat
+                // "Still enough" tolerates minor landmark jitter; only a real movement (calibSignificantMotion)
+                // resets the count, so the capture can actually reach calibStableFrames.
+                let faceStill = faceMotion < self.calibSignificantMotion
+                if faceMotion > self.calibSignificantMotion {
+                    self.lastSignificantMovementTime = calibNow
+                    if self.calibPhase == .done { self.armedForRecalib = true }
+                }
+                // Re-calibrate only after a real movement followed by calibCooldownSeconds of calm (settled).
+                // Define ENABLE_FACE_RECALIBRATION in the build's Swift compilation conditions to enable it;
+                // otherwise only the one-time initial calibration runs.
+                // The first-time neutral capture only runs once the user has pressed Calibrate.
+                let initialCalib = self.calibPhase == .neutral && self.calibrationRequested
+                    && (calibNow - self.calibrationRequestedTime >= self.calibStartDelaySeconds)
+#if ENABLE_FACE_RECALIBRATION
+                let calibEligible = initialCalib ||
+                    (self.armedForRecalib && (calibNow - self.lastSignificantMovementTime) >= self.calibCooldownSeconds)
+#else
+                let calibEligible = initialCalib
+#endif
+
+                if calibEligible && faceStill {
+                    self.isCalibrating = true
+                    // Average the neutral across the still window (incremental running mean) so per-frame
+                    // landmark noise doesn't bake into the baseline.
+                    self.calibSampleCount += 1
+                    let nD = Double(self.calibSampleCount)
+                    let nC = CGFloat(self.calibSampleCount)
+                    let nF = Float(self.calibSampleCount)
+                    accMean(&self.firstSampleMouthWidth, Double(mouthWidth / faceW), nD)
+                    accMean(&self.firstSampleMouthWidthL, Double(mouthWidthL / faceW), nD)
+                    accMean(&self.firstSampleMouthWidthR, Double(mouthWidthR / faceW), nD)
+                    accMean(&self.firstSampleMouthCenterY, Double(mouthCenter.y / faceH), nD)
+                    accMean(&self.firstSampleMouthCenterX, Double(mouthCenter.x / faceW), nD)
+                    accMean(&self.firstSampleMouthMinX, Double(mouthMinX / faceW), nD)
+                    accMean(&self.firstSampleMouthMaxX, Double(mouthMaxX / faceW), nD)
+                    accMean(&self.firstSampleEyeWidthL, eyeWidthL, nC)
+                    accMean(&self.firstSampleEyeHeightL, eyeHeightL, nC)
+                    accMean(&self.firstSampleEyeMinYL, eyeMinYL / faceH, nC)
+                    accMean(&self.firstSampleEyeMaxYL, eyeMaxYL / faceH, nC)
+                    accMean(&self.firstSampleEyeWidthR, eyeWidthR, nC)
+                    accMean(&self.firstSampleEyeHeightR, eyeHeightR, nC)
+                    accMean(&self.firstSampleEyeMinYR, eyeMinYR / faceH, nC)
+                    accMean(&self.firstSampleEyeMaxYR, eyeMaxYR / faceH, nC)
+
+                    // Neutral vertical gaze (so eyesLookDown/Up read ~0 at rest)
+                    if !lPupilImg.isEmpty { accMean(&self.firstSampleEyeGazeYL, eyeVerticalRatio(lEyeImg, lPupilImg, eyeWidthL), nC) }
+                    if !rPupilImg.isEmpty { accMean(&self.firstSampleEyeGazeYR, eyeVerticalRatio(rEyeImg, rPupilImg, eyeWidthR), nC) }
+
+                    // Easy-tier baselines
+                    accMean(&self.firstSampleJawOffsetX, curJawOffsetX, nC)
+                    accMean(&self.firstSampleUpperLipGapL, curUpperLipGapL, nC)
+                    accMean(&self.firstSampleUpperLipGapR, curUpperLipGapR, nC)
+                    accMean(&self.firstSampleLowerLipDropL, curLowerLipDropL, nC)
+                    accMean(&self.firstSampleLowerLipDropR, curLowerLipDropR, nC)
+                    accMean(&self.firstSampleCheekWidthL, curCheekWidthL, nC)
+                    accMean(&self.firstSampleCheekWidthR, curCheekWidthR, nC)
+                    accMean(&self.firstSampleEyeOpenRawNeutralL, lEyeOpenedRaw, nF)
+                    accMean(&self.firstSampleEyeOpenRawNeutralR, rEyeOpenedRaw, nF)
+
+                    if self.calibSampleCount >= self.calibStableFrames {
+                        self.sampledInitialFace = true
+                        self.lastCalibrationTime = calibNow
+                        self.calibSampleCount = 0
+                        if self.calibPhase == .neutral {
+                            // Neutral captured -> chime and ask the user to close their eyes.
+                            self.calibPhase = .closing
+                            self.closingStart = calibNow
+                            self.closingMinRawL = lEyeOpenedRaw
+                            self.closingMinRawR = rEyeOpenedRaw
+                            self.isCalibrating = true
+                            AudioServicesPlaySystemSound(1113)
+                        } else {
+                            self.isCalibrating = false
+                            self.armedForRecalib = false
+                        }
+                    }
+                } else {
+                    // Not capturing this frame (settle delay, waiting to hold still, or cooldown): drop any
+                    // partial average but keep the prompt up while a calibration is requested.
+                    self.calibSampleCount = 0
+                    self.isCalibrating = self.calibPhase == .neutral && self.calibrationRequested
+                }
                 }
                 WorldTracker.shared.fbFaceTrackingValid = true
             }
@@ -979,16 +1327,37 @@ final class CameraModel: NSObject, ObservableObject {
             }
 
             self.blendShapes = newBlendShapes
-            
+
+            // Build this frame's target. Every per-shape computation is guarded on a landmark region
+            // (lips/brows/contour/pupil); a shape absent from newBlendShapes (region dropped this frame)
+            // targets 0, so the filter eases it back to neutral instead of letting it stick.
+            let slotCount = XrFaceExpression2FB.count.rawValue
+            var target = [Float](repeating: 0.0, count: slotCount)
             for shape in self.blendShapes {
                 let idx = XrFaceExpression2FB.fromString[shape.key, default: XrFaceExpression2FB.count].rawValue
-                if idx < XrFaceExpression2FB.count.rawValue {
-                    WorldTracker.shared.fbFaceTracking[idx] = shape.value
-                }
-                else {
-                    print("Failed to map:", shape.key)
-                }
+                if idx < slotCount { target[idx] = shape.value }
+                else { print("Failed to map:", shape.key) }
             }
+
+            // One Euro low-pass per channel to take the edge off visionOS's inherent landmark jitter.
+            let now = ProcessInfo.processInfo.systemUptime
+            let dt = self.oeInitialized ? Float(max(0.001, now - self.oeLastTime)) : Float(1.0 / 30.0)
+            self.oeLastTime = now
+            for i in 0..<slotCount {
+                let x = target[i]
+                if self.oeInitialized {
+                    let dx = (x - self.oePrev[i]) / dt
+                    self.oeDeriv[i] += self.oneEuroAlpha(self.oeDCutoff, dt) * (dx - self.oeDeriv[i])
+                    let cutoff = self.oeMinCutoff + self.oeBeta * abs(self.oeDeriv[i])
+                    self.oeValue[i] += self.oneEuroAlpha(cutoff, dt) * (x - self.oeValue[i])
+                } else {
+                    self.oeValue[i] = x
+                    self.oeDeriv[i] = 0
+                }
+                self.oePrev[i] = x
+                WorldTracker.shared.fbFaceTracking[i] = max(0.0, min(1.0, self.oeValue[i]))
+            }
+            self.oeInitialized = true
         }
     }
     

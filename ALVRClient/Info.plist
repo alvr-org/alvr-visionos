@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleIdentifier</key>
-	<string></string>
 	<key>GCSupportedGameControllers</key>
 	<array>
 		<dict>
@@ -15,18 +13,12 @@
 			<string>ExtendedGamepad</string>
 		</dict>
 	</array>
+	<key>LSSupportsGameMode</key>
+	<true/>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_alvr._tcp</string>
 	</array>
-	<key>NSHandsTrackingUsageDescription</key>
-	<string>ALVR would like to send hand positions and skeletons to SteamVR.</string>
-	<key>NSWorldSensingUsageDescription</key>
-	<string>ALVR would like to scan your surroundings for obstacles and playspace boundaries.</string>
-	<key>NSAccessoryTrackingUsageDescription</key>
-	<string>ALVR would like to send spatial accessory positions to SteamVR.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>ALVR would like to track and send face tracking data to SteamVR, using your Spatial Persona camera.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>
@@ -35,10 +27,6 @@
 		<true/>
 	</dict>
 	<key>UIFileSharingEnabled</key>
-	<true/>
-	<key>GCSupportsControllerUserInteraction</key>
-	<true/>
-	<key>LSSupportsGameMode</key>
 	<true/>
 </dict>
 </plist>
