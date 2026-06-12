@@ -923,10 +923,10 @@ final class CameraModel: NSObject, ObservableObject {
 //                newBlendShapes["noseWrinklerR"] = 0.0
 
                 // tongueOut (use inner mouth height beyond jawOpen as proxy)
-//                if mouthHeight > 0 {
-//                    let t = max(0, (mouthHeight / faceH) - 0.12) * 4.0
-//                    newBlendShapes["tongueOut"] = 0.0//norm(t)
-//                }
+                if mouthHeight > 0 {
+                    let t = max(0, (mouthHeight / faceH) - 0.12) * 4.0
+                    newBlendShapes["tongueOut"] = norm(t)
+                }
                 
                 // Recurrent state
                 if self.firstSampleEyeHeightL < (eyeHeightL) {
