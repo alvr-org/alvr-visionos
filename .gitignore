@@ -4,3 +4,10 @@ alvrrepack
 Override.xcconfig
 xcuserdata/
 .DS_Store
+CLAUDE.md
+/build/*
+ALVRClient.gputrace/
+ALVRClient.xcodeproj/xcshareddata/
+ALVRClient.xcodeproj/xcshareddata_/
+ALVRClient_bicubic.gputrace/
+ALVRClient_profiled.gputrace/

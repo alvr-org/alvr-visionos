@@ -111,6 +111,28 @@ class Renderer {
     var videoFrameDepthPipelineState: MTLRenderPipelineState!
     var fullscreenQuadBuffer:MTLBuffer!
     var unitVectorXYZBuffer:MTLBuffer!
+    /// Steam Controller body wireframe. Built on first use rather than at init,
+    /// because the overwhelmingly common case is that no Steam Controller is
+    /// connected and nothing ever asks to draw it.
+    private var ibexMeshBufferStorage:MTLBuffer?
+    private var ibexMeshBuildAttempted = false
+    var ibexMeshVertexCount: Int = 0
+
+    /// Uploads `IbexModel`'s decimated shell on first call. Returns nil if the
+    /// resource is missing, and does not retry — a missing bundle resource will
+    /// not fix itself, and retrying every frame would spam the log.
+    func ibexMeshBuffer() -> MTLBuffer? {
+        if ibexMeshBuildAttempted { return ibexMeshBufferStorage }
+        ibexMeshBuildAttempted = true
+        let verts = IbexModel.wireframeVertices
+        guard !verts.isEmpty else { return nil }
+        verts.withUnsafeBytes {
+            ibexMeshBufferStorage = device.makeBuffer(bytes: $0.baseAddress!, length: $0.count)
+        }
+        ibexMeshVertexCount = IbexModel.wireframeVertexCount
+        print("Renderer: Ibex wireframe uploaded, \(ibexMeshVertexCount) verts")
+        return ibexMeshBufferStorage
+    }
     var hudPipelineState: MTLRenderPipelineState!
     var hudQuadBuffer: MTLBuffer!
     var depthStateAlwaysNoWrite: MTLDepthStencilState!
@@ -167,10 +189,6 @@ class Renderer {
                 //self.layerRenderer?.renderQuality = .init(1.0)
             }
 #endif
-        }
-        
-        guard let settings = Settings.getAlvrSettings() else {
-            fatalError("streaming started: failed to retrieve alvr settings")
         }
 
         encodingGamma = EventHandler.shared.encodingGamma
@@ -268,11 +286,8 @@ class Renderer {
     }
     
     func rebuildRenderPipelines() {
-        guard let settings = Settings.getAlvrSettings() else {
-            fatalError("streaming started: failed to retrieve alvr settings")
-        }
         print("rebuildRenderPipelines")
-            
+
         encodingGamma = EventHandler.shared.encodingGamma
         hdrEnabled = EventHandler.shared.enableHdr
         if hdrEnabled {
@@ -283,8 +298,26 @@ class Renderer {
             currentRenderColorFormat = renderColorFormatSDR
             currentDrawableRenderColorFormat = renderColorFormatSDR
         }
-            
-        let foveationVars = FFR.calculateFoveationVars(alvrEvent: EventHandler.shared.streamEvent!.STREAMING_STARTED, foveationSettings: settings.video.foveated_encoding)
+
+        // Everything below builds the *video frame* pipelines, and both of its
+        // inputs only exist once a streamer has told us about the stream:
+        // `settings` comes from the session config, and `streamEvent` from
+        // STREAMING_STARTED. The renderer can legitimately be running before
+        // either arrives — the offline input debug space brings it up with no
+        // server at all — so this is a normal state, not a failure.
+        //
+        // Nothing is lost by deferring: there are no video frames to draw yet,
+        // the pipeline states are implicitly-unwrapped optionals that stay nil
+        // until used, and the first IPD report after streaming goes active
+        // re-enters this function (see the `lastIpd == -1` branch in
+        // renderFrame) and builds them for real.
+        guard let settings = Settings.getAlvrSettings(),
+              let streamEvent = EventHandler.shared.streamEvent else {
+            print("rebuildRenderPipelines: no stream yet, deferring video pipelines")
+            return
+        }
+
+        let foveationVars = FFR.calculateFoveationVars(alvrEvent: streamEvent.STREAMING_STARTED, foveationSettings: settings.video.foveated_encoding)
         videoFramePipelineState_YpCbCrBiPlanar = try! buildRenderPipelineForVideoFrameWithDevice(
                             device: device,
                             mtlVertexDescriptor: mtlVertexDescriptor,
@@ -874,6 +907,18 @@ class Renderer {
 
             WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)
         }
+        else {
+#if DEBUG_ALVR_TRACKING
+            let viewFovs = EventHandler.shared.viewFovs
+            let viewTransforms = EventHandler.shared.viewTransforms
+
+            let targetTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))
+            let reportedTargetTimestamp = vsyncTime
+            var anchorTimestamp = vsyncTime// + (Double(min(alvr_get_head_prediction_offset_ns(), WorldTracker.maxPrediction)) / Double(NSEC_PER_SEC))//LayerRenderer.Clock.Instant.epoch.duration(to: mainDrawable.frameTiming.trackableAnchorTime).timeInterval
+            
+            WorldTracker.shared.sendTracking(viewTransforms: viewTransforms, viewFovs: viewFovs, targetTimestamp: targetTimestamp, reportedTargetTimestamp: reportedTargetTimestamp, anchorTimestamp: anchorTimestamp, delay: 0.0)
+#endif
+        }
         
         let deviceAnchor = WorldTracker.shared.worldTracking.queryDeviceAnchor(atTimestamp: vsyncTime)
         
@@ -1367,9 +1412,35 @@ class Renderer {
                 renderEncoder.drawPrimitives(type: .triangle, vertexStart: 3*i, vertexCount: 3)
             }
         }
-        
+
+        // Render solid bodies (currently only the Steam Controller shell).
+        if !WorldTracker.shared.debuggableMeshes.isEmpty, let meshBuffer = ibexMeshBuffer(), ibexMeshVertexCount > 0 {
+            for (matTransform, color) in WorldTracker.shared.debuggableMeshes {
+                renderEncoder.setVertexBuffer(meshBuffer, offset: 0, index: VertexAttribute.position.rawValue)
+                // Texcoords are unused by the plane fragment shader, which is
+                // flat-coloured — bind the position buffer again rather than
+                // carrying a second one purely to satisfy the descriptor.
+                renderEncoder.setVertexBuffer(meshBuffer, offset: 0, index: VertexAttribute.texcoord.rawValue)
+
+                selectNextPlaneUniformBuffer()
+                self.planeUniforms[0].planeTransform = matTransform
+                self.planeUniforms[0].planeColor = color
+                self.planeUniforms[0].planeDoProximity = 0.0
+                if firstBind {
+                    renderEncoder.setVertexBuffer(dynamicPlaneUniformBuffer, offset:planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                    firstBind = false
+                } else {
+                    renderEncoder.setVertexBufferOffset(planeUniformBufferOffset, index: BufferIndex.planeUniforms.rawValue)
+                }
+
+                renderEncoder.setTriangleFillMode(.lines)
+                renderEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: ibexMeshVertexCount)
+            }
+        }
+
         WorldTracker.shared.debuggableMats = []
         WorldTracker.shared.debuggableScales = []
+        WorldTracker.shared.debuggableMeshes = []
         WorldTracker.shared.unlockDebuggables()
         
         renderEncoder.popDebugGroup()
@@ -1752,7 +1823,7 @@ class Renderer {
         
         self.updateGameStateForVideoFrame(whichIdx, drawable: drawable, viewTransforms: viewTransforms, sentViewTangents: sentViewTangents, realViewTangents: realViewTangents, nearZ: nearZ, farZ: farZ, framePose: framePose, simdDeviceAnchor: simdDeviceAnchor)
         
-        if fadeInOverlayAlpha > 0.0 || WorldTracker.shared.debuggableMats.count > 0 {
+        if fadeInOverlayAlpha > 0.0 || WorldTracker.shared.debuggableMats.count > 0 || WorldTracker.shared.debuggableMeshes.count > 0 {
             // Not super kosher--we need the depth to be correct for the video frame box, but we can't have the view
             // outside of the video frame box be 0.0 depth or it won't get rastered by the compositor at all.
             // So we re-render the frame depth.

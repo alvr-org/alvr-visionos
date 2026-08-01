@@ -12,6 +12,7 @@ struct Entry: View {
     @Binding var chromaKeyColor: Color
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.self) var environment
+    @Environment(\.openWindow) private var openWindow
     let saveAction: ()->Void
     
     let refreshRatesPost20 = ["Default", "90", "96", "100", "120"]
@@ -288,6 +289,13 @@ struct Entry: View {
                         .onChange(of: gStore.settings.showPerformanceHud) {
                             saveAction()
                         }
+
+                        Button {
+                            openWindow(id: "InputDebug")
+                        } label: {
+                            Label("Controller Input Debug", systemImage: "gamecontroller")
+                        }
+                        .padding(.top)
                     }
                     .frame(minWidth: 450)
                     .padding()

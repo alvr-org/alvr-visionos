@@ -258,11 +258,17 @@ class EventHandler: ObservableObject {
     // Various hacks to be performed when the headset is removed or the app is exiting.
     func handleHeadsetRemoved() {
         preventAudioCracklingOnExit()
+        // Hand the Steam Controller back to the system on the way out, for the
+        // same reason the audio session is torn down here: leaving it out of
+        // lizard mode while nobody is looking at the app means its trackpads
+        // quietly drive the desktop instead.
+        InputDebugSession.shared.suspend()
     }
-    
+
     // Various hacks to be performed when the headset is donned and VR is entering.
     func handleHeadsetEntered() {
         fixAudioForDirectStereo()
+        InputDebugSession.shared.resume()
         Task {
             await WorldTracker.shared.initializeAr()
         }
@@ -709,6 +715,12 @@ class EventHandler: ObservableObject {
                             service.cancel()
                             self.mdnsListener = nil
                         }
+                        // Stops the lizard-mode keepalive. This works precisely
+                        // because it is the *absence* of traffic and not a
+                        // write: nothing has to reach the controller before
+                        // exit(0) kills us, and the controller's own watchdog
+                        // restores lizard mode a few seconds later.
+                        SteamControllerManager.shared.stop()
                         exit(0)
                     }
                 }

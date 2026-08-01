@@ -195,6 +195,32 @@ struct ALVRClientApp: App {
             }
         }
         
+        // Offline exercise harness for the controller input stack. Deliberately
+        // a plain window rather than an ImmersiveSpace: it needs to be readable
+        // alongside the lobby with no renderer running, and it must not compete
+        // with the client space for the single immersive slot.
+        WindowGroup(id: "InputDebug") {
+            InputDebugView()
+        }
+        .windowResizability(.contentSize)
+
+        // Offline test space: the real Metal renderer, entered with no streamer
+        // connected, which is the state that already draws the room wireframe.
+        // Deliberately contains no UI of its own — the input debug window stays
+        // open in front of it, which is the whole point of entering from there.
+        //
+        // Pinned to .mixed rather than sharing clientImmersionStyle: a .full
+        // space would hide that window.
+        ImmersiveSpace(id: "InputDebugSpace") {
+            CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
+                let system = MetalClientSystem(layerRenderer)
+                system.startRenderLoop()
+            }
+        }
+        .disablePersistentSystemOverlaysForVisionOS2(shouldDisable: ALVRClientApp.gStore.settings.disablePersistentSystemOverlays ? .hidden : .automatic)
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+        .upperLimbVisibility(.visible)
+
         ImmersiveSpace(id: "DummyImmersiveSpace") {
             CompositorLayer(configuration: ContentStageConfiguration()) { layerRenderer in
                 let renderer = DummyMetalRenderer(layerRenderer)

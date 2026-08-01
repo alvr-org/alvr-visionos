@@ -26,6 +26,15 @@
 		E702FBDC2B899B8700EE75D0 /* GlobalSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */; };
 		E70C9AEA2C9377F50035B4F9 /* Codable.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70C9AE92C9377F20035B4F9 /* Codable.swift */; };
 		E71352CE2DF784C60079F12B /* GCController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71352CD2DF784BF0079F12B /* GCController.swift */; };
+		E7A11A0200000000000000A2 /* InputTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A11A0100000000000000A1 /* InputTypes.swift */; };
+		E7A11A0400000000000000A4 /* SteamControllerDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A11A0300000000000000A3 /* SteamControllerDevice.swift */; };
+		E7A11A0700000000000000A7 /* InteractionProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A11A0600000000000000A6 /* InteractionProfile.swift */; };
+		E7A11A0900000000000000A9 /* InputSink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A11A0800000000000000A8 /* InputSink.swift */; };
+		E7A11A0B00000000000000AB /* InputDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A11A0A00000000000000AA /* InputDebugView.swift */; };
+		E7A11A0D00000000000000AD /* IbexModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A11A0C00000000000000AC /* IbexModel.swift */; };
+		E7A11A0F00000000000000AF /* ControllerPoseFuser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A11A0E00000000000000AE /* ControllerPoseFuser.swift */; };
+		E7A11A1300000000000000B3 /* ComponentProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A11A1200000000000000B2 /* ComponentProbe.swift */; };
+		E7A11A1100000000000000B1 /* ibex_ev1.mesh in Resources */ = {isa = PBXBuildFile; fileRef = E7A11A1000000000000000B0 /* ibex_ev1.mesh */; };
 		E71DEF972C18D478008A2074 /* RealityKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF932C18D325008A2074 /* RealityKit.swift */; };
 		E71DEF982C18D478008A2074 /* SwiftUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF942C18D325008A2074 /* SwiftUI.swift */; };
 		E71DEF9A2C18D4B4008A2074 /* ALVRTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71DEF992C18D4B4008A2074 /* ALVRTypes.swift */; };
@@ -111,6 +120,15 @@
 		E702FBDB2B899B8300EE75D0 /* GlobalSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSettings.swift; sourceTree = "<group>"; };
 		E70C9AE92C9377F20035B4F9 /* Codable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codable.swift; sourceTree = "<group>"; };
 		E71352CD2DF784BF0079F12B /* GCController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GCController.swift; sourceTree = "<group>"; };
+		E7A11A0100000000000000A1 /* InputTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputTypes.swift; sourceTree = "<group>"; };
+		E7A11A0300000000000000A3 /* SteamControllerDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SteamControllerDevice.swift; sourceTree = "<group>"; };
+		E7A11A0600000000000000A6 /* InteractionProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionProfile.swift; sourceTree = "<group>"; };
+		E7A11A0800000000000000A8 /* InputSink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputSink.swift; sourceTree = "<group>"; };
+		E7A11A0A00000000000000AA /* InputDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputDebugView.swift; sourceTree = "<group>"; };
+		E7A11A0C00000000000000AC /* IbexModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IbexModel.swift; sourceTree = "<group>"; };
+		E7A11A0E00000000000000AE /* ControllerPoseFuser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerPoseFuser.swift; sourceTree = "<group>"; };
+		E7A11A1200000000000000B2 /* ComponentProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComponentProbe.swift; sourceTree = "<group>"; };
+		E7A11A1000000000000000B0 /* ibex_ev1.mesh */ = {isa = PBXFileReference; lastKnownFileType = file; path = ibex_ev1.mesh; sourceTree = "<group>"; };
 		E71DEF932C18D325008A2074 /* RealityKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealityKit.swift; sourceTree = "<group>"; };
 		E71DEF942C18D325008A2074 /* SwiftUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUI.swift; sourceTree = "<group>"; };
 		E71DEF992C18D4B4008A2074 /* ALVRTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ALVRTypes.swift; sourceTree = "<group>"; };
@@ -203,6 +221,7 @@
 			children = (
 				E71DEFB22C19263D008A2074 /* ALVRClient.entitlements */,
 				E71DEF962C18D425008A2074 /* Extensions */,
+				E7A11A0500000000000000A5 /* Input */,
 				8E1240FD2B7CC021005B75F2 /* Entry */,
 				8E739C892B7898EC0045ED16 /* Model */,
 				C5E590492B637C7E00328ED6 /* ALVRClient-Bridging-Header.h */,
@@ -257,6 +276,22 @@
 				E71DEF9B2C18D4DA008A2074 /* simd.swift */,
 			);
 			path = Extensions;
+			sourceTree = "<group>";
+		};
+		E7A11A0500000000000000A5 /* Input */ = {
+			isa = PBXGroup;
+			children = (
+				E7A11A0100000000000000A1 /* InputTypes.swift */,
+				E7A11A0300000000000000A3 /* SteamControllerDevice.swift */,
+				E7A11A0600000000000000A6 /* InteractionProfile.swift */,
+				E7A11A0800000000000000A8 /* InputSink.swift */,
+				E7A11A0A00000000000000AA /* InputDebugView.swift */,
+				E7A11A0C00000000000000AC /* IbexModel.swift */,
+				E7A11A0E00000000000000AE /* ControllerPoseFuser.swift */,
+				E7A11A1200000000000000B2 /* ComponentProbe.swift */,
+				E7A11A1000000000000000B0 /* ibex_ev1.mesh */,
+			);
+			path = Input;
 			sourceTree = "<group>";
 		};
 		E71DEFA62C192617008A2074 /* ALVREyeBroadcast */ = {
@@ -368,6 +403,7 @@
 				E7F222442BE2F21600D10191 /* SBSMaterial.usda in Resources */,
 				E7D606052C1B646D009E3343 /* EyeTrackingMats.usda in Resources */,
 				C5E5903C2B6379ED00328ED6 /* Preview Assets.xcassets in Resources */,
+				E7A11A1100000000000000B1 /* ibex_ev1.mesh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -412,6 +448,14 @@
 				E71DEF9C2C18D4DA008A2074 /* simd.swift in Sources */,
 				E78D482F2EBA76BB000F77D7 /* NALParser.swift in Sources */,
 				E71352CE2DF784C60079F12B /* GCController.swift in Sources */,
+				E7A11A0200000000000000A2 /* InputTypes.swift in Sources */,
+				E7A11A0400000000000000A4 /* SteamControllerDevice.swift in Sources */,
+				E7A11A0700000000000000A7 /* InteractionProfile.swift in Sources */,
+				E7A11A0900000000000000A9 /* InputSink.swift in Sources */,
+				E7A11A0B00000000000000AB /* InputDebugView.swift in Sources */,
+				E7A11A0D00000000000000AD /* IbexModel.swift in Sources */,
+				E7A11A0F00000000000000AF /* ControllerPoseFuser.swift in Sources */,
+				E7A11A1300000000000000B3 /* ComponentProbe.swift in Sources */,
 				8E739C8B2B78990B0045ED16 /* ViewModel.swift in Sources */,
 				656A9FCF2F04031600D8DE2D /* ChaperoneSystem.swift in Sources */,
 				E78D482D2EBA7508000F77D7 /* AV1Parser.swift in Sources */,

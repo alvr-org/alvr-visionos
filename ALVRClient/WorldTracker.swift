@@ -266,6 +266,11 @@ class WorldTracker {
     var sentPoses = 0
     var debuggableMats: [simd_float4x4] = []
     var debuggableScales: [Float] = []
+    /// Solid geometry to draw as wireframe, alongside the basis gadgets.
+    /// A pose gadget shows where we think something is; a body shows whether
+    /// that pose is actually *on* the object, which is the question the Steam
+    /// Controller fusion has to answer and cannot answer from three axes.
+    var debuggableMeshes: [(simd_float4x4, simd_float4)] = []
     var debuggablesLock = NSObject()
     var currentAppleOriginFromAnchor: simd_float4x4 = simd_float4x4()
     
@@ -964,6 +969,12 @@ class WorldTracker {
         WorldTracker.shared.debuggableMats.append(mat)
         WorldTracker.shared.debuggableScales.append(scale)
     }
+
+    /// Queues the controller body wireframe at `mat`. Call between
+    /// `lockDebuggables()` and `unlockDebuggables()`, like the pose gadgets.
+    func addDebuggableMesh(_ mat: simd_float4x4, _ color: simd_float4) {
+        WorldTracker.shared.debuggableMeshes.append((mat, color))
+    }
     
     func enqueueHapticsPulse(isLeft: Bool, amplitude: Float, duration: TimeInterval) {
         let now = CACurrentMediaTime()
@@ -1226,6 +1237,124 @@ class WorldTracker {
             return AlvrDeviceMotion(device_id: device_id, pose: pose, linear_velocity: (linVelAdjusted.x, linVelAdjusted.y, linVelAdjusted.z), angular_velocity: (controllerAngVel.x, controllerAngVel.y, controllerAngVel.z))
         }
         return nil
+    }
+
+    // MARK: - Steam Controller pose fusion
+
+    /// Solver state for the Steam Controller (2026).
+    ///
+    /// It gets its own path rather than joining `controllerToAlvrDeviceMotion`
+    /// because that function's first act is to look up an ARKit `AccessoryAnchor`,
+    /// and this device fundamentally does not have one — it is not a
+    /// `GCController` and not a spatial accessory. See `ALVRClient/Input/`.
+    let steamControllerFuser = ControllerPoseFuser()
+    /// Measures stick and pad positions off the thumb. Read from the debug
+    /// panel; nothing in the pose path consumes it.
+    let steamControllerProbe = ComponentProbe()
+    var lastSteamControllerPose: FusedControllerPose?
+    var steamControllerLock = NSObject()
+
+    /// Thread-safe read of the last fused Steam Controller pose.
+    func currentSteamControllerPose() -> FusedControllerPose? {
+        objc_sync_enter(steamControllerLock)
+        defer { objc_sync_exit(steamControllerLock) }
+        return lastSteamControllerPose
+    }
+
+    /// Palm point and wrist orientation in **Apple world space**.
+    ///
+    /// Note the absence of `worldTrackingSteamVRTransform.inverse`, which every
+    /// neighbouring helper applies. Fusion runs entirely in Apple's frame and
+    /// converts once at the end, the same way `controllerToAlvrDeviceMotion`
+    /// does; converting on the way in would mean filtering in one frame and
+    /// comparing against IMU data expressed in another.
+    private func handObservation(_ hand: HandAnchor?) -> HandObservation? {
+        guard let hand else { return nil }
+        guard let skeleton = hand.handSkeleton else {
+            let m = hand.originFromAnchorTransform
+            return HandObservation(palmPosition: m.columns.3.asFloat3(),
+                                   palmOrientation: simd_quaternion(m),
+                                   isTracked: hand.isTracked,
+                                   thumbTip: nil,
+                                   indexTip: nil)
+        }
+        // OpenXR's palm: midway between middle metacarpal and knuckle. Same
+        // definition `handAnchorToPose` uses, so the two agree about where a
+        // hand "is" even though they end up in different spaces.
+        let metacarpal = hand.originFromAnchorTransform * skeleton.joint(.middleFingerMetacarpal).anchorFromJointTransform
+        let knuckle = hand.originFromAnchorTransform * skeleton.joint(.middleFingerKnuckle).anchorFromJointTransform
+        let wrist = hand.originFromAnchorTransform * skeleton.joint(.wrist).anchorFromJointTransform
+        let palm = (metacarpal.columns.3.asFloat3() + knuckle.columns.3.asFloat3()) * 0.5
+        let thumb = hand.originFromAnchorTransform * skeleton.joint(.thumbTip).anchorFromJointTransform
+        let index = hand.originFromAnchorTransform * skeleton.joint(.indexFingerTip).anchorFromJointTransform
+        return HandObservation(palmPosition: palm,
+                               palmOrientation: simd_quaternion(wrist),
+                               isTracked: hand.isTracked,
+                               thumbTip: thumb.columns.3.asFloat3(),
+                               indexTip: index.columns.3.asFloat3())
+    }
+
+    /// Folds the latest controller report and hand anchors into a device pose.
+    ///
+    /// Cheap and early-outs when no Steam Controller is connected, which is the
+    /// normal case — this runs on every tracking submission.
+    func updateSteamControllerFusion(_ leftHand: HandAnchor?, _ rightHand: HandAnchor?, _ targetTs: Double) {
+        guard let device = SteamControllerManager.shared.connectedDevices.first,
+              let snapshot = device.snapshot() else {
+            objc_sync_enter(steamControllerLock)
+            lastSteamControllerPose = nil
+            objc_sync_exit(steamControllerLock)
+            return
+        }
+
+        let leftObs = handObservation(leftHand)
+        let rightObs = handObservation(rightHand)
+        let fused = steamControllerFuser.update(snapshot: snapshot,
+                                                left: leftObs,
+                                                right: rightObs,
+                                                now: CACurrentMediaTime())
+
+        if let fused {
+            steamControllerProbe.observe(pose: fused, snapshot: snapshot, left: leftObs, right: rightObs)
+        }
+
+        objc_sync_enter(steamControllerLock)
+        lastSteamControllerPose = fused
+        objc_sync_exit(steamControllerLock)
+
+#if DEBUG_ALVR_TRACKING
+        guard let fused else { return }
+        // Draw the shell itself, not just a basis. Three axes at the model
+        // origin cannot show whether the solved pose is actually *on* the
+        // object — the body silhouette against your real hands can, and that is
+        // the only check available for a device with no ground truth.
+        //
+        // Green when both grips are held (yaw is measured), amber when one is
+        // (yaw is being guessed), red when neither (dead reckoning).
+        let color: simd_float4
+        if fused.heldLeft && fused.heldRight {
+            color = simd_float4(0.2, 1.0, 0.3, 1.0)
+        } else if fused.heldLeft || fused.heldRight {
+            color = simd_float4(1.0, 0.7, 0.1, 1.0)
+        } else {
+            color = simd_float4(1.0, 0.2, 0.2, 1.0)
+        }
+
+        let model = ControllerPoseFuser.modelMatrix(fused)
+        WorldTracker.shared.lockDebuggables()
+        WorldTracker.shared.addDebuggableMesh(model, color)
+        // Where each virtual controller will be planted, so a wrong grip anchor
+        // shows up as a gadget floating off the handle rather than as a subtly
+        // wrong pose downstream.
+        for isLeft in [true, false] {
+            let (q, p) = ControllerPoseFuser.handPose(fused, isLeft: isLeft)
+            var m = simd_float4x4(q)
+            m.columns.3 = simd_float4(p, 1)
+            WorldTracker.shared.addDebuggablePose(m, 0.03)
+        }
+        WorldTracker.shared.addDebuggablePose(model * IbexModel.gripTransform, 0.05)
+        WorldTracker.shared.unlockDebuggables()
+#endif
     }
 
     func handAnchorToAlvrDeviceMotion(_ hand: HandAnchor, _ targetTs: Double) -> AlvrDeviceMotion {
@@ -2116,6 +2245,11 @@ class WorldTracker {
                 steamVRInput2p0Enabled = false
             }
         }
+        else {
+            skeletonsEnabled = true
+            steamVRInput2p0Enabled = true
+            handGesturesEnabled = false
+        }
         
         Task {
             for anchor in worldAnchorsToRemove {
@@ -2542,7 +2676,11 @@ class WorldTracker {
             handPoses = handTracking.latestAnchors
 #endif
         }
-        
+
+        // The Steam Controller has no anchor of its own, so its pose is solved
+        // here, where the hands that are holding it are already in hand.
+        updateSteamControllerFusion(handPoses.leftHand, handPoses.rightHand, anchorTimestamp)
+
         // Skeleton disabling for SteamVR input 2.0
         leftSkeletonDisableHysteresis -= 0.01
         if leftSkeletonDisableHysteresis <= 0.0 {
