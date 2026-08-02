@@ -3192,7 +3192,7 @@ class WorldTracker {
         var trackingMotions:[AlvrDeviceMotion] = []
         
         let dummyPoseView = AlvrPose()
-        let dummyPoseHeadset = AlvrPose(orientation: AlvrQuat(simd_quatf()), position: (0.0, 1.2, 0.0)) // keep the dummy at a reasonable height for both seated/standing entry
+        let dummyPoseHeadset = AlvrPose(orientation: AlvrQuat(simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)), position: (0.0, 1.2, 0.0)) // keep the dummy at a reasonable height for both seated/standing entry
         let targetTimestampNS = UInt64(targetTimestamp * Double(NSEC_PER_SEC))
         
         let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)

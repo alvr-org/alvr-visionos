@@ -19,7 +19,9 @@ extension AlvrQuat
 extension AlvrPose
 {
     init() {
-        self.init(simd_quatf(), simd_float3())
+        // Identity quaternion, NOT simd_quatf(): the zero-initialized quat (0,0,0,0)
+        // is degenerate and crashes SteamVR on Linux when sent over FFI.
+        self.init(simd_quatf(ix: 0, iy: 0, iz: 0, r: 1), simd_float3())
     }
 
     init(_ q: simd_quatf, _ p: simd_float3) {
