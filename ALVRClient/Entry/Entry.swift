@@ -125,6 +125,14 @@ struct Entry: View {
                     }
                     .toggleStyle(.switch)
                     
+                    Toggle(isOn: $gStore.settings.claimControllerHomeButton) {
+                        Text("Send the controller PS/Home button to games")
+                    }
+                    .toggleStyle(.switch)
+                    if gStore.settings.claimControllerHomeButton {
+                        ControllerHomeButtonHint()
+                    }
+                    
                     HStack {
                         Text("Stream refresh rate*")
                         Picker("Stream refresh rate", selection: $gStore.settings.streamFPS) {
@@ -446,5 +454,35 @@ struct Entry: View {
         })
         
         EntryControls(saveAction: saveAction)
+    }
+}
+
+
+/// Explains what the user has to switch in visionOS Settings so the controller Home (PS) button reaches games.
+struct ControllerHomeButtonHint: View {
+    @ObservedObject var status = ControllerHomeButtonStatus.shared
+
+    var body: some View {
+        Group {
+            switch status.state {
+            case .systemHandles:
+                HStack {
+                    Text("visionOS still handles the PS button. Set the controller in-app action to \"Defer to app\".")
+                        .font(.footnote)
+                    Button("Open Settings") {
+                        status.openSettings()
+                    }
+                }
+            case .deliveredToApp:
+                Text("The PS button is sent to games.")
+                    .font(.footnote)
+            case .unknown:
+                EmptyView()
+            }
+        }
+        .task {
+            // Reading the setting needs a connected controller; this stays unknown until one is.
+            status.start()
+        }
     }
 }
