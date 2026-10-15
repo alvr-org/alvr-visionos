@@ -120,6 +120,14 @@ struct Entry: View {
                     }
                     .toggleStyle(.switch)
                     
+                    Toggle(isOn: $gStore.settings.enableDistanceBasedHandTracking) {
+                        Text("Automatically switch to hand tracking when controllers are far from hands")
+                    }
+                    .toggleStyle(.switch)
+                    .onChange(of: gStore.settings.enableDistanceBasedHandTracking) {
+                        saveAction()
+                    }
+                    
                     Toggle(isOn: $gStore.settings.emulatedPinchInteractions) {
                         Text("Send gaze-pinch interactions as controller inputs")
                     }
