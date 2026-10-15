@@ -2104,7 +2104,24 @@ class WorldTracker {
             guard let capturedInput = controller.input.nextInputState() else {
                 continue
             }
+            let claimHomeButton = ALVRClientApp.gStore.settings.claimControllerHomeButton
+            if claimHomeButton {
+                // visionOS keeps the PS/Home button for itself unless the app asks to receive it (and the
+                // user allows it in Settings on visionOS 27).
+                controller.claimHomeButtonFromSystem()
+                if ControllerHomeButtonStatus.shared.state == .unknown && CACurrentMediaTime() - lastHomeButtonStatusAttempt > 2.0 {
+                    lastHomeButtonStatusAttempt = CACurrentMediaTime()
+                    Task { @MainActor in
+                        ControllerHomeButtonStatus.shared.start()
+                    }
+                }
+            }
+            // The Home button drives the system click when we know it reaches us. Otherwise the menu
+            // button keeps doubling as the system click, like before.
             let buttons = capturedInput.buttons
+            let homeButtonReachesApp = claimHomeButton && ControllerHomeButtonStatus.shared.reachesApp
+            let homePressed = buttons["Button Home"]?.pressedInput.isPressed ?? false
+            let homeTouched = buttons["Button Home"]?.touchedInput?.isTouched ?? false
             let dpads = capturedInput.dpads
             let axes = capturedInput.axes
 
@@ -2154,7 +2171,7 @@ class WorldTracker {
                 */
                 
                 if isPsvr {
-                    leftAssociatedButtons = ["Thumbstick Left", "Thumbstick Right", "Grip", "Trigger", "Thumbstick Button", "Button B", "Button A", "Button Menu", "Thumbstick Down", "Thumbstick Up"]
+                    leftAssociatedButtons = ["Thumbstick Left", "Thumbstick Right", "Grip", "Trigger", "Thumbstick Button", "Button B", "Button A", "Button Menu", "Button Home", "Thumbstick Down", "Thumbstick Up"]
                     leftAssociatedDpads = ["Thumbstick"]
                     rightAssociatedButtons = leftAssociatedButtons
                     rightAssociatedDpads = leftAssociatedDpads
@@ -2183,10 +2200,12 @@ class WorldTracker {
                         // Workaround until Apple supports trigger sensors
                         alvr_send_button(WorldTracker.leftTriggerSensorValue, scalarVal((buttons["Trigger"]?.touchedInput?.isTouched ?? false) ? 1.0 : 0.0))
 
-                        alvr_send_button(WorldTracker.leftMenuTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
-                        alvr_send_button(WorldTracker.leftSystemTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
-                        alvr_send_button(WorldTracker.leftMenuClick, boolVal(buttons["Button Menu"]?.pressedInput.isPressed ?? false))
-                        alvr_send_button(WorldTracker.leftSystemClick, boolVal(buttons["Button Menu"]?.pressedInput.isPressed ?? false))
+                        let menuPressed = buttons["Button Menu"]?.pressedInput.isPressed ?? false
+                        let menuTouched = buttons["Button Menu"]?.touchedInput?.isTouched ?? false
+                        alvr_send_button(WorldTracker.leftMenuTouched, boolVal(menuTouched))
+                        alvr_send_button(WorldTracker.leftSystemTouched, boolVal(homeTouched || (!homeButtonReachesApp && menuTouched)))
+                        alvr_send_button(WorldTracker.leftMenuClick, boolVal(menuPressed))
+                        alvr_send_button(WorldTracker.leftSystemClick, boolVal(homePressed || (!homeButtonReachesApp && menuPressed)))
 
                     }
                     else {
@@ -2214,10 +2233,12 @@ class WorldTracker {
                         // Workaround until Apple supports trigger sensors
                         alvr_send_button(WorldTracker.rightTriggerSensorValue, scalarVal(((buttons["Trigger"]?.touchedInput?.isTouched ?? false) ? 1.0 : 0.0)))
 
-                        alvr_send_button(WorldTracker.rightMenuTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
-                        alvr_send_button(WorldTracker.rightSystemTouched, boolVal(buttons["Button Menu"]?.touchedInput?.isTouched ?? false))
-                        alvr_send_button(WorldTracker.rightMenuClick, boolVal(buttons["Button Menu"]?.pressedInput.isPressed ?? false))
-                        alvr_send_button(WorldTracker.rightSystemClick, boolVal(buttons["Button Menu"]?.pressedInput.isPressed ?? false))
+                        let menuPressed = buttons["Button Menu"]?.pressedInput.isPressed ?? false
+                        let menuTouched = buttons["Button Menu"]?.touchedInput?.isTouched ?? false
+                        alvr_send_button(WorldTracker.rightMenuTouched, boolVal(menuTouched))
+                        alvr_send_button(WorldTracker.rightSystemTouched, boolVal(homeTouched || (!homeButtonReachesApp && menuTouched)))
+                        alvr_send_button(WorldTracker.rightMenuClick, boolVal(menuPressed))
+                        alvr_send_button(WorldTracker.rightSystemClick, boolVal(homePressed || (!homeButtonReachesApp && menuPressed)))
                     }
                 }
             }
@@ -2470,6 +2491,7 @@ class WorldTracker {
     }
     
     var lastSentTime = 0.0
+    var lastHomeButtonStatusAttempt = 0.0
     
     // TODO: figure out how stable Apple's predictions are into the future
     // targetTimestamp: The timestamp of the pose we will send to ALVR--capped by how far we can predict forward.
