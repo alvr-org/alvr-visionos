@@ -15,6 +15,7 @@ struct GlobalSettings: Codable {
     var streamFPS: String = "Default"
     var realityKitRenderer: Bool = false
     var chromaKeyEnabled: Bool = false
+    var chromaKeyFromStreamer: Bool = true
     var chromaKeyDistRangeMin: Float = 0.35
     var chromaKeyDistRangeMax: Float = 0.7
     var chromaKeyColorR: Float = 16.0 / 255.0
@@ -45,6 +46,7 @@ struct GlobalSettings: Codable {
         self.streamFPS = try container.decodeIfPresent(String.self, forKey: .streamFPS) ?? self.streamFPS
         self.realityKitRenderer = try container.decodeIfPresent(Bool.self, forKey: .realityKitRenderer) ?? self.realityKitRenderer
         self.chromaKeyEnabled = try container.decodeIfPresent(Bool.self, forKey: .chromaKeyEnabled) ?? self.chromaKeyEnabled
+        self.chromaKeyFromStreamer = try container.decodeIfPresent(Bool.self, forKey: .chromaKeyFromStreamer) ?? self.chromaKeyFromStreamer
         self.chromaKeyDistRangeMin = try container.decodeIfPresent(Float.self, forKey: .chromaKeyDistRangeMin) ?? self.chromaKeyDistRangeMin
         self.chromaKeyDistRangeMax = try container.decodeIfPresent(Float.self, forKey: .chromaKeyDistRangeMax) ?? self.chromaKeyDistRangeMax
         self.chromaKeyColorR = try container.decodeIfPresent(Float.self, forKey: .chromaKeyColorR) ?? self.chromaKeyColorR

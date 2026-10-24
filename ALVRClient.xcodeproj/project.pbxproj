@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA00C0FE0000000000000001 /* ChromaKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00C0FE0000000000000002 /* ChromaKey.swift */; };
 		656A9FCF2F04031600D8DE2D /* ChaperoneSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 656A9FCE2F04031600D8DE2D /* ChaperoneSystem.swift */; };
 		8E1240FF2B7CC02E005B75F2 /* Entry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1240FE2B7CC02E005B75F2 /* Entry.swift */; };
 		8E1241032B7CC0E1005B75F2 /* EntryControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1241022B7CC0E1005B75F2 /* EntryControls.swift */; };
@@ -94,6 +95,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AA00C0FE0000000000000002 /* ChromaKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromaKey.swift; sourceTree = "<group>"; };
 		0FDF7F3AB0664D5089D91DE3 /* PerformanceTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceTracker.swift; sourceTree = "<group>"; };
 		5BD00478C3614F7DB55D935E /* PerformanceOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceOverlayView.swift; sourceTree = "<group>"; };
 		656A9FCE2F04031600D8DE2D /* ChaperoneSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChaperoneSystem.swift; sourceTree = "<group>"; };
@@ -244,6 +246,7 @@
 				E7D606022C1B5D37009E3343 /* RealityKitEyeTrackingSystem.swift */,
 				C5E590352B6379ED00328ED6 /* Renderer.swift */,
 				9ED257162B8062A1008DC22F /* Settings.swift */,
+				AA00C0FE0000000000000002 /* ChromaKey.swift */,
 				C5E590372B6379ED00328ED6 /* Shaders.metal */,
 				C5E590392B6379ED00328ED6 /* ShaderTypes.h */,
 				D61E6FDF2B71CE080076031A /* VideoHandler.swift */,
@@ -442,6 +445,7 @@
 				E77FDE582EC5D98200B0ED4F /* CameraView.swift in Sources */,
 				D68FA8092B742F6F0052B7FF /* FFR.swift in Sources */,
 				9ED257172B8062A2008DC22F /* Settings.swift in Sources */,
+				AA00C0FE0000000000000001 /* ChromaKey.swift in Sources */,
 				C5E590362B6379ED00328ED6 /* Renderer.swift in Sources */,
 				C5E590322B6379ED00328ED6 /* ALVRClientApp.swift in Sources */,
 				E7D606032C1B5D39009E3343 /* RealityKitEyeTrackingSystem.swift in Sources */,
