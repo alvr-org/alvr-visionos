@@ -12,6 +12,7 @@ struct GlobalSettings: Codable {
     var showHandsOverlaid: Bool = false
     var disablePersistentSystemOverlays: Bool = true
     var enableDoubleTapForHands: Bool = false
+    var enableDistanceBasedHandTracking: Bool = false
     var streamFPS: String = "Default"
     var realityKitRenderer: Bool = false
     var chromaKeyEnabled: Bool = false
@@ -43,6 +44,7 @@ struct GlobalSettings: Codable {
         self.showHandsOverlaid = try container.decodeIfPresent(Bool.self, forKey: .showHandsOverlaid) ?? self.showHandsOverlaid
         self.disablePersistentSystemOverlays = try container.decodeIfPresent(Bool.self, forKey: .disablePersistentSystemOverlays) ?? self.disablePersistentSystemOverlays
         self.enableDoubleTapForHands = try container.decodeIfPresent(Bool.self, forKey: .enableDoubleTapForHands) ?? self.enableDoubleTapForHands
+        self.enableDistanceBasedHandTracking = try container.decodeIfPresent(Bool.self, forKey: .enableDistanceBasedHandTracking) ?? self.enableDistanceBasedHandTracking
         self.streamFPS = try container.decodeIfPresent(String.self, forKey: .streamFPS) ?? self.streamFPS
         self.realityKitRenderer = try container.decodeIfPresent(Bool.self, forKey: .realityKitRenderer) ?? self.realityKitRenderer
         self.chromaKeyEnabled = try container.decodeIfPresent(Bool.self, forKey: .chromaKeyEnabled) ?? self.chromaKeyEnabled
