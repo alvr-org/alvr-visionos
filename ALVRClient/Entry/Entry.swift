@@ -467,14 +467,16 @@ struct ControllerHomeButtonHint: View {
             switch status.state {
             case .systemHandles:
                 HStack {
-                    Text("visionOS still handles the PS button. Set the controller in-app action to \"Defer to app\".")
+                    Text("visionOS still handles the controller Home button. Add ALVR under Home Button Overrides.")
                         .font(.footnote)
                     Button("Open Settings") {
                         status.openSettings()
                     }
                 }
             case .deliveredToApp:
-                Text("The PS button is sent to games.")
+                // visionOS does not expose the PS button of the PSVR2 Sense controllers to apps, so the override
+                // has nothing to act on there; the small Create/Options buttons are the ones games get.
+                Text("Home Button Overrides is on. PSVR2 Sense: the PS button still opens the Home View (visionOS keeps it); Create/Options reach games.")
                     .font(.footnote)
             case .unknown:
                 EmptyView()

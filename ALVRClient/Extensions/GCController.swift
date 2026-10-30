@@ -18,24 +18,52 @@ extension GCController {
 }
 
 extension GCController {
-    /// Asks visionOS not to act on the controller's Home (PS) button, so the press reaches the app.
+    /// Buttons worth reporting: Home, and the menu-like ones (Menu, Options, Share). Only Home is claimed.
+    static let reportedButtons = [GCInputButtonHome, GCInputButtonMenu, GCInputButtonOptions, GCInputButtonShare]
+
+    /// Asks visionOS not to act on the controller's Home button, so the press reaches the app.
     ///
-    /// This is only a request: the system honors it when the user's "in-app action" for the controller
-    /// Home button is set to "Defer to app" in Settings (visionOS 27). See `ControllerHomeButtonStatus`.
-    func claimHomeButtonFromSystem() {
-        guard let home = physicalInputProfile.buttons[GCInputButtonHome] else {
-            return
+    /// This is only a request: the system honors it when the user listed the app under Home Button Overrides
+    /// (Settings > General > Game Controller, visionOS 27). See `ControllerHomeButtonStatus`. Returns a one-line
+    /// report (which of the reported buttons exist, whether Home was claimed, whether the system binds them).
+    ///
+    /// Field result on visionOS 27 with the PlayStation VR2 Sense controllers (2026-10-28): the profile has no
+    /// Home element at all ("Button Home=absent"), so the PS button stays the system's whatever the user sets;
+    /// the small Create/Options buttons are "Button Menu" and do reach the app.
+    @discardableResult
+    func claimHomeButtonFromSystem() -> String {
+        var report = [String]()
+        for name in GCController.reportedButtons {
+            guard let button = physicalInputProfile.buttons[name] else {
+                report.append("\(name)=absent")
+                continue
+            }
+            var state = "present"
+            if name == GCInputButtonHome {
+                if button.preferredSystemGestureState != .disabled {
+                    button.preferredSystemGestureState = .disabled
+                }
+                state = button.preferredSystemGestureState == .disabled ? "claimed" : "refused"
+            }
+            report.append("\(name)=\(state)\(button.isBoundToSystemGesture ? "/bound" : "")")
         }
-        if home.preferredSystemGestureState != .disabled {
-            home.preferredSystemGestureState = .disabled
-        }
+        return report.joined(separator: " ")
+    }
+
+    /// The Home button as the physical input profile sees it. The live-input snapshot (`input.nextInputState()`)
+    /// and the profile are two collections, and Apple has acknowledged they differ for the Sense controllers,
+    /// so the press is read from both. A missing element (the Sense case) reads as not pressed.
+    var homeButtonPressedInProfile: Bool {
+        physicalInputProfile.buttons[GCInputButtonHome]?.isPressed ?? false
     }
 }
 
-/// Whether the controller Home (PS) button can reach the app, and a way to ask the user to enable it.
+/// Whether the user let the controller Home button reach the app (Home Button Overrides), and a way to open
+/// that Settings page.
 ///
 /// visionOS 27 lets the user choose what the Home button does while an app is in front: keep the system
 /// behavior, or defer to the app. The app can read that choice and open the Settings page, but not change it.
+/// The choice only matters for controllers whose profile exposes a Home element; the PSVR2 Sense does not.
 final class ControllerHomeButtonStatus: ObservableObject {
     static let shared = ControllerHomeButtonStatus()
 
