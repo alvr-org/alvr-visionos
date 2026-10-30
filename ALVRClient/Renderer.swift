@@ -168,15 +168,14 @@ class Renderer {
     //
     // Chroma keying shader vars
     //
-    var chromaKeyEnabled = false
-    var chromaKeyColor = simd_float3(0.0, 1.0, 0.0); // green
-    
-    //chromaKeyLerpDistRange is used to decide the amount of color to be used from either foreground or background
-    //if the current distance from pixel color to chromaKey is smaller then chromaKeyLerpDistRange.x we use background,
-    //if the current distance from pixel color to chromaKey is bigger then chromaKeyLerpDistRange.y we use foreground,
-    //else, we alpha blend them
-    //playing with this variable will decide how much the foreground and background blend together
-    var chromaKeyLerpDistRange = simd_float2(0.005, 0.1);
+    // chromaKeyParams.lerpDistRange is used to decide the amount of color to be used from either foreground or background
+    // if the current distance from pixel color to chromaKey is smaller then lerpDistRange.x we use background,
+    // if the current distance from pixel color to chromaKey is bigger then lerpDistRange.y we use foreground,
+    // else, we alpha blend them
+    // playing with this variable will decide how much the foreground and background blend together
+    // The key is the client's own, or the streamer's (see ChromaKeyParams.current)
+    var chromaKeyParams = ChromaKeyParams()
+    var chromaKeyEnabled: Bool { return chromaKeyParams.enabled }
     
     init(_ layerRenderer: LayerRenderer?) {
         self.layerRenderer = layerRenderer
@@ -452,21 +451,11 @@ class Renderer {
         
         let fragmentConstants = MTLFunctionConstantValues()
         let settings = ALVRClientApp.gStore.settings
-        if #available(visionOS 2.0, *) {
-            chromaKeyEnabled = settings.chromaKeyEnabled
-        }
-        else {
-            chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
-        }
-        chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
-        chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
+        chromaKeyParams = ChromaKeyParams.current(settings, isRealityKit: isRealityKit)
 
         var mutVrrScreenSize = simd_float2(Float(vrrScreenSize?.width ?? 1), Float(vrrScreenSize?.height ?? 1))
         var mutVrrPhysSize = simd_float2(Float(vrrPhysSize?.width ?? 1), Float(vrrPhysSize?.height ?? 1))
-        var chromaKeyColorLinear = NonlinearToLinearRGB(chromaKeyColor)
-        fragmentConstants.setConstantValue(&chromaKeyEnabled, type: .bool, index: ALVRFunctionConstant.chromaKeyEnabled.rawValue)
-        fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
-        fragmentConstants.setConstantValue(&chromaKeyLerpDistRange, type: .float2, index: ALVRFunctionConstant.chromaKeyLerpDistRange.rawValue)
+        chromaKeyParams.setFunctionConstants(fragmentConstants)
         fragmentConstants.setConstantValue(&isRealityKit, type: .bool, index: ALVRFunctionConstant.realityKitEnabled.rawValue)
         fragmentConstants.setConstantValue(&mutVrrScreenSize, type: .float2, index: ALVRFunctionConstant.vrrScreenSize.rawValue)
         fragmentConstants.setConstantValue(&mutVrrPhysSize, type: .float2, index: ALVRFunctionConstant.vrrPhysSize.rawValue)
@@ -529,19 +518,9 @@ class Renderer {
         let fragmentConstants = FFR.makeFunctionConstants(foveationVars)
         
         let settings = ALVRClientApp.gStore.settings
-        if #available(visionOS 2.0, *) {
-            chromaKeyEnabled = settings.chromaKeyEnabled
-        }
-        else {
-            chromaKeyEnabled = settings.chromaKeyEnabled && isRealityKit
-        }
-        chromaKeyColor = simd_float3(settings.chromaKeyColorR, settings.chromaKeyColorG, settings.chromaKeyColorB)
-        chromaKeyLerpDistRange = simd_float2(settings.chromaKeyDistRangeMin, settings.chromaKeyDistRangeMax)
+        chromaKeyParams = ChromaKeyParams.current(settings, isRealityKit: isRealityKit)
 
-        var chromaKeyColorLinear = NonlinearToLinearRGB(chromaKeyColor)
-        fragmentConstants.setConstantValue(&chromaKeyEnabled, type: .bool, index: ALVRFunctionConstant.chromaKeyEnabled.rawValue)
-        fragmentConstants.setConstantValue(&chromaKeyColorLinear, type: .float3, index: ALVRFunctionConstant.chromaKeyColor.rawValue)
-        fragmentConstants.setConstantValue(&chromaKeyLerpDistRange, type: .float2, index: ALVRFunctionConstant.chromaKeyLerpDistRange.rawValue)
+        chromaKeyParams.setFunctionConstants(fragmentConstants)
         fragmentConstants.setConstantValue(&isRealityKit, type: .bool, index: ALVRFunctionConstant.realityKitEnabled.rawValue)
         fragmentConstants.setConstantValue(&encodingGamma, type: .float, index: ALVRFunctionConstant.encodingGamma.rawValue)
         fragmentConstants.setConstantValue(&currentYuvTransform.columns.0, type: .float4, index: ALVRFunctionConstant.encodingYUVTransform0.rawValue)
@@ -841,7 +820,7 @@ class Renderer {
                 needsPipelineRebuild = true
             }
             
-            if CACurrentMediaTime() - lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != chromaKeyEnabled || settings.chromaKeyColorR != chromaKeyColor.x || settings.chromaKeyColorG != chromaKeyColor.y || settings.chromaKeyColorB != chromaKeyColor.z || settings.chromaKeyDistRangeMin != chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != chromaKeyLerpDistRange.y) {
+            if CACurrentMediaTime() - lastReconfigureTime > 1.0 && chromaKeyParams.wantsRebuild(for: settings, isRealityKit: isRealityKit) {
                 lastReconfigureTime = CACurrentMediaTime()
                 needsPipelineRebuild = true
             }

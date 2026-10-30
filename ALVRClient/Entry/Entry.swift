@@ -203,6 +203,16 @@ struct Entry: View {
                             saveAction()
                         }
                     
+                        Toggle(isOn: $gStore.settings.chromaKeyFromStreamer) {
+                            Text("Use the streamer's chroma key")
+                            Text("*Applies the PC's Passthrough chroma key settings unless the key above is enabled")
+                            .font(.system(size: 10))
+                        }
+                        .toggleStyle(.switch)
+                        .onChange(of: gStore.settings.chromaKeyFromStreamer) {
+                            saveAction()
+                        }
+                    
                         ColorPicker("Chroma Key Color", selection: chromaKeyColor)
                         
                         Text("Chroma Blend Distance Min/Max").frame(maxWidth: .infinity, alignment: .leading)

@@ -1393,7 +1393,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
         activePlane_R.scale = scale_R
         activePlane_R.isEnabled = true
 
-        if settings.chromaKeyEnabled {
+        if renderer.chromaKeyEnabled {
             backdrop.isEnabled = false
         }
         else {
@@ -1569,7 +1569,7 @@ class RealityKitClientSystemCorrectlyAssociated : System {
                 }
             }*/
 
-            if CACurrentMediaTime() - renderer.lastReconfigureTime > 1.0 && (settings.chromaKeyEnabled != renderer.chromaKeyEnabled || settings.chromaKeyColorR != renderer.chromaKeyColor.x || settings.chromaKeyColorG != renderer.chromaKeyColor.y || settings.chromaKeyColorB != renderer.chromaKeyColor.z || settings.chromaKeyDistRangeMin != renderer.chromaKeyLerpDistRange.x || settings.chromaKeyDistRangeMax != renderer.chromaKeyLerpDistRange.y) {
+            if CACurrentMediaTime() - renderer.lastReconfigureTime > 1.0 && renderer.chromaKeyParams.wantsRebuild(for: settings, isRealityKit: renderer.isRealityKit) {
                 renderer.lastReconfigureTime = CACurrentMediaTime()
                 needsPipelineRebuild = true
             }

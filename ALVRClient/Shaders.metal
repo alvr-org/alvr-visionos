@@ -112,6 +112,10 @@ constant float2 EDGE_RATIO [[ function_constant(ALVRFunctionConstantFfrCommonSha
 constant bool CHROMAKEY_ENABLED [[ function_constant(ALVRFunctionConstantChromaKeyEnabled) ]];
 constant float3 CHROMAKEY_COLOR [[ function_constant(ALVRFunctionConstantChromaKeyColor) ]];
 constant float2 CHROMAKEY_LERP_DIST_RANGE [[ function_constant(ALVRFunctionConstantChromaKeyLerpDistRange) ]];
+constant uint CHROMAKEY_MODE [[ function_constant(ALVRFunctionConstantChromaKeyMode) ]]; // 0: client key color, 1: streamer RGB, 2: streamer HSV
+constant float4 CHROMAKEY_CHANNEL_0 [[ function_constant(ALVRFunctionConstantChromaKeyChannel0) ]];
+constant float4 CHROMAKEY_CHANNEL_1 [[ function_constant(ALVRFunctionConstantChromaKeyChannel1) ]];
+constant float4 CHROMAKEY_CHANNEL_2 [[ function_constant(ALVRFunctionConstantChromaKeyChannel2) ]];
 constant bool REALITYKIT_ENABLED [[ function_constant(ALVRFunctionConstantRealityKitEnabled) ]];
 constant float2 VRR_SCREEN_SIZE [[ function_constant(ALVRFunctionConstantVRRScreenSize) ]];
 constant float2 VRR_PHYS_SIZE [[ function_constant(ALVRFunctionConstantVRRPhysSize) ]];
@@ -299,11 +303,45 @@ half3 rgb2hsv(half3 rgb) {
     return hsv;
 }
 
+// Smoothstep from edge0 to edge1 where edge0 may be above edge1 (a falling ramp)
+float3 chromaKeyRamp(float3 edge0, float3 edge1, float3 x) {
+    float3 span = edge1 - edge0;
+    float3 t = saturate((x - edge0) / select(span, float3(1.0), span == 0.0));
+    t = select(t, step(edge0, x), span == 0.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+// The streamer's chroma key (ALVR video.passthrough, same math as the standalone clients):
+// opacity is the max over the three channels of the rising ramp below the key range
+// (start) and above it (end); 0 means keyed out.
+half chromaKeyMaskFromStreamer(half3 rgb) {
+    float3 current = float3(rgb);
+    if (CHROMAKEY_MODE == 2) {
+        current = float3(rgb2hsv(rgb));
+    }
+    float3 startMax = float3(CHROMAKEY_CHANNEL_0.x, CHROMAKEY_CHANNEL_1.x, CHROMAKEY_CHANNEL_2.x);
+    float3 startMin = float3(CHROMAKEY_CHANNEL_0.y, CHROMAKEY_CHANNEL_1.y, CHROMAKEY_CHANNEL_2.y);
+    float3 endMin = float3(CHROMAKEY_CHANNEL_0.z, CHROMAKEY_CHANNEL_1.z, CHROMAKEY_CHANNEL_2.z);
+    float3 endMax = float3(CHROMAKEY_CHANNEL_0.w, CHROMAKEY_CHANNEL_1.w, CHROMAKEY_CHANNEL_2.w);
+    float3 startMask = chromaKeyRamp(startMin, startMax, current);
+    float3 endMask = chromaKeyRamp(endMin, endMax, current);
+    return half(max(max(startMask.x, max(startMask.y, startMask.z)), max(endMask.x, max(endMask.y, endMask.z))));
+}
+
 half4 videoFrameFragmentShader_common(half3 color_in) {
     half3 color = EncodingNonlinearToLinearRGB_half(color_in, ENCODING_GAMMA);
     
     half4 colorOut = half4(color.rgb, 1.0);
-    if (CHROMAKEY_ENABLED) {
+    if (CHROMAKEY_ENABLED && CHROMAKEY_MODE != 0) {
+        half mask = chromaKeyMaskFromStreamer(color.rgb);
+        if (!REALITYKIT_ENABLED && mask <= 0.0) {
+            discard_fragment();
+        }
+        
+        // Premultiplied alpha, as the compositor expects
+        return half4(colorOut.rgb * mask, colorOut.a * mask);
+    }
+    else if (CHROMAKEY_ENABLED) {
         half4 chromaKeyHSV = half4(rgb2hsv(half3(CHROMAKEY_COLOR)), 1.0);
         half4 newHSV = half4(rgb2hsv(color.rgb), 1.0);
         half mask = colorclose_hsv(newHSV.rgb, chromaKeyHSV.rgb, half2(CHROMAKEY_LERP_DIST_RANGE));

@@ -10,8 +10,73 @@ enum SettingsError: Error {
 }
 
 struct SettingsCodables {
+    //
+    // Passthrough (video.passthrough). The streamer's chroma key settings, same meaning as on the
+    // standalone clients. Decoding never throws: a variant or field this client doesn't know
+    // becomes .unsupported rather than invalidating the whole settings blob.
+    //
+    struct RgbChromaKeyConfig: Codable {
+        var red: Float = 0
+        var green: Float = 0
+        var blue: Float = 0
+        var distance_threshold: Float = 1
+        var feathering: Float = 0.01
+    }
+
+    struct HsvChromaKeyConfig: Codable {
+        var hue_start_max_deg: Float = 0
+        var hue_start_min_deg: Float = 0
+        var hue_end_min_deg: Float = 0
+        var hue_end_max_deg: Float = 0
+        var saturation_start_max: Float = 0
+        var saturation_start_min: Float = 0
+        var saturation_end_min: Float = 0
+        var saturation_end_max: Float = 0
+        var value_start_max: Float = 0
+        var value_start_min: Float = 0
+        var value_end_min: Float = 0
+        var value_end_max: Float = 0
+    }
+
+    enum PassthroughMode: Codable {
+        case blend // alpha blending has no counterpart here, treated as no keying
+        case rgbChromaKey(RgbChromaKeyConfig)
+        case hsvChromaKey(HsvChromaKeyConfig)
+        case unsupported
+
+        enum CodingKeys: String, CodingKey {
+            case Blend, RgbChromaKey, HsvChromaKey
+        }
+
+        init(from decoder: Decoder) throws {
+            guard let container = try? decoder.container(keyedBy: CodingKeys.self) else {
+                self = .unsupported
+                return
+            }
+            if let rgb = try? container.decode(RgbChromaKeyConfig.self, forKey: .RgbChromaKey) {
+                self = .rgbChromaKey(rgb)
+            } else if let hsv = try? container.decode(HsvChromaKeyConfig.self, forKey: .HsvChromaKey) {
+                self = .hsvChromaKey(hsv)
+            } else if container.contains(.Blend) {
+                self = .blend
+            } else {
+                self = .unsupported
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            switch self {
+            case .rgbChromaKey(let rgb): try container.encode(rgb, forKey: .RgbChromaKey)
+            case .hsvChromaKey(let hsv): try container.encode(hsv, forKey: .HsvChromaKey)
+            case .blend, .unsupported: break
+            }
+        }
+    }
+
     struct VideoConfig: Codable {
         @OptionSwitch var foveated_encoding: FoveationSettings?
+        @OptionSwitch var passthrough: PassthroughMode?
     }
     
     //
